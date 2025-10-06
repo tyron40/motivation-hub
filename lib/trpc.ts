@@ -7,23 +7,14 @@ export const trpc = createTRPCReact<AppRouter>();
 const getBaseUrl = () => {
   const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || process.env.EXPO_PUBLIC_TOOLKIT_URL;
   
-  console.log('🔍 Checking backend URL...');
-  console.log('🔍 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-  console.log('🔍 EXPO_PUBLIC_TOOLKIT_URL:', process.env.EXPO_PUBLIC_TOOLKIT_URL);
-  console.log('🔍 All env vars:', Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC')));
-  
   if (backendUrl) {
     console.log('✅ Using backend URL:', backendUrl);
     return backendUrl;
   }
 
-  console.error('❌ Backend URL not found in environment variables');
-  console.error('💡 The Rork platform should set EXPO_PUBLIC_TOOLKIT_URL automatically');
-  console.error('💡 Make sure the backend is enabled in your Rork project');
-  
-  throw new Error(
-    "Backend URL not configured. Please ensure the backend is enabled in Rork."
-  );
+  const devUrl = 'http://localhost:8081';
+  console.log('⚠️ Backend URL not found in environment, using development fallback:', devUrl);
+  return devUrl;
 };
 
 let cachedBaseUrl: string | null = null;
