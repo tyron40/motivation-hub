@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Heart, Share2, BookOpen, Star, Filter, Bookmark, Sparkles, Quote, ChevronDown } from 'lucide-react-native';
+import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { allScriptures, Scripture } from '@/mocks/allScriptures';
@@ -278,11 +279,13 @@ export default function ScriptureScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
-      style={styles.container}
-    >
-      <Animated.View 
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
+        style={styles.container}
+      >
+        <Animated.View 
         style={[
           styles.content,
           {
@@ -432,6 +435,7 @@ export default function ScriptureScreen() {
         </ScrollView>
       </Animated.View>
     </LinearGradient>
+    </>
   );
 }
 

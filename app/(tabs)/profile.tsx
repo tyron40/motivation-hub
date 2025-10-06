@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut } from 'lucide-react-native';
+import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -95,11 +96,13 @@ function ProfileContent() {
   }
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E']}
-      style={styles.container}
-    >
-      <SafeAreaView style={styles.safeArea}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E']}
+        style={styles.container}
+      >
+        <SafeAreaView style={styles.safeArea}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -270,6 +273,7 @@ function ProfileContent() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
+    </>
   );
 }
 

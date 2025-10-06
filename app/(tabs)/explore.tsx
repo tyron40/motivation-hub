@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Radio, CheckCircle, XCircle, Video } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { useSpeechContext, useSpeechSearch } from '@/hooks/speech-context';
@@ -53,12 +54,14 @@ export default function ExploreScreen() {
   const displaySpeeches = searchQuery ? searchResults : speeches;
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E']}
-      style={styles.container}
-      testID="explore-screen"
-    >
-      <View style={styles.safeArea}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E']}
+        style={styles.container}
+        testID="explore-screen"
+      >
+        <View style={styles.safeArea}>
         <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>Explore</Text>
@@ -174,6 +177,7 @@ export default function ExploreScreen() {
         </ScrollView>
       </View>
     </LinearGradient>
+    </>
   );
 }
 

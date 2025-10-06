@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain } from 'lucide-react-native';
+import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { Audio } from 'expo-av';
@@ -421,11 +422,13 @@ export default function ChatScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
-      style={styles.container}
-    >
-      <View style={styles.content}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
+        style={styles.container}
+      >
+        <View style={styles.content}>
         <Animated.View 
           style={[
             styles.header, 
@@ -577,6 +580,7 @@ export default function ChatScreen() {
         </KeyboardAvoidingView>
       </View>
     </LinearGradient>
+    </>
   );
 }
 

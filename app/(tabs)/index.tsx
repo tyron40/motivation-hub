@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
+import { Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -75,11 +75,13 @@ export default function HomeScreen() {
   );
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E']}
-      style={styles.container}
-    >
-      <View style={styles.safeArea}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E']}
+        style={styles.container}
+      >
+        <View style={styles.safeArea}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -150,6 +152,7 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
     </LinearGradient>
+    </>
   );
 }
 
