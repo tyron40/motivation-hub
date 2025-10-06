@@ -516,9 +516,9 @@ export default function VoiceCoachScreen() {
         // Check recording duration
         if (status && status.durationMillis) {
           console.log(`⏱️ Recording duration: ${status.durationMillis}ms`);
-          if (status.durationMillis < 300) {
+          if (status.durationMillis < 200) {
             console.log('⚠️ Recording too short, likely no speech');
-            Alert.alert('Recording Too Short', 'Please hold the button for at least 1 second and speak clearly.');
+            Alert.alert('Recording Too Short', 'Please hold the button while speaking.');
             setCurrentStatus('Ready to listen');
             return;
           }
@@ -622,10 +622,10 @@ export default function VoiceCoachScreen() {
         
         // Filter out common transcription errors and noise
         const cleanedText = text.trim();
-        // More lenient noise filtering - only filter very short or noise patterns
-        const noisePatterns = ['.', '...', '', ' ', 'you', 'thank you', 'thanks'];
+        // Very lenient noise filtering - only filter empty or single character responses
+        const noisePatterns = ['.', '...', '', ' '];
         
-        if (noisePatterns.includes(cleanedText.toLowerCase()) || cleanedText.length < 2) {
+        if (noisePatterns.includes(cleanedText) || cleanedText.length < 1) {
           console.log('⚠️ Likely transcription error or noise:', cleanedText);
           Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
           setCurrentStatus('Ready to listen');
@@ -658,7 +658,7 @@ export default function VoiceCoachScreen() {
         });
         Alert.alert(
           'No Speech Detected', 
-          'I couldn\'t detect any speech in the recording. Please:\n\n1. Hold the microphone button while speaking\n2. Speak clearly and loudly\n3. Make sure your microphone is not blocked\n4. Try speaking for at least 2-3 seconds',
+          'I couldn\'t detect any speech. Please:\n\n1. Hold the microphone button while speaking\n2. Speak clearly into your device\n3. Check microphone permissions\n4. Ensure your microphone is not blocked',
           [{ text: 'Try Again' }]
         );
       }
