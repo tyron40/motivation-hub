@@ -637,15 +637,31 @@ export default function VoiceCoachScreen() {
       
       // Get response as text first to debug
       const responseText = await transcriptionResponse.text();
-      console.log('📥 Raw response text:', responseText);
+      console.log('📥 Raw response text (first 200 chars):', responseText.substring(0, 200));
+      console.log('📥 Response content-type:', transcriptionResponse.headers.get('content-type'));
       
       let transcriptionData;
       try {
         transcriptionData = JSON.parse(responseText);
       } catch (parseError) {
         console.error('❌ Failed to parse JSON response:', parseError);
-        console.error('❌ Response was:', responseText);
-        throw new Error(`Invalid JSON response from transcription service: ${responseText.substring(0, 100)}`);
+        console.error('❌ Response was (first 500 chars):', responseText.substring(0, 500));
+        
+        // Check if response looks like an error message
+        if (responseText.toLowerCase().includes('error') || 
+            responseText.toLowerCase().includes('invalid') ||
+            responseText.toLowerCase().includes('failed')) {
+          throw new Error(`Transcription service error: ${responseText.substring(0, 200)}`);
+        }
+        
+        // If it's not JSON and not an obvious error, it might be the transcription itself
+        // Some APIs return plain text instead of JSON
+        if (responseText.trim().length > 0 && !responseText.startsWith('{') && !responseText.startsWith('[')) {
+          console.log('⚠️ Response appears to be plain text, treating as transcription');
+          transcriptionData = { text: responseText.trim() };
+        } else {
+          throw new Error(`Invalid JSON response from transcription service. Response: ${responseText.substring(0, 100)}`);
+        }
       }
       
       console.log('📥 Transcription response data:', transcriptionData);
