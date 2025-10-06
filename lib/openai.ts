@@ -1,39 +1,48 @@
-import { trpcClient } from '@/lib/trpc';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export async function generateChatCompletion(params: {
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
 }): Promise<string> {
   try {
-    console.log('🤖 Calling backend chat API via tRPC');
-    console.log('🔍 Backend URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+    console.log('🤖 Calling OpenAI Chat API directly');
     
-    if (!process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
-      throw new Error('Backend URL not configured. EXPO_PUBLIC_RORK_API_BASE_URL is not set.');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API key not configured in .env file');
     }
     
-    const result = await trpcClient.chat.mutate({
-      messages: params.messages,
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: params.messages,
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
     });
     
-    if (!result.completion || typeof result.completion !== 'string') {
-      throw new Error('Invalid response format from chat API');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ OpenAI API error:', response.status, errorText);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
     
-    console.log('✅ Chat completion received, length:', result.completion.length);
-    return result.completion;
+    const data = await response.json();
+    const completion = data.choices?.[0]?.message?.content;
+    
+    if (!completion || typeof completion !== 'string') {
+      throw new Error('Invalid response format from OpenAI API');
+    }
+    
+    console.log('✅ Chat completion received, length:', completion.length);
+    return completion;
   } catch (error: any) {
     console.error('❌ Error in generateChatCompletion:', error);
     console.error('❌ Error name:', error?.name);
     console.error('❌ Error message:', error?.message);
-    
-    if (error?.message?.includes('Backend URL not configured')) {
-      throw new Error('Backend is not running. Please start the backend server.');
-    }
-    
-    if (error?.message?.includes('Network request failed') || error?.name === 'TypeError') {
-      throw new Error('Cannot connect to backend. Please ensure the backend server is running.');
-    }
-    
     throw error;
   }
 }
@@ -46,33 +55,34 @@ export async function generateTextToSpeech(params: {
     console.log('🎤 Generating TTS for text:', params.text.substring(0, 50) + '...');
     console.log('🔊 Voice:', params.voice || 'alloy');
     
-    console.log('📤 Calling backend TTS API via tRPC...');
-    console.log('🔍 Backend URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-    
-    if (!process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
-      throw new Error('Backend URL not configured. EXPO_PUBLIC_RORK_API_BASE_URL is not set.');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OpenAI API key not configured in .env file');
     }
     
-    const result = await trpcClient.tts.mutate({
-      text: params.text,
-      voice: params.voice || 'alloy',
+    console.log('📤 Calling OpenAI TTS API directly...');
+    
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: params.text,
+        voice: params.voice || 'alloy',
+      }),
     });
     
-    if (!result.audio || !result.audio.base64Data) {
-      throw new Error('Invalid response format from TTS API');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ OpenAI TTS API error:', response.status, errorText);
+      throw new Error(`OpenAI TTS API error: ${response.status}`);
     }
     
-    console.log('✅ Converting base64 to blob...');
-    const base64Data = result.audio.base64Data;
-    const mimeType = result.audio.mimeType || 'audio/mpeg';
-    
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: mimeType });
+    console.log('✅ TTS response received, converting to blob...');
+    const arrayBuffer = await response.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
     
     console.log('✅ Creating object URL from blob...');
     const audioUrl = URL.createObjectURL(blob);
@@ -83,16 +93,6 @@ export async function generateTextToSpeech(params: {
     console.error('❌ Error in generateTextToSpeech:', error);
     console.error('❌ Error name:', error?.name);
     console.error('❌ Error message:', error?.message);
-    console.error('❌ Error cause:', error?.cause);
-    
-    if (error?.message?.includes('Backend URL not configured')) {
-      throw new Error('Backend is not running. Please start the backend server.');
-    }
-    
-    if (error?.message?.includes('Network request failed') || error?.name === 'TypeError') {
-      throw new Error('Cannot connect to backend. Please ensure the backend server is running.');
-    }
-    
     throw error;
   }
 }
