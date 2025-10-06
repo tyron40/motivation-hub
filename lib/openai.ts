@@ -1,5 +1,8 @@
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
+console.log('🔑 OpenAI API Key status:', OPENAI_API_KEY ? 'Found' : 'Not found');
+console.log('🔑 First 10 chars:', OPENAI_API_KEY?.substring(0, 10));
+
 export async function generateChatCompletion(params: {
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
 }): Promise<string> {
