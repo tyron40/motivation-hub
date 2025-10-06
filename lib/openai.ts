@@ -1,3 +1,6 @@
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
+
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
 console.log('🔑 OpenAI API Key status:', OPENAI_API_KEY ? 'Found' : 'Not found');
@@ -83,15 +86,36 @@ export async function generateTextToSpeech(params: {
       throw new Error(`OpenAI TTS API error: ${response.status}`);
     }
     
-    console.log('✅ TTS response received, converting to blob...');
-    const arrayBuffer = await response.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+    console.log('✅ TTS response received');
     
-    console.log('✅ Creating object URL from blob...');
-    const audioUrl = URL.createObjectURL(blob);
-    
-    console.log('✅ TTS audio generated successfully');
-    return audioUrl;
+    if (Platform.OS === 'web') {
+      console.log('🌐 Web platform: converting to blob...');
+      const arrayBuffer = await response.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(blob);
+      console.log('✅ TTS audio URL created for web');
+      return audioUrl;
+    } else {
+      console.log('📱 Native platform: saving to file system...');
+      const base64 = await response.arrayBuffer().then(buffer => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      });
+      
+      const fileUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
+      console.log('💾 Writing audio to:', fileUri);
+      
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      console.log('✅ TTS audio saved to file system');
+      return fileUri;
+    }
   } catch (error: any) {
     console.error('❌ Error in generateTextToSpeech:', error);
     console.error('❌ Error name:', error?.name);
