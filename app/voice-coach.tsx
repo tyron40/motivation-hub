@@ -494,6 +494,9 @@ export default function VoiceCoachScreen() {
       let recordingToProcess = recording;
       
       try {
+        // Wait a bit for the recording to finalize
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Get recording status first
         status = await recordingToProcess.getStatusAsync();
         console.log('📊 Recording status:', JSON.stringify(status, null, 2));
@@ -548,18 +551,18 @@ export default function VoiceCoachScreen() {
         console.log('🎵 Processing recording with URI:', uri);
         // Check recording duration
         if (status && status.durationMillis !== undefined) {
-          console.log(`⏱️ Recording duration: ${status.durationMillis}ms`);
-          if (status.durationMillis < 500) {
+          console.log(`⏱️ Recording duration: ${status.durationMillis}ms (${(status.durationMillis / 1000).toFixed(2)}s)`);
+          if (status.durationMillis < 300) {
             console.log('⚠️ Recording too short, likely no speech');
             Alert.alert(
               'Recording Too Short', 
-              `Recording was only ${Math.round(status.durationMillis)}ms. Please hold the button longer while speaking clearly.`
+              `Recording was only ${(status.durationMillis / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`
             );
             setCurrentStatus('Ready to listen');
             return;
           }
         } else {
-          console.log('⚠️ No duration information available');
+          console.log('⚠️ No duration information available, proceeding anyway');
         }
         // Process the recording
         await processAudioTranscription(uri);
