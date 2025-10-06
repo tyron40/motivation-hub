@@ -516,9 +516,9 @@ export default function VoiceCoachScreen() {
         // Check recording duration
         if (status && status.durationMillis) {
           console.log(`⏱️ Recording duration: ${status.durationMillis}ms`);
-          if (status.durationMillis < 500) {
+          if (status.durationMillis < 300) {
             console.log('⚠️ Recording too short, likely no speech');
-            Alert.alert('Recording Too Short', 'Please hold the button longer and speak clearly.');
+            Alert.alert('Recording Too Short', 'Please hold the button for at least 1 second and speak clearly.');
             setCurrentStatus('Ready to listen');
             return;
           }
@@ -578,6 +578,8 @@ export default function VoiceCoachScreen() {
         type: audioFile.type,
       });
       
+      console.log('🌐 Calling STT API: https://toolkit.rork.com/stt/transcribe/');
+      
       const transcriptionResponse = await fetch('https://toolkit.rork.com/stt/transcribe/', {
         method: 'POST',
         body: formData,
@@ -587,7 +589,7 @@ export default function VoiceCoachScreen() {
       clearTimeout(timeoutId);
       
       console.log('📡 Transcription response status:', transcriptionResponse.status);
-      console.log('📡 Response headers:', transcriptionResponse.headers);
+      console.log('📡 Response headers:', JSON.stringify(Object.fromEntries(transcriptionResponse.headers.entries())));
       
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
@@ -616,15 +618,16 @@ export default function VoiceCoachScreen() {
       
       if (text && typeof text === 'string' && text.trim().length > 0) {
         console.log('✅ Valid transcribed text:', text);
+        console.log('📏 Text length:', text.trim().length);
         
         // Filter out common transcription errors and noise
         const cleanedText = text.trim();
         // More lenient noise filtering - only filter very short or noise patterns
-        const noisePatterns = ['.', '...', '', ' '];
+        const noisePatterns = ['.', '...', '', ' ', 'you', 'thank you', 'thanks'];
         
-        if (noisePatterns.includes(cleanedText) || cleanedText.length < 2) {
+        if (noisePatterns.includes(cleanedText.toLowerCase()) || cleanedText.length < 2) {
           console.log('⚠️ Likely transcription error or noise:', cleanedText);
-          Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and try again.');
+          Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
           setCurrentStatus('Ready to listen');
           return;
         }
@@ -653,7 +656,11 @@ export default function VoiceCoachScreen() {
           length: text?.trim ? text.trim().length : 0,
           fullResponse: transcriptionData 
         });
-        Alert.alert('No Speech Detected', 'I couldn\'t hear what you said. Please hold the button and speak clearly.');
+        Alert.alert(
+          'No Speech Detected', 
+          'I couldn\'t detect any speech in the recording. Please:\n\n1. Hold the microphone button while speaking\n2. Speak clearly and loudly\n3. Make sure your microphone is not blocked\n4. Try speaking for at least 2-3 seconds',
+          [{ text: 'Try Again' }]
+        );
       }
     } catch (error) {
       console.error('❌ Error processing transcription:', error);
