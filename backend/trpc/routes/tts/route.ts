@@ -1,5 +1,6 @@
 import { publicProcedure } from "../../create-context";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 
 export const ttsRoute = publicProcedure
   .input(
@@ -16,9 +17,13 @@ export const ttsRoute = publicProcedure
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         console.error("❌ OPENAI_API_KEY not found in environment variables");
-        throw new Error("OpenAI API key not configured");
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "OpenAI API key not configured",
+        });
       }
 
+      console.log("📤 Calling OpenAI TTS API...");
       const response = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: {
@@ -35,7 +40,10 @@ export const ttsRoute = publicProcedure
       if (!response.ok) {
         const errorText = await response.text();
         console.error("❌ OpenAI TTS API error:", response.status, errorText);
-        throw new Error(`OpenAI TTS API error: ${response.status}`);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `OpenAI TTS API error: ${response.status}`,
+        });
       }
 
       console.log("✅ TTS response received, converting to base64...");
@@ -43,15 +51,25 @@ export const ttsRoute = publicProcedure
       const buffer = Buffer.from(arrayBuffer);
       const base64Data = buffer.toString("base64");
 
-      console.log("✅ TTS audio generated successfully");
-      return {
+      console.log("✅ TTS audio generated, base64 length:", base64Data.length);
+      
+      const result = {
         audio: {
-          base64Data,
+          base64Data: base64Data,
           mimeType: "audio/mpeg",
         },
       };
+      
+      console.log("✅ Returning TTS result");
+      return result;
     } catch (error) {
       console.error("❌ Error in TTS route:", error);
-      throw error;
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   });
