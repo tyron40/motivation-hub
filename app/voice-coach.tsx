@@ -353,11 +353,32 @@ export default function VoiceCoachScreen() {
       }
       
       // Request permissions
-      const { status } = await Audio.requestPermissionsAsync();
+      console.log('🔐 Requesting microphone permissions...');
+      const { status, canAskAgain, granted } = await Audio.requestPermissionsAsync();
+      console.log('🔐 Permission status:', { status, canAskAgain, granted });
+      
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant microphone permission to use voice chat.');
+        console.error('❌ Microphone permission denied');
+        Alert.alert(
+          'Microphone Permission Required', 
+          'Please grant microphone permission in your device settings to use voice chat.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => {
+              if (Platform.OS === 'ios') {
+                // iOS settings
+                console.log('Opening iOS settings...');
+              } else if (Platform.OS === 'android') {
+                // Android settings
+                console.log('Opening Android settings...');
+              }
+            }}
+          ]
+        );
         return;
       }
+      
+      console.log('✅ Microphone permission granted');
 
       // Reset audio mode first, then set for recording
       console.log('🔧 Setting up audio mode...');
@@ -418,11 +439,20 @@ export default function VoiceCoachScreen() {
       console.log('▶️ Starting recording...');
       await recordingInstance.startAsync();
       
+      // Verify recording is actually running
+      const recordingStatus = await recordingInstance.getStatusAsync();
+      console.log('📊 Recording status after start:', recordingStatus);
+      
+      if (!recordingStatus.isRecording) {
+        console.error('❌ Recording failed to start properly');
+        throw new Error('Recording did not start. Please check microphone permissions.');
+      }
+      
       setRecording(recordingInstance);
       setIsRecording(true);
-      setCurrentStatus('Listening...');
+      setCurrentStatus('Listening... Speak now!');
       
-      console.log('✅ Recording started successfully');
+      console.log('✅ Recording started successfully and verified');
     } catch (error) {
       console.error('❌ Error starting recording:', error);
       
@@ -466,7 +496,10 @@ export default function VoiceCoachScreen() {
       try {
         // Get recording status first
         status = await recordingToProcess.getStatusAsync();
-        console.log('📊 Recording status:', status);
+        console.log('📊 Recording status:', JSON.stringify(status, null, 2));
+        console.log('📊 Duration:', status.durationMillis, 'ms');
+        console.log('📊 Is recording:', status.isRecording);
+        console.log('📊 Can record:', status.canRecord);
         
         // Get URI before stopping (more reliable)
         if (status.canRecord || status.isRecording) {
@@ -514,14 +547,19 @@ export default function VoiceCoachScreen() {
       if (uri) {
         console.log('🎵 Processing recording with URI:', uri);
         // Check recording duration
-        if (status && status.durationMillis) {
+        if (status && status.durationMillis !== undefined) {
           console.log(`⏱️ Recording duration: ${status.durationMillis}ms`);
-          if (status.durationMillis < 200) {
+          if (status.durationMillis < 500) {
             console.log('⚠️ Recording too short, likely no speech');
-            Alert.alert('Recording Too Short', 'Please hold the button while speaking.');
+            Alert.alert(
+              'Recording Too Short', 
+              `Recording was only ${Math.round(status.durationMillis)}ms. Please hold the button longer while speaking clearly.`
+            );
             setCurrentStatus('Ready to listen');
             return;
           }
+        } else {
+          console.log('⚠️ No duration information available');
         }
         // Process the recording
         await processAudioTranscription(uri);
