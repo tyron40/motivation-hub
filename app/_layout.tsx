@@ -5,7 +5,7 @@ import { StyleSheet, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { trpc, trpcClient } from '@/lib/trpc';
+
 import { SpeechProvider, useSpeechContext } from "@/hooks/speech-context";
 import { UserProfileProvider } from "@/hooks/user-profile-context";
 import { AuthProvider, useAuth } from "@/hooks/auth-context";
@@ -282,23 +282,21 @@ export default function RootLayout() {
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
-          <trpc.Provider client={trpcClient} queryClient={queryClient}>
-            <QueryClientProvider client={queryClient}>
-              <ErrorBoundary>
-                <AuthProvider>
-                  <ErrorBoundary>
-                    <UserProfileProvider>
-                      <ErrorBoundary>
-                        <SpeechProvider>
-                          <RootLayoutNav />
-                        </SpeechProvider>
-                      </ErrorBoundary>
-                    </UserProfileProvider>
-                  </ErrorBoundary>
-                </AuthProvider>
-              </ErrorBoundary>
-            </QueryClientProvider>
-          </trpc.Provider>
+          <QueryClientProvider client={queryClient}>
+            <ErrorBoundary>
+              <AuthProvider>
+                <ErrorBoundary>
+                  <UserProfileProvider>
+                    <ErrorBoundary>
+                      <SpeechProvider>
+                        <RootLayoutNav />
+                      </SpeechProvider>
+                    </ErrorBoundary>
+                  </UserProfileProvider>
+                </ErrorBoundary>
+              </AuthProvider>
+            </ErrorBoundary>
+          </QueryClientProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

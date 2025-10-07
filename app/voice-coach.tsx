@@ -17,7 +17,7 @@ import { Mic, MicOff, User, Settings, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
-import { trpc } from '@/lib/trpc';
+import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -51,55 +51,7 @@ export default function VoiceCoachScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const avatarAnim = useRef(new Animated.Value(0)).current;
   
-  // tRPC mutations
-  const ttsMutation = trpc.tts.synthesize.useMutation({
-    onError: (error) => {
-      console.error('❌ TTS mutation error:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error data:', error.data);
-      
-      if (error.message.includes('Backend URL not configured') || 
-          error.message.includes('Network request failed') ||
-          error.message.includes('JSON') ||
-          error.message.includes('Unexpected')) {
-        Alert.alert(
-          'Backend Not Available',
-          'The voice coach backend is not configured or not responding correctly.\n\nFor local development: Make sure "bun start" is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL in your environment variables.',
-          [{ text: 'OK' }]
-        );
-      } else if (error.message.includes('API key')) {
-        Alert.alert(
-          'API Key Error',
-          'The OpenAI API key is not configured correctly on the server. Please check your backend configuration.',
-          [{ text: 'OK' }]
-        );
-      }
-    }
-  });
-  const chatMutation = trpc.chat.send.useMutation({
-    onError: (error) => {
-      console.error('❌ Chat mutation error:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error data:', error.data);
-      
-      if (error.message.includes('Backend URL not configured') || 
-          error.message.includes('Network request failed') ||
-          error.message.includes('JSON') ||
-          error.message.includes('Unexpected')) {
-        Alert.alert(
-          'Backend Not Available',
-          'The voice coach backend is not configured or not responding correctly.\n\nFor local development: Make sure "bun start" is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL in your environment variables.',
-          [{ text: 'OK' }]
-        );
-      } else if (error.message.includes('API key')) {
-        Alert.alert(
-          'API Key Error',
-          'The OpenAI API key is not configured correctly on the server. Please check your backend configuration.',
-          [{ text: 'OK' }]
-        );
-      }
-    }
-  });
+
 
   const speakMessage = useCallback(async (text: string) => {
     try {
@@ -120,10 +72,10 @@ export default function VoiceCoachScreen() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS via tRPC backend...');
+      console.log('📤 Calling TTS via Vercel API...');
       
       try {
-        const result = await ttsMutation.mutateAsync({
+        const result = await generateTTS({
           text,
           voice: preferredVoice as any,
         });
@@ -178,7 +130,7 @@ export default function VoiceCoachScreen() {
       setCurrentStatus('Ready to listen (text mode)');
       console.log('Speech synthesis failed, continuing in text mode');
     }
-  }, [profile.preferredVoice, sound, ttsMutation]);
+  }, [profile.preferredVoice, sound]);
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreetedRef.current) {
@@ -803,7 +755,7 @@ Key traits:
 
 Always end with encouragement and offer to continue the conversation.`;
 
-      console.log('📤 Calling chat via tRPC backend...');
+      console.log('📤 Calling chat via Vercel API...');
       
       const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
         { role: 'system' as const, content: systemPrompt },
@@ -813,7 +765,7 @@ Always end with encouragement and offer to continue the conversation.`;
         }))
       ];
 
-      const result = await chatMutation.mutateAsync({ messages });
+      const result = await sendChatMessage({ messages });
       const completion = result.message;
 
       if (!completion || typeof completion !== 'string') {
