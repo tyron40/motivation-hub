@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2 } from 'lucide-react-native';
+import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
@@ -217,6 +217,20 @@ export default function SettingsScreen() {
                 <Text style={styles.settingValue}>1.0.0</Text>
               </View>
             </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => router.push('/diagnostic')}
+          >
+            <View style={styles.settingLeft}>
+              <Activity size={20} color={Colors.primary} />
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>Diagnostics</Text>
+                <Text style={styles.settingValue}>Test backend connectivity</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </ScrollView>

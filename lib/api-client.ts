@@ -1,24 +1,43 @@
 const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
 
 const DEFAULT_TIMEOUT = 45000;
+const CONNECTION_TEST_TIMEOUT = 10000;
 
 async function testConnection(url: string): Promise<boolean> {
   try {
     console.log('🔍 Testing connection to:', url);
+    console.log('🔍 Full health check URL:', `${url}/api/health`);
+    
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT);
     
     const response = await fetch(`${url}/api/health`, {
       method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
       signal: controller.signal,
+      cache: 'no-store',
     });
     
     clearTimeout(timeoutId);
     const isOk = response.ok;
     console.log(isOk ? '✅ Connection test passed' : '❌ Connection test failed:', response.status);
+    
+    if (isOk) {
+      const data = await response.json();
+      console.log('✅ Health check response:', data);
+    }
+    
     return isOk;
-  } catch (error) {
+  } catch (error: any) {
     console.log('❌ Connection test failed:', error);
+    console.log('❌ Error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack?.substring(0, 200),
+    });
     return false;
   }
 }
@@ -34,10 +53,18 @@ export async function generateTextToSpeech(params: {
     console.log('🎤 Text length:', params.text.length);
     console.log('🎤 Voice:', params.voice || 'alloy');
 
+    console.log('🔍 Checking server connectivity...');
     const canConnect = await testConnection(VERCEL_API_BASE);
     if (!canConnect) {
+      console.error('❌ Server connectivity check failed');
+      console.error('❌ Attempted URL:', VERCEL_API_BASE);
+      console.error('❌ Please verify:');
+      console.error('   1. Internet connection is active');
+      console.error('   2. Backend is deployed at:', VERCEL_API_BASE);
+      console.error('   3. EXPO_PUBLIC_RORK_API_BASE_URL is set correctly in .env');
       throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
     }
+    console.log('✅ Server connectivity confirmed');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -139,10 +166,18 @@ export async function sendChatMessage(params: {
     console.log('🤖 API Base URL:', VERCEL_API_BASE);
     console.log('🤖 Full URL:', `${VERCEL_API_BASE}/api/chat`);
 
+    console.log('🔍 Checking server connectivity...');
     const canConnect = await testConnection(VERCEL_API_BASE);
     if (!canConnect) {
+      console.error('❌ Server connectivity check failed');
+      console.error('❌ Attempted URL:', VERCEL_API_BASE);
+      console.error('❌ Please verify:');
+      console.error('   1. Internet connection is active');
+      console.error('   2. Backend is deployed at:', VERCEL_API_BASE);
+      console.error('   3. EXPO_PUBLIC_RORK_API_BASE_URL is set correctly in .env');
       throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
     }
+    console.log('✅ Server connectivity confirmed');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
