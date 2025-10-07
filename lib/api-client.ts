@@ -57,14 +57,23 @@ export async function generateTextToSpeech(params: {
       throw new Error(errorMessage);
     }
 
+    const responseText = await response.text();
+    console.log('📥 Response text length:', responseText.length);
+    console.log('📥 Response first 100 chars:', responseText.substring(0, 100));
+    
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Response is not JSON, content-type:', contentType);
+      console.error('❌ Response body:', responseText.substring(0, 500));
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    }
+
     let result;
     try {
-      const responseText = await response.text();
-      console.log('📥 Response text length:', responseText.length);
       result = JSON.parse(responseText);
     } catch (parseError) {
       console.error('❌ Failed to parse TTS response as JSON:', parseError);
-      throw new Error('Invalid JSON response from TTS API');
+      console.error('❌ Response was:', responseText.substring(0, 500));
+      throw new Error(`Invalid JSON response from TTS API: ${responseText.substring(0, 100)}`);
     }
     console.log('✅ TTS result received');
 
@@ -144,14 +153,23 @@ export async function sendChatMessage(params: {
       throw new Error(errorMessage);
     }
 
+    const responseText = await response.text();
+    console.log('📥 Response text length:', responseText.length);
+    console.log('📥 Response first 100 chars:', responseText.substring(0, 100));
+    
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Response is not JSON, content-type:', contentType);
+      console.error('❌ Response body:', responseText.substring(0, 500));
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    }
+
     let result;
     try {
-      const responseText = await response.text();
-      console.log('📥 Response text length:', responseText.length);
       result = JSON.parse(responseText);
     } catch (parseError) {
       console.error('❌ Failed to parse chat response as JSON:', parseError);
-      throw new Error('Invalid JSON response from chat API');
+      console.error('❌ Response was:', responseText.substring(0, 500));
+      throw new Error(`Invalid JSON response from chat API: ${responseText.substring(0, 100)}`);
     }
     console.log('✅ Chat response received');
 
