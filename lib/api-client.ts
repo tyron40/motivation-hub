@@ -1,4 +1,11 @@
-const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || PRODUCTION_API_URL;
+
+console.log('🔧 API Client Configuration:');
+console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL from env:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
+console.log('🔧 Using VERCEL_API_BASE:', VERCEL_API_BASE);
+console.log('🔧 All env vars:', Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC')));
 
 const DEFAULT_TIMEOUT = 45000;
 const CONNECTION_TEST_TIMEOUT = 10000;

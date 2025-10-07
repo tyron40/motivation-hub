@@ -4,20 +4,17 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const getBaseUrl = () => {
-  const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-  
-  if (backendUrl) {
-    console.log('✅ Using backend URL:', backendUrl);
-    return backendUrl;
-  }
+const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
 
-  console.error('❌ EXPO_PUBLIC_RORK_API_BASE_URL is not set!');
-  console.error('❌ Your backend needs to be deployed and the URL configured.');
-  console.error('❌ For local development, the tunnel URL should be set automatically.');
-  console.error('❌ For production, deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL.');
+const getBaseUrl = () => {
+  const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || PRODUCTION_API_URL;
   
-  throw new Error('Backend URL not configured. Please set EXPO_PUBLIC_RORK_API_BASE_URL environment variable.');
+  console.log('🔧 [tRPC] Configuration:');
+  console.log('🔧 [tRPC] EXPO_PUBLIC_RORK_API_BASE_URL from env:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+  console.log('🔧 [tRPC] PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
+  console.log('🔧 [tRPC] Using backend URL:', backendUrl);
+  
+  return backendUrl;
 };
 
 let cachedBaseUrl: string | null = null;
