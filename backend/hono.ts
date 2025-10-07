@@ -18,8 +18,11 @@ app.use("*", cors({
 
 app.use("*", async (c, next) => {
   console.log("[Hono] Incoming request:", c.req.method, c.req.url);
+  console.log("[Hono] Request path:", c.req.path);
+  console.log("[Hono] Request headers:", Object.fromEntries(c.req.raw.headers.entries()));
   await next();
   console.log("[Hono] Response status:", c.res.status);
+  console.log("[Hono] Response content-type:", c.res.headers.get('content-type'));
 });
 
 app.get("/", (c) => {
@@ -195,6 +198,20 @@ app.all("/api/trpc/*", async (c) => {
     console.error("[Hono] tRPC error:", error);
     return c.json({ error: "Internal server error", details: error instanceof Error ? error.message : String(error) }, 500);
   }
+});
+
+app.notFound((c) => {
+  console.log("[Hono] 404 Not Found:", c.req.method, c.req.url);
+  return c.json({ error: "Not Found", path: c.req.path, method: c.req.method }, 404);
+});
+
+app.onError((err, c) => {
+  console.error("[Hono] Unhandled error:", err);
+  return c.json({ 
+    error: "Internal Server Error", 
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+  }, 500);
 });
 
 export default app;
