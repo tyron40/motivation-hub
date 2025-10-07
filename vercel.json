@@ -6,7 +6,11 @@
   "outputDirectory": ".",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/:path*",
+      "destination": "/api"
+    },
+    {
+      "source": "/:path*",
       "destination": "/api"
     }
   ]
