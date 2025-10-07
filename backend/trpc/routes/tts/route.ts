@@ -1,9 +1,10 @@
-import { publicProcedure } from "../../create-context";
+import { publicProcedure, createTRPCRouter } from "../../create-context";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { getOpenAIKey } from "../../../lib/supabase";
 
-export const ttsRoute = publicProcedure
+export const ttsRouter = createTRPCRouter({
+  synthesize: publicProcedure
   .input(
     z.object({
       text: z.string(),
@@ -112,4 +113,5 @@ export const ttsRoute = publicProcedure
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  });
+  }),
+});

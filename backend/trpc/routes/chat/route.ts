@@ -1,8 +1,9 @@
-import { publicProcedure } from "../../create-context";
+import { publicProcedure, createTRPCRouter } from "../../create-context";
 import { z } from "zod";
 import { getOpenAIKey } from "../../../lib/supabase";
 
-export const chatRoute = publicProcedure
+export const chatRouter = createTRPCRouter({
+  send: publicProcedure
   .input(
     z.object({
       messages: z.array(
@@ -54,4 +55,5 @@ export const chatRoute = publicProcedure
       console.error("❌ Error in chat route:", error);
       throw error;
     }
-  });
+  }),
+});

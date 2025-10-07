@@ -52,7 +52,7 @@ export default function VoiceCoachScreen() {
   const avatarAnim = useRef(new Animated.Value(0)).current;
   
   // tRPC mutations
-  const ttsMutation = trpc.tts.useMutation({
+  const ttsMutation = trpc.tts.synthesize.useMutation({
     onError: (error) => {
       console.error('❌ TTS mutation error:', error);
       console.error('❌ Error message:', error.message);
@@ -76,7 +76,7 @@ export default function VoiceCoachScreen() {
       }
     }
   });
-  const chatMutation = trpc.chat.useMutation({
+  const chatMutation = trpc.chat.send.useMutation({
     onError: (error) => {
       console.error('❌ Chat mutation error:', error);
       console.error('❌ Error message:', error.message);
