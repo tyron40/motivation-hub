@@ -1,24 +1,35 @@
 const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
 
+const DEFAULT_TIMEOUT = 30000;
+
 export async function generateTextToSpeech(params: {
   text: string;
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 }): Promise<{ audio: { base64Data: string; mimeType: string } }> {
   try {
     console.log('🎤 Generating TTS via Vercel API...');
+    console.log('🎤 API Base URL:', VERCEL_API_BASE);
+    console.log('🎤 Full URL:', `${VERCEL_API_BASE}/api/tts`);
     console.log('🎤 Text length:', params.text.length);
     console.log('🎤 Voice:', params.voice || 'alloy');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
     const response = await fetch(`${VERCEL_API_BASE}/api/tts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         text: params.text,
         voice: params.voice || 'alloy',
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const contentType = response.headers.get('content-type');
     console.log('📡 Response content-type:', contentType);
@@ -64,6 +75,17 @@ export async function generateTextToSpeech(params: {
     return result;
   } catch (error) {
     console.error('❌ TTS generation failed:', error);
+    console.error('❌ Error name:', (error as any)?.name);
+    console.error('❌ Error message:', (error as any)?.message);
+    
+    if ((error as any)?.name === 'AbortError') {
+      throw new Error('Request timeout - please check your internet connection');
+    }
+    
+    if ((error as any)?.message?.includes('Network request failed')) {
+      throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+    }
+    
     throw error;
   }
 }
@@ -76,16 +98,25 @@ export async function sendChatMessage(params: {
 }): Promise<{ message: string }> {
   try {
     console.log('🤖 Sending chat message via Vercel API...');
+    console.log('🤖 API Base URL:', VERCEL_API_BASE);
+    console.log('🤖 Full URL:', `${VERCEL_API_BASE}/api/chat`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
     const response = await fetch(`${VERCEL_API_BASE}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       body: JSON.stringify({
         messages: params.messages,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const contentType = response.headers.get('content-type');
     console.log('📡 Response content-type:', contentType);
@@ -131,6 +162,17 @@ export async function sendChatMessage(params: {
     return result;
   } catch (error) {
     console.error('❌ Chat request failed:', error);
+    console.error('❌ Error name:', (error as any)?.name);
+    console.error('❌ Error message:', (error as any)?.message);
+    
+    if ((error as any)?.name === 'AbortError') {
+      throw new Error('Request timeout - please check your internet connection');
+    }
+    
+    if ((error as any)?.message?.includes('Network request failed')) {
+      throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+    }
+    
     throw error;
   }
 }

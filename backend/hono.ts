@@ -7,7 +7,14 @@ import OpenAI from "openai";
 
 const app = new Hono();
 
-app.use("*", cors());
+app.use("*", cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  exposeHeaders: ['Content-Length', 'Content-Type'],
+  maxAge: 600,
+  credentials: false,
+}));
 
 app.use("*", async (c, next) => {
   console.log("[Hono] Incoming request:", c.req.method, c.req.url);
