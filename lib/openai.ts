@@ -1,125 +1,39 @@
-import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
-
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-
-console.log('🔑 OpenAI API Key status:', OPENAI_API_KEY ? 'Found' : 'Not found');
-console.log('🔑 First 10 chars:', OPENAI_API_KEY?.substring(0, 10));
-
-export async function generateChatCompletion(params: {
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
-}): Promise<string> {
-  try {
-    console.log('🤖 Calling OpenAI Chat API directly');
-    
-    if (!OPENAI_API_KEY) {
-      throw new Error('OpenAI API key not configured in .env file');
-    }
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: params.messages,
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ OpenAI API error:', response.status, errorText);
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const completion = data.choices?.[0]?.message?.content;
-    
-    if (!completion || typeof completion !== 'string') {
-      throw new Error('Invalid response format from OpenAI API');
-    }
-    
-    console.log('✅ Chat completion received, length:', completion.length);
-    return completion;
-  } catch (error: any) {
-    console.error('❌ Error in generateChatCompletion:', error);
-    console.error('❌ Error name:', error?.name);
-    console.error('❌ Error message:', error?.message);
-    throw error;
-  }
-}
+import { trpcClient } from './trpc';
 
 export async function generateTextToSpeech(params: {
   text: string;
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 }): Promise<string> {
   try {
-    console.log('🎤 Generating TTS for text:', params.text.substring(0, 50) + '...');
-    console.log('🔊 Voice:', params.voice || 'alloy');
-    
-    if (!OPENAI_API_KEY) {
-      throw new Error('OpenAI API key not configured in .env file');
-    }
-    
-    console.log('📤 Calling OpenAI TTS API directly...');
-    
-    const response = await fetch('https://api.openai.com/v1/audio/speech', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'tts-1',
-        input: params.text,
-        voice: params.voice || 'alloy',
-      }),
+    console.log('🎤 [OpenAI] Generating TTS via tRPC...');
+    console.log('🎤 [OpenAI] Text length:', params.text.length);
+    console.log('🎤 [OpenAI] Voice:', params.voice || 'alloy');
+
+    const result = await trpcClient.tts.synthesize.mutate({
+      text: params.text,
+      voice: params.voice || 'alloy',
     });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ OpenAI TTS API error:', response.status, errorText);
-      throw new Error(`OpenAI TTS API error: ${response.status}`);
+
+    console.log('✅ [OpenAI] TTS result received');
+    console.log('📦 [OpenAI] Result structure:', {
+      hasAudio: !!result.audio,
+      hasMimeType: !!result.audio?.mimeType,
+      hasBase64Data: !!result.audio?.base64Data,
+      base64Length: result.audio?.base64Data?.length || 0,
+    });
+
+    if (!result.audio || !result.audio.base64Data) {
+      throw new Error('Invalid TTS response: missing audio data');
     }
+
+    const audioUrl = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
+    console.log('✅ [OpenAI] Audio URL created, length:', audioUrl.length);
     
-    console.log('✅ TTS response received');
-    
-    if (Platform.OS === 'web') {
-      console.log('🌐 Web platform: converting to blob...');
-      const arrayBuffer = await response.arrayBuffer();
-      const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(blob);
-      console.log('✅ TTS audio URL created for web');
-      return audioUrl;
-    } else {
-      console.log('📱 Native platform: saving to file system...');
-      const base64 = await response.arrayBuffer().then(buffer => {
-        const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
-      });
-      
-      const fileUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
-      console.log('💾 Writing audio to:', fileUri);
-      
-      await FileSystem.writeAsStringAsync(fileUri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      console.log('✅ TTS audio saved to file system');
-      return fileUri;
-    }
-  } catch (error: any) {
-    console.error('❌ Error in generateTextToSpeech:', error);
-    console.error('❌ Error name:', error?.name);
-    console.error('❌ Error message:', error?.message);
+    return audioUrl;
+  } catch (error) {
+    console.error('❌ [OpenAI] TTS generation failed:', error);
+    console.error('❌ [OpenAI] Error type:', error?.constructor?.name);
+    console.error('❌ [OpenAI] Error message:', error instanceof Error ? error.message : String(error));
     throw error;
   }
 }
