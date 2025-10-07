@@ -12,19 +12,19 @@ export const ttsRoute = publicProcedure
   )
   .mutation(async ({ input }) => {
     try {
-      console.log("🎤 Generating TTS for text:", input.text.substring(0, 50) + "...");
-      console.log("🔊 Voice:", input.voice || "alloy");
+      console.log("🎤 [TTS] Generating TTS for text:", input.text.substring(0, 50) + "...");
+      console.log("🔊 [TTS] Voice:", input.voice || "alloy");
 
       const apiKey = await getOpenAIKey();
       if (!apiKey) {
-        console.error("❌ OPENAI_API_KEY not found in Supabase or environment");
+        console.error("❌ [TTS] OPENAI_API_KEY not found in Supabase or environment");
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "OpenAI API key not configured",
         });
       }
 
-      console.log("📤 Calling OpenAI TTS API...");
+      console.log("📤 [TTS] Calling OpenAI TTS API...");
       const response = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: {
@@ -38,9 +38,12 @@ export const ttsRoute = publicProcedure
         }),
       });
 
+      console.log("📡 [TTS] Response status:", response.status);
+      console.log("📡 [TTS] Response content-type:", response.headers.get("content-type"));
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("❌ OpenAI TTS API error:", response.status, errorText);
+        console.error("❌ [TTS] OpenAI TTS API error:", response.status, errorText);
         
         let errorMessage = `OpenAI TTS API error: ${response.status}`;
         try {
@@ -57,26 +60,29 @@ export const ttsRoute = publicProcedure
           message: errorMessage,
         });
       }
-
-      console.log("✅ TTS response received, content-type:", response.headers.get("content-type"));
       
       const contentType = response.headers.get("content-type") || "";
+      console.log("📋 [TTS] Content-Type:", contentType);
+      
       if (!contentType.includes("audio") && !contentType.includes("octet-stream")) {
         const responseText = await response.text();
-        console.error("❌ Unexpected response type:", contentType);
-        console.error("❌ Response body:", responseText.substring(0, 500));
+        console.error("❌ [TTS] Unexpected response type:", contentType);
+        console.error("❌ [TTS] Response body:", responseText.substring(0, 500));
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Unexpected response from OpenAI TTS API",
         });
       }
       
-      console.log("✅ Converting audio to base64...");
+      console.log("✅ [TTS] Converting audio to base64...");
       const arrayBuffer = await response.arrayBuffer();
+      console.log("📊 [TTS] ArrayBuffer size:", arrayBuffer.byteLength, "bytes");
+      
       const buffer = Buffer.from(arrayBuffer);
       const base64Data = buffer.toString("base64");
 
-      console.log("✅ TTS audio generated, base64 length:", base64Data.length);
+      console.log("✅ [TTS] TTS audio generated, base64 length:", base64Data.length);
+      console.log("📦 [TTS] First 50 chars of base64:", base64Data.substring(0, 50));
       
       const result = {
         audio: {
@@ -85,10 +91,19 @@ export const ttsRoute = publicProcedure
         },
       };
       
-      console.log("✅ Returning TTS result");
+      console.log("✅ [TTS] Returning TTS result with structure:", {
+        audio: {
+          base64DataLength: result.audio.base64Data.length,
+          mimeType: result.audio.mimeType,
+        }
+      });
+      
       return result;
     } catch (error) {
-      console.error("❌ Error in TTS route:", error);
+      console.error("❌ [TTS] Error in TTS route:", error);
+      console.error("❌ [TTS] Error type:", error?.constructor?.name);
+      console.error("❌ [TTS] Error message:", error instanceof Error ? error.message : String(error));
+      
       if (error instanceof TRPCError) {
         throw error;
       }

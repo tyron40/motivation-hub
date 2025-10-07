@@ -57,13 +57,32 @@ function createTRPCClient() {
         httpLink({
           url: `${baseUrl}/api/trpc`,
           fetch: async (url, options) => {
-            console.log('🌐 tRPC fetch:', url);
+            console.log('🌐 [tRPC] Fetching:', url);
+            console.log('🌐 [tRPC] Method:', options?.method || 'GET');
             try {
               const response = await fetch(url, options);
-              console.log('✅ tRPC response status:', response.status);
+              console.log('✅ [tRPC] Response status:', response.status);
+              console.log('✅ [tRPC] Response content-type:', response.headers.get('content-type'));
+              
+              const clonedResponse = response.clone();
+              const responseText = await clonedResponse.text();
+              console.log('📥 [tRPC] Response preview (first 200 chars):', responseText.substring(0, 200));
+              
+              if (!response.ok) {
+                console.error('❌ [tRPC] Non-OK response:', response.status);
+                console.error('❌ [tRPC] Response body:', responseText.substring(0, 500));
+              }
+              
+              if (response.headers.get('content-type')?.includes('text/html')) {
+                console.error('❌ [tRPC] Received HTML instead of JSON!');
+                console.error('❌ [tRPC] This usually means the backend route is not found or misconfigured');
+                console.error('❌ [tRPC] Full HTML response:', responseText.substring(0, 1000));
+              }
+              
               return response;
             } catch (error) {
-              console.error('❌ tRPC fetch error:', error);
+              console.error('❌ [tRPC] Fetch error:', error);
+              console.error('❌ [tRPC] Error type:', error?.constructor?.name);
               throw error;
             }
           },
