@@ -47,12 +47,14 @@ export async function generateTextToSpeech(params: {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({
         text: params.text,
         voice: params.voice || 'alloy',
       }),
       signal: controller.signal,
+      cache: 'no-store',
     });
 
     clearTimeout(timeoutId);
@@ -150,11 +152,13 @@ export async function sendChatMessage(params: {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({
         messages: params.messages,
       }),
       signal: controller.signal,
+      cache: 'no-store',
     });
 
     clearTimeout(timeoutId);
