@@ -4,6 +4,11 @@
   "installCommand": "bun install",
   "framework": null,
   "outputDirectory": ".",
+  "functions": {
+    "api/index.ts": {
+      "runtime": "edge"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
