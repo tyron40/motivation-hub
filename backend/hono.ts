@@ -58,9 +58,11 @@ app.get("/api/health", (c) => {
   });
 });
 
-app.post("/api/tts", async (c) => {
+const handleTTS = async (c: any) => {
   try {
     console.log("[Hono] TTS request received");
+    console.log("[Hono] Request URL:", c.req.url);
+    console.log("[Hono] Request path:", c.req.path);
     
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -106,11 +108,16 @@ app.post("/api/tts", async (c) => {
       details: error instanceof Error ? error.message : String(error) 
     }, 500);
   }
-});
+};
 
-app.post("/api/chat", async (c) => {
+app.post("/api/tts", handleTTS);
+app.post("/tts", handleTTS);
+
+const handleChat = async (c: any) => {
   try {
     console.log("[Hono] Chat request received");
+    console.log("[Hono] Request URL:", c.req.url);
+    console.log("[Hono] Request path:", c.req.path);
     
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -151,7 +158,10 @@ app.post("/api/chat", async (c) => {
       details: error instanceof Error ? error.message : String(error) 
     }, 500);
   }
-});
+};
+
+app.post("/api/chat", handleChat);
+app.post("/chat", handleChat);
 
 app.all("/trpc/*", async (c) => {
   console.log("[Hono] tRPC request:", c.req.method, c.req.url);
