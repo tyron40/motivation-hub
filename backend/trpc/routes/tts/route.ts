@@ -1,6 +1,7 @@
 import { publicProcedure } from "../../create-context";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import Constants from "expo-constants";
 
 export const ttsRoute = publicProcedure
   .input(
@@ -14,9 +15,10 @@ export const ttsRoute = publicProcedure
       console.log("🎤 Generating TTS for text:", input.text.substring(0, 50) + "...");
       console.log("🔊 Voice:", input.voice || "alloy");
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = Constants.expoConfig?.extra?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
       if (!apiKey) {
         console.error("❌ OPENAI_API_KEY not found in environment variables");
+        console.error("❌ Constants.expoConfig?.extra:", Constants.expoConfig?.extra);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "OpenAI API key not configured",
