@@ -1,19 +1,37 @@
 const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
 const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || PRODUCTION_API_URL;
 
-console.log('🔧 API Client Configuration:');
-console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL from env:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+console.log('🔧 ========================================');
+console.log('🔧 API Client Configuration');
+console.log('🔧 ========================================');
+console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
 console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
-console.log('🔧 Using VERCEL_API_BASE:', VERCEL_API_BASE);
-console.log('🔧 All env vars:', Object.keys(process.env).filter(k => k.startsWith('EXPO_PUBLIC')));
+console.log('🔧 FINAL URL BEING USED:', VERCEL_API_BASE);
+console.log('🔧 ========================================');
+
+if (VERCEL_API_BASE.includes('rorktest.dev')) {
+  console.warn('⚠️ WARNING: Using Rork development URL!');
+  console.warn('⚠️ This will NOT work on physical devices.');
+  console.warn('⚠️ Please rebuild your app to pick up the correct URL from .env');
+  console.warn('⚠️ Expected URL:', PRODUCTION_API_URL);
+  console.warn('⚠️ Current URL:', VERCEL_API_BASE);
+}
 
 const DEFAULT_TIMEOUT = 45000;
 const CONNECTION_TEST_TIMEOUT = 10000;
 
-async function testConnection(url: string): Promise<boolean> {
+async function testConnection(url: string): Promise<{ success: boolean; error?: string }> {
   try {
     console.log('🔍 Testing connection to:', url);
     console.log('🔍 Full health check URL:', `${url}/api/health`);
+    
+    if (url.includes('rorktest.dev')) {
+      console.error('❌ Detected Rork development URL - this will not work on physical devices');
+      return {
+        success: false,
+        error: 'App is using old development URL. Please rebuild the app to use the production URL.'
+      };
+    }
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT);
@@ -35,9 +53,10 @@ async function testConnection(url: string): Promise<boolean> {
     if (isOk) {
       const data = await response.json();
       console.log('✅ Health check response:', data);
+      return { success: true };
     }
     
-    return isOk;
+    return { success: false, error: `Server returned status ${response.status}` };
   } catch (error: any) {
     console.log('❌ Connection test failed:', error);
     console.log('❌ Error details:', {
@@ -45,7 +64,12 @@ async function testConnection(url: string): Promise<boolean> {
       message: error?.message,
       stack: error?.stack?.substring(0, 200),
     });
-    return false;
+    
+    if (error?.name === 'AbortError') {
+      return { success: false, error: 'Connection timeout - server took too long to respond' };
+    }
+    
+    return { success: false, error: error?.message || 'Network request failed' };
   }
 }
 
@@ -61,15 +85,29 @@ export async function generateTextToSpeech(params: {
     console.log('🎤 Voice:', params.voice || 'alloy');
 
     console.log('🔍 Checking server connectivity...');
-    const canConnect = await testConnection(VERCEL_API_BASE);
-    if (!canConnect) {
+    const connectionResult = await testConnection(VERCEL_API_BASE);
+    if (!connectionResult.success) {
       console.error('❌ Server connectivity check failed');
       console.error('❌ Attempted URL:', VERCEL_API_BASE);
-      console.error('❌ Please verify:');
-      console.error('   1. Internet connection is active');
-      console.error('   2. Backend is deployed at:', VERCEL_API_BASE);
-      console.error('   3. EXPO_PUBLIC_RORK_API_BASE_URL is set correctly in .env');
-      throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
+      console.error('❌ Error:', connectionResult.error);
+      
+      if (VERCEL_API_BASE.includes('rorktest.dev')) {
+        throw new Error(
+          'App is using an old development URL that no longer exists.\n\n' +
+          'SOLUTION: Rebuild your app to pick up the correct production URL.\n\n' +
+          'The app was built with: ' + VERCEL_API_BASE + '\n' +
+          'But should use: ' + PRODUCTION_API_URL
+        );
+      }
+      
+      throw new Error(
+        'Cannot reach the server.\n\n' +
+        'Attempted URL: ' + VERCEL_API_BASE + '\n\n' +
+        'Please verify:\n' +
+        '1. Your internet connection is active\n' +
+        '2. The backend is deployed and running\n' +
+        '3. If you recently changed .env, rebuild the app'
+      );
     }
     console.log('✅ Server connectivity confirmed');
 
@@ -174,15 +212,29 @@ export async function sendChatMessage(params: {
     console.log('🤖 Full URL:', `${VERCEL_API_BASE}/api/chat`);
 
     console.log('🔍 Checking server connectivity...');
-    const canConnect = await testConnection(VERCEL_API_BASE);
-    if (!canConnect) {
+    const connectionResult = await testConnection(VERCEL_API_BASE);
+    if (!connectionResult.success) {
       console.error('❌ Server connectivity check failed');
       console.error('❌ Attempted URL:', VERCEL_API_BASE);
-      console.error('❌ Please verify:');
-      console.error('   1. Internet connection is active');
-      console.error('   2. Backend is deployed at:', VERCEL_API_BASE);
-      console.error('   3. EXPO_PUBLIC_RORK_API_BASE_URL is set correctly in .env');
-      throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
+      console.error('❌ Error:', connectionResult.error);
+      
+      if (VERCEL_API_BASE.includes('rorktest.dev')) {
+        throw new Error(
+          'App is using an old development URL that no longer exists.\n\n' +
+          'SOLUTION: Rebuild your app to pick up the correct production URL.\n\n' +
+          'The app was built with: ' + VERCEL_API_BASE + '\n' +
+          'But should use: ' + PRODUCTION_API_URL
+        );
+      }
+      
+      throw new Error(
+        'Cannot reach the server.\n\n' +
+        'Attempted URL: ' + VERCEL_API_BASE + '\n\n' +
+        'Please verify:\n' +
+        '1. Your internet connection is active\n' +
+        '2. The backend is deployed and running\n' +
+        '3. If you recently changed .env, rebuild the app'
+      );
     }
     console.log('✅ Server connectivity confirmed');
 
