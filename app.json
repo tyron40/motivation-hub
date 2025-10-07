@@ -16,11 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "17",
+      "buildNumber": "18",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio"],
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
       }
     },
@@ -30,12 +28,10 @@
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.motivational-speech-app",
-      "versionCode": 17,
+      "versionCode": 18,
       "permissions": [
-        "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "INTERNET"
+        "INTERNET",
+        "RECORD_AUDIO"
       ]
     },
     "web": {
@@ -45,7 +41,7 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app"
         }
       ],
       [
@@ -59,7 +55,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "OPENAI_API_KEY": "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"
+      "rorkApiBaseUrl": "https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app"
     }
   }
 }
