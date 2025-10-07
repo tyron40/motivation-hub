@@ -16,7 +16,7 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { allScriptures, Scripture } from '@/mocks/allScriptures';
-import { generateText } from '@rork/toolkit-sdk';
+
 
 const categories = ['All', 'Strength', 'Hope', 'Courage', 'Faith', 'Love', 'Peace', 'Wisdom'];
 const ITEMS_PER_PAGE = 8;
@@ -81,10 +81,25 @@ export default function ScriptureScreen() {
       setIsGenerating(true);
       const prompt = `Generate 5 inspiring Bible verses about ${selectedCategory}. Return them in JSON format as an array with this structure: [{"id": "unique-id", "verse": "the verse text", "reference": "Book Chapter:Verse", "category": "${selectedCategory}"}]`;
       
-      const response = await generateText({ messages: [{ role: 'user', content: prompt }] });
+      const response = await fetch('https://toolkit.rork.com/text/llm/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const completion = data.completion;
       
       try {
-        const jsonMatch = response.match(/\[.*\]/s);
+        const jsonMatch = completion.match(/\[.*\]/s);
         if (jsonMatch) {
           const scriptures = JSON.parse(jsonMatch[0]);
           console.log(`✅ Generated ${scriptures.length} new scriptures`);
@@ -108,7 +123,6 @@ export default function ScriptureScreen() {
       }
     } catch (error) {
       console.error('❌ Error loading more scriptures:', error);
-      // Fallback to showing more existing scriptures if available
       setDisplayedCount(prev => ({
         ...prev,
         [selectedCategory]: Math.min((prev[selectedCategory] || ITEMS_PER_PAGE) + ITEMS_PER_PAGE, filteredScriptures.length)
