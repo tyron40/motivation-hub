@@ -1,9 +1,9 @@
 {
-  "buildCommand": "echo 'No build needed'",
-  "devCommand": "bun run backend/hono.ts",
-  "installCommand": "bun install",
-  "framework": null,
-  "outputDirectory": ".",
+  "functions": {
+    "api/index.ts": {
+      "runtime": "edge"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
