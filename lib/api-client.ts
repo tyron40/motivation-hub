@@ -20,13 +20,41 @@ export async function generateTextToSpeech(params: {
       }),
     });
 
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Response content-type:', contentType);
+    console.log('📡 Response status:', response.status);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ TTS API error:', response.status, errorText);
-      throw new Error(`TTS API error: ${response.status}`);
+      let errorMessage = `TTS API error: ${response.status}`;
+      try {
+        const errorText = await response.text();
+        console.error('❌ TTS API error response:', errorText.substring(0, 200));
+        
+        if (contentType?.includes('application/json')) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorMessage;
+          } catch {
+            errorMessage = errorText.substring(0, 100);
+          }
+        } else {
+          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
+        }
+      } catch (e) {
+        console.error('❌ Could not read error response:', e);
+      }
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      const responseText = await response.text();
+      console.log('📥 Response text length:', responseText.length);
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Failed to parse TTS response as JSON:', parseError);
+      throw new Error('Invalid JSON response from TTS API');
+    }
     console.log('✅ TTS result received');
 
     if (!result.audio || !result.audio.base64Data) {
@@ -59,13 +87,41 @@ export async function sendChatMessage(params: {
       }),
     });
 
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Response content-type:', contentType);
+    console.log('📡 Response status:', response.status);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Chat API error:', response.status, errorText);
-      throw new Error(`Chat API error: ${response.status}`);
+      let errorMessage = `Chat API error: ${response.status}`;
+      try {
+        const errorText = await response.text();
+        console.error('❌ Chat API error response:', errorText.substring(0, 200));
+        
+        if (contentType?.includes('application/json')) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorMessage;
+          } catch {
+            errorMessage = errorText.substring(0, 100);
+          }
+        } else {
+          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
+        }
+      } catch (e) {
+        console.error('❌ Could not read error response:', e);
+      }
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      const responseText = await response.text();
+      console.log('📥 Response text length:', responseText.length);
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Failed to parse chat response as JSON:', parseError);
+      throw new Error('Invalid JSON response from chat API');
+    }
     console.log('✅ Chat response received');
 
     if (!result.message || typeof result.message !== 'string') {
