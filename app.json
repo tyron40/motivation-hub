@@ -18,7 +18,9 @@
       "bundleIdentifier": "app.rork.motivational-speech-app",
       "buildNumber": "18",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
       }
     },
