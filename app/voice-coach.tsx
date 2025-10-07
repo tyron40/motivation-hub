@@ -55,10 +55,22 @@ export default function VoiceCoachScreen() {
   const ttsMutation = trpc.tts.useMutation({
     onError: (error) => {
       console.error('❌ TTS mutation error:', error);
-      if (error.message.includes('Backend URL not configured') || error.message.includes('Network request failed')) {
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error data:', error.data);
+      
+      if (error.message.includes('Backend URL not configured') || 
+          error.message.includes('Network request failed') ||
+          error.message.includes('JSON') ||
+          error.message.includes('Unexpected')) {
         Alert.alert(
           'Backend Not Available',
-          'The voice coach backend is not configured. This feature requires a deployed backend.\n\nFor local development: Make sure bun start is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL.',
+          'The voice coach backend is not configured or not responding correctly.\n\nFor local development: Make sure "bun start" is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL in your environment variables.',
+          [{ text: 'OK' }]
+        );
+      } else if (error.message.includes('API key')) {
+        Alert.alert(
+          'API Key Error',
+          'The OpenAI API key is not configured correctly on the server. Please check your backend configuration.',
           [{ text: 'OK' }]
         );
       }
@@ -67,10 +79,22 @@ export default function VoiceCoachScreen() {
   const chatMutation = trpc.chat.useMutation({
     onError: (error) => {
       console.error('❌ Chat mutation error:', error);
-      if (error.message.includes('Backend URL not configured') || error.message.includes('Network request failed')) {
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error data:', error.data);
+      
+      if (error.message.includes('Backend URL not configured') || 
+          error.message.includes('Network request failed') ||
+          error.message.includes('JSON') ||
+          error.message.includes('Unexpected')) {
         Alert.alert(
           'Backend Not Available',
-          'The voice coach backend is not configured. This feature requires a deployed backend.\n\nFor local development: Make sure bun start is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL.',
+          'The voice coach backend is not configured or not responding correctly.\n\nFor local development: Make sure "bun start" is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL in your environment variables.',
+          [{ text: 'OK' }]
+        );
+      } else if (error.message.includes('API key')) {
+        Alert.alert(
+          'API Key Error',
+          'The OpenAI API key is not configured correctly on the server. Please check your backend configuration.',
           [{ text: 'OK' }]
         );
       }

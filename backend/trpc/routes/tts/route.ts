@@ -41,13 +41,37 @@ export const ttsRoute = publicProcedure
       if (!response.ok) {
         const errorText = await response.text();
         console.error("❌ OpenAI TTS API error:", response.status, errorText);
+        
+        let errorMessage = `OpenAI TTS API error: ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.error?.message) {
+            errorMessage = errorJson.error.message;
+          }
+        } catch {
+          errorMessage = errorText.substring(0, 200);
+        }
+        
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: `OpenAI TTS API error: ${response.status}`,
+          message: errorMessage,
         });
       }
 
-      console.log("✅ TTS response received, converting to base64...");
+      console.log("✅ TTS response received, content-type:", response.headers.get("content-type"));
+      
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("audio") && !contentType.includes("octet-stream")) {
+        const responseText = await response.text();
+        console.error("❌ Unexpected response type:", contentType);
+        console.error("❌ Response body:", responseText.substring(0, 500));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Unexpected response from OpenAI TTS API",
+        });
+      }
+      
+      console.log("✅ Converting audio to base64...");
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       const base64Data = buffer.toString("base64");
