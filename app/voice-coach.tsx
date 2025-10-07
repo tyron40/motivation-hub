@@ -17,7 +17,7 @@ import { Mic, MicOff, User, Settings, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
-import { generateChatCompletion, generateTextToSpeech } from '@/lib/openai';
+import { trpcClient } from '@/lib/trpc';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -72,15 +72,17 @@ export default function VoiceCoachScreen() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS API directly...');
+      console.log('📤 Calling TTS via backend tRPC...');
       
       try {
-        const audioUri = await generateTextToSpeech({
+        const result = await trpcClient.tts.mutate({
           text,
           voice: preferredVoice,
         });
         
-        console.log('✅ TTS audio received');
+        console.log('✅ TTS audio received from backend');
+        
+        const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
         
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
@@ -102,7 +104,7 @@ export default function VoiceCoachScreen() {
         if (ttsError?.message?.includes('API key')) {
           Alert.alert(
             'Voice Not Available',
-            'Text-to-speech is currently unavailable. The OpenAI API key needs to be configured. You can continue using the voice coach in text mode.',
+            'Text-to-speech is currently unavailable. The OpenAI API key needs to be configured on the server. You can continue using the voice coach in text mode.',
             [{ text: 'OK' }]
           );
         }
@@ -761,9 +763,10 @@ Always end with encouragement and offer to continue the conversation.`;
         }))
       ];
       
-      console.log('📤 Calling chat API directly...');
+      console.log('📤 Calling chat API via backend tRPC...');
       
-      const completion = await generateChatCompletion({ messages });
+      const result = await trpcClient.chat.mutate({ messages });
+      const completion = result.completion;
       
       const assistantMessage: Message = {
         role: 'assistant',

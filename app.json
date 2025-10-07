@@ -57,9 +57,9 @@
     ],
     "experiments": {
       "typedRoutes": true
-  },
-  "extra": {
-    "OPENAI_API_KEY": "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"
+    },
+    "extra": {
+      "OPENAI_API_KEY": "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"
+    }
   }
-}
 }
