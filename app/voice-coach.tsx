@@ -52,8 +52,30 @@ export default function VoiceCoachScreen() {
   const avatarAnim = useRef(new Animated.Value(0)).current;
   
   // tRPC mutations
-  const ttsMutation = trpc.tts.useMutation();
-  const chatMutation = trpc.chat.useMutation();
+  const ttsMutation = trpc.tts.useMutation({
+    onError: (error) => {
+      console.error('❌ TTS mutation error:', error);
+      if (error.message.includes('Backend URL not configured') || error.message.includes('Network request failed')) {
+        Alert.alert(
+          'Backend Not Available',
+          'The voice coach backend is not configured. This feature requires a deployed backend.\n\nFor local development: Make sure bun start is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+  });
+  const chatMutation = trpc.chat.useMutation({
+    onError: (error) => {
+      console.error('❌ Chat mutation error:', error);
+      if (error.message.includes('Backend URL not configured') || error.message.includes('Network request failed')) {
+        Alert.alert(
+          'Backend Not Available',
+          'The voice coach backend is not configured. This feature requires a deployed backend.\n\nFor local development: Make sure bun start is running.\n\nFor production: Deploy your backend and set EXPO_PUBLIC_RORK_API_BASE_URL.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+  });
 
   const speakMessage = useCallback(async (text: string) => {
     try {
