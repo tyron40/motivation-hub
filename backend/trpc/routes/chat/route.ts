@@ -48,7 +48,7 @@ export const chatRoute = publicProcedure
       }
 
       console.log("✅ Chat completion received, length:", completion.length);
-      return { completion };
+      return { message: completion };
     } catch (error) {
       console.error("❌ Error in chat route:", error);
       throw error;

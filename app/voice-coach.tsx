@@ -17,6 +17,7 @@ import { Mic, MicOff, User, Settings, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
+import { trpc } from '@/lib/trpc';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -50,7 +51,9 @@ export default function VoiceCoachScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const avatarAnim = useRef(new Animated.Value(0)).current;
   
-  // No tRPC mutations needed - calling APIs directly
+  // tRPC mutations
+  const ttsMutation = trpc.tts.useMutation();
+  const chatMutation = trpc.chat.useMutation();
 
   const speakMessage = useCallback(async (text: string) => {
     try {
@@ -71,44 +74,17 @@ export default function VoiceCoachScreen() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling OpenAI TTS API directly...');
+      console.log('📤 Calling TTS via tRPC backend...');
       
       try {
-        const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-        if (!apiKey) {
-          throw new Error('OpenAI API key not configured');
-        }
-
-        const response = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: text,
-            voice: preferredVoice,
-          }),
+        const result = await ttsMutation.mutateAsync({
+          text,
+          voice: preferredVoice as any,
         });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ OpenAI TTS API error:', response.status, errorText);
-          throw new Error(`TTS API error: ${response.status}`);
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        const base64Data = btoa(
-          new Uint8Array(arrayBuffer).reduce(
-            (data, byte) => data + String.fromCharCode(byte),
-            ''
-          )
-        );
         
-        console.log('✅ TTS audio received');
+        console.log('✅ TTS audio received from backend');
         
-        const audioUri = `data:audio/mpeg;base64,${base64Data}`;
+        const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
         
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
@@ -156,7 +132,7 @@ export default function VoiceCoachScreen() {
       setCurrentStatus('Ready to listen (text mode)');
       console.log('Speech synthesis failed, continuing in text mode');
     }
-  }, [profile.preferredVoice, sound]);
+  }, [profile.preferredVoice, sound, ttsMutation]);
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreetedRef.current) {
@@ -781,13 +757,8 @@ Key traits:
 
 Always end with encouragement and offer to continue the conversation.`;
 
-      console.log('📤 Calling OpenAI chat API directly...');
+      console.log('📤 Calling chat via tRPC backend...');
       
-      const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-      if (!apiKey) {
-        throw new Error('OpenAI API key not configured');
-      }
-
       const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
         { role: 'system' as const, content: systemPrompt },
         ...conversationMessages.slice(-10).map(msg => ({
@@ -796,29 +767,11 @@ Always end with encouragement and offer to continue the conversation.`;
         }))
       ];
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ OpenAI chat API error:', response.status, errorText);
-        throw new Error(`Chat API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const completion = data.choices?.[0]?.message?.content;
+      const result = await chatMutation.mutateAsync({ messages });
+      const completion = result.message;
 
       if (!completion || typeof completion !== 'string') {
-        throw new Error('Invalid response format from OpenAI API');
+        throw new Error('Invalid response format from chat API');
       }
       
       const assistantMessage: Message = {
