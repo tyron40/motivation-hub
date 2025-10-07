@@ -17,7 +17,6 @@ import { Mic, MicOff, User, Settings, Check } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
-import { trpcClient } from '@/lib/trpc';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -72,17 +71,44 @@ export default function VoiceCoachScreen() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS via backend tRPC...');
+      console.log('📤 Calling OpenAI TTS API directly...');
       
       try {
-        const result = await trpcClient.tts.mutate({
-          text,
-          voice: preferredVoice,
+        const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+        if (!apiKey) {
+          throw new Error('OpenAI API key not configured');
+        }
+
+        const response = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'tts-1',
+            input: text,
+            voice: preferredVoice,
+          }),
         });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ OpenAI TTS API error:', response.status, errorText);
+          throw new Error(`TTS API error: ${response.status}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const base64Data = btoa(
+          new Uint8Array(arrayBuffer).reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ''
+          )
+        );
         
-        console.log('✅ TTS audio received from backend');
+        console.log('✅ TTS audio received');
         
-        const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
+        const audioUri = `data:audio/mpeg;base64,${base64Data}`;
         
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
@@ -755,6 +781,13 @@ Key traits:
 
 Always end with encouragement and offer to continue the conversation.`;
 
+      console.log('📤 Calling OpenAI chat API directly...');
+      
+      const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new Error('OpenAI API key not configured');
+      }
+
       const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
         { role: 'system' as const, content: systemPrompt },
         ...conversationMessages.slice(-10).map(msg => ({
@@ -762,11 +795,31 @@ Always end with encouragement and offer to continue the conversation.`;
           content: msg.content,
         }))
       ];
-      
-      console.log('📤 Calling chat API via backend tRPC...');
-      
-      const result = await trpcClient.chat.mutate({ messages });
-      const completion = result.completion;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ OpenAI chat API error:', response.status, errorText);
+        throw new Error(`Chat API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const completion = data.choices?.[0]?.message?.content;
+
+      if (!completion || typeof completion !== 'string') {
+        throw new Error('Invalid response format from OpenAI API');
+      }
       
       const assistantMessage: Message = {
         role: 'assistant',
