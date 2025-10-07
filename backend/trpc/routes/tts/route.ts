@@ -1,6 +1,7 @@
 import { publicProcedure } from "../../create-context";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { getOpenAIKey } from "../../../lib/supabase";
 
 export const ttsRoute = publicProcedure
   .input(
@@ -14,9 +15,9 @@ export const ttsRoute = publicProcedure
       console.log("🎤 Generating TTS for text:", input.text.substring(0, 50) + "...");
       console.log("🔊 Voice:", input.voice || "alloy");
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = await getOpenAIKey();
       if (!apiKey) {
-        console.error("❌ OPENAI_API_KEY not found in environment variables");
+        console.error("❌ OPENAI_API_KEY not found in Supabase or environment");
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "OpenAI API key not configured",

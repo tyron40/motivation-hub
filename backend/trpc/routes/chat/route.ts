@@ -1,5 +1,6 @@
 import { publicProcedure } from "../../create-context";
 import { z } from "zod";
+import { getOpenAIKey } from "../../../lib/supabase";
 
 export const chatRoute = publicProcedure
   .input(
@@ -16,9 +17,9 @@ export const chatRoute = publicProcedure
     try {
       console.log("🤖 Calling OpenAI chat completion API");
 
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = await getOpenAIKey();
       if (!apiKey) {
-        console.error("❌ OPENAI_API_KEY not found in environment variables");
+        console.error("❌ OPENAI_API_KEY not found in Supabase or environment");
         throw new Error("OpenAI API key not configured");
       }
 
