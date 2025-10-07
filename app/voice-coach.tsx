@@ -101,13 +101,19 @@ export default function VoiceCoachScreen() {
       } catch (ttsError: any) {
         console.error('❌ TTS generation failed:', ttsError);
         
+        let errorTitle = 'Voice Not Available';
+        let errorMessage = 'Text-to-speech is currently unavailable. You can continue using the voice coach in text mode.';
+        
         if (ttsError?.message?.includes('API key')) {
-          Alert.alert(
-            'Voice Not Available',
-            'Text-to-speech is currently unavailable. The OpenAI API key needs to be configured on the server. You can continue using the voice coach in text mode.',
-            [{ text: 'OK' }]
-          );
+          errorMessage = 'The OpenAI API key needs to be configured on the server. You can continue using the voice coach in text mode.';
+        } else if (ttsError?.message?.includes('Cannot reach') || 
+                   ttsError?.message?.includes('Cannot connect') ||
+                   ttsError?.message?.includes('Network')) {
+          errorTitle = 'Connection Error';
+          errorMessage = ttsError.message;
         }
+        
+        Alert.alert(errorTitle, errorMessage, [{ text: 'OK' }]);
         
         setIsPlaying(false);
         setCurrentStatus('Ready to listen (text mode)');
@@ -118,13 +124,20 @@ export default function VoiceCoachScreen() {
       console.error('❌ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      let errorTitle = 'Voice Not Available';
+      let displayMessage = 'Text-to-speech is currently unavailable. You can continue using the voice coach in text mode.';
+      
       if (errorMessage.includes('API key') || errorMessage.includes('401')) {
-        Alert.alert(
-          'Voice Not Available',
-          'Text-to-speech is currently unavailable. Please check the server configuration.',
-          [{ text: 'OK' }]
-        );
+        displayMessage = 'Please check the server configuration.';
+      } else if (errorMessage.includes('Cannot reach') || 
+                 errorMessage.includes('Cannot connect') ||
+                 errorMessage.includes('Network')) {
+        errorTitle = 'Connection Error';
+        displayMessage = errorMessage;
       }
+      
+      Alert.alert(errorTitle, displayMessage, [{ text: 'OK' }]);
       
       setIsPlaying(false);
       setCurrentStatus('Ready to listen (text mode)');

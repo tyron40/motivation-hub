@@ -1,6 +1,27 @@
 const VERCEL_API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
 
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 45000;
+
+async function testConnection(url: string): Promise<boolean> {
+  try {
+    console.log('🔍 Testing connection to:', url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(`${url}/api/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    const isOk = response.ok;
+    console.log(isOk ? '✅ Connection test passed' : '❌ Connection test failed:', response.status);
+    return isOk;
+  } catch (error) {
+    console.log('❌ Connection test failed:', error);
+    return false;
+  }
+}
 
 export async function generateTextToSpeech(params: {
   text: string;
@@ -12,6 +33,11 @@ export async function generateTextToSpeech(params: {
     console.log('🎤 Full URL:', `${VERCEL_API_BASE}/api/tts`);
     console.log('🎤 Text length:', params.text.length);
     console.log('🎤 Voice:', params.voice || 'alloy');
+
+    const canConnect = await testConnection(VERCEL_API_BASE);
+    if (!canConnect) {
+      throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -91,8 +117,9 @@ export async function generateTextToSpeech(params: {
       throw new Error('Request timeout - please check your internet connection');
     }
     
-    if ((error as any)?.message?.includes('Network request failed')) {
-      throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+    if ((error as any)?.message?.includes('Network request failed') || 
+        (error as any)?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server at ${VERCEL_API_BASE}. Please check:\n1. Your internet connection\n2. The backend is deployed and running\n3. The URL in .env is correct`);
     }
     
     throw error;
@@ -109,6 +136,11 @@ export async function sendChatMessage(params: {
     console.log('🤖 Sending chat message via Vercel API...');
     console.log('🤖 API Base URL:', VERCEL_API_BASE);
     console.log('🤖 Full URL:', `${VERCEL_API_BASE}/api/chat`);
+
+    const canConnect = await testConnection(VERCEL_API_BASE);
+    if (!canConnect) {
+      throw new Error('Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.');
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -187,8 +219,9 @@ export async function sendChatMessage(params: {
       throw new Error('Request timeout - please check your internet connection');
     }
     
-    if ((error as any)?.message?.includes('Network request failed')) {
-      throw new Error('Cannot connect to server. Please check your internet connection and try again.');
+    if ((error as any)?.message?.includes('Network request failed') || 
+        (error as any)?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server at ${VERCEL_API_BASE}. Please check:\n1. Your internet connection\n2. The backend is deployed and running\n3. The URL in .env is correct`);
     }
     
     throw error;
