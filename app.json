@@ -32,8 +32,10 @@
       "package": "app.rork.motivational-speech-app",
       "versionCode": 18,
       "permissions": [
-        "INTERNET",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
       ]
     },
     "web": {
@@ -43,7 +45,7 @@
       [
         "expo-router",
         {
-          "origin": "https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app"
+          "origin": "https://rork.com/"
         }
       ],
       [
@@ -57,7 +59,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "rorkApiBaseUrl": "https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app"
+      "OPENAI_API_KEY": "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"
     }
   }
 }
