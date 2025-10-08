@@ -34,52 +34,48 @@ const CONNECTION_TEST_TIMEOUT = 10000;
 async function testConnection(url: string): Promise<{ success: boolean; error?: string }> {
   try {
     console.log('🔍 Testing connection to:', url);
-    console.log('🔍 Full health check URL:', `${url}/api/health`);
 
     if (url.includes('rorktest.dev') || url.includes('localhost')) {
       console.error('❌ Detected development URL - this will not work on physical devices');
       return {
         success: false,
-        error: 'App is using a development URL. The client will auto-switch to production, but rebuild is recommended.'
+        error: 'Development URL detected. Rebuild with production URL.'
       };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT);
+    const pathsToTry = ['/api/health', '/health', '/'];
+    for (const path of pathsToTry) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT);
 
-    const response = await fetch(`${url}/api/health`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+        const response = await fetch(`${url}${path}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          signal: controller.signal,
+          cache: 'no-store',
+        });
 
-    clearTimeout(timeoutId);
-    const isOk = response.ok;
-    console.log(isOk ? '✅ Connection test passed' : '❌ Connection test failed:', response.status);
+        clearTimeout(timeoutId);
+        console.log(`🔎 Probe ${path} -> ${response.status}`);
 
-    if (isOk) {
-      const data = await response.json();
-      console.log('✅ Health check response:', data);
-      return { success: true };
+        if (response.ok || response.status === 401 || response.status === 403) {
+          return { success: true };
+        }
+      } catch (innerErr: any) {
+        console.log(`⚠️ Probe failed for one path: ${path}`, innerErr?.message);
+      }
     }
 
-    return { success: false, error: `Server returned status ${response.status}` };
+    return { success: false, error: 'All health probes failed' };
   } catch (error: any) {
     console.log('❌ Connection test failed:', error);
-    console.log('❌ Error details:', {
-      name: error?.name,
-      message: error?.message,
-      stack: error?.stack?.substring(0, 200),
-    });
-
     if (error?.name === 'AbortError') {
       return { success: false, error: 'Connection timeout - server took too long to respond' };
     }
-
     return { success: false, error: error?.message || 'Network request failed' };
   }
 }
@@ -98,24 +94,12 @@ export async function generateTextToSpeech(params: {
     console.log('🔍 Checking server connectivity...');
     const connectionResult = await testConnection(API_BASE);
     if (!connectionResult.success) {
-      console.error('❌ Server connectivity check failed');
-      console.error('❌ Attempted URL:', API_BASE);
-      console.error('❌ Error:', connectionResult.error);
-
-      if (API_BASE.includes('rorktest.dev') || API_BASE.includes('localhost')) {
-        throw new Error(
-          'App is using an old development URL that no longer exists.\n\n' +
-          'SOLUTION: Rebuild your app to pick up the correct production URL.\n\n' +
-          'The app was built with: ' + API_BASE + '\n' +
-          'But should use: ' + PRODUCTION_API_URL
-        );
-      }
-
-      throw new Error(
-        'Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.'
-      );
+      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
+      console.warn('⚠️ Attempted URL:', API_BASE);
+      console.warn('⚠️ Probe error:', connectionResult.error);
+    } else {
+      console.log('✅ Server connectivity confirmed');
     }
-    console.log('✅ Server connectivity confirmed');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -199,7 +183,7 @@ export async function generateTextToSpeech(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Your internet connection\n2. The backend is deployed and running\n3. The URL in .env is correct`);
+      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
     }
 
     throw error;
@@ -220,24 +204,12 @@ export async function sendChatMessage(params: {
     console.log('🔍 Checking server connectivity...');
     const connectionResult = await testConnection(API_BASE);
     if (!connectionResult.success) {
-      console.error('❌ Server connectivity check failed');
-      console.error('❌ Attempted URL:', API_BASE);
-      console.error('❌ Error:', connectionResult.error);
-
-      if (API_BASE.includes('rorktest.dev') || API_BASE.includes('localhost')) {
-        throw new Error(
-          'App is using an old development URL that no longer exists.\n\n' +
-          'SOLUTION: Rebuild your app to pick up the correct production URL.\n\n' +
-          'The app was built with: ' + API_BASE + '\n' +
-          'But should use: ' + PRODUCTION_API_URL
-        );
-      }
-
-      throw new Error(
-        'Cannot reach the server. Please check your internet connection and ensure the backend is deployed and accessible.'
-      );
+      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
+      console.warn('⚠️ Attempted URL:', API_BASE);
+      console.warn('⚠️ Probe error:', connectionResult.error);
+    } else {
+      console.log('✅ Server connectivity confirmed');
     }
-    console.log('✅ Server connectivity confirmed');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
@@ -320,7 +292,7 @@ export async function sendChatMessage(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Your internet connection\n2. The backend is deployed and running\n3. The URL in .env is correct`);
+      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
     }
 
     throw error;
