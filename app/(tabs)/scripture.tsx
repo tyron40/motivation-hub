@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Search, Heart, Share2, BookOpen, Star, Filter, Bookmark, Sparkles, Quote, ChevronDown } from 'lucide-react-native';
+import { Search, Heart, Share2, BookOpen, Star, Filter, Bookmark, Sparkles, Quote, ChevronDown, Wand2 } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +32,7 @@ export default function ScriptureScreen() {
   const [generatedScriptures, setGeneratedScriptures] = useState<Scripture[]>([]);
   
   const [isGenerating, setIsGenerating] = useState(false);
+  const [insights, setInsights] = useState<Record<string, { text: string; loading: boolean; error?: string }>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -227,6 +228,30 @@ export default function ScriptureScreen() {
       toggleFavorite(scripture.id);
     };
 
+    const handleInspire = async () => {
+      const id = scripture.id;
+      if (!id) return;
+      const current = insights[id];
+      if (current?.loading) return;
+      setInsights(prev => ({ ...prev, [id]: { text: current?.text ?? '', loading: true, error: undefined } }));
+      try {
+        const prompt = `Using the following Bible verse, write a concise, uplifting motivational application (3-5 sentences) that helps someone apply it today. Avoid quoting the verse again. Keep it warm, practical, and non-denominational. Verse: "${scripture.verse}" (${scripture.reference}).`;
+        const res = await fetch('https://toolkit.rork.com/text/llm/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const text: string = data?.completion ?? '';
+        const cleaned = String(text ?? '').trim();
+        setInsights(prev => ({ ...prev, [id]: { text: cleaned || 'No insight generated. Try again.', loading: false } }));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
+        setInsights(prev => ({ ...prev, [id]: { text: prev[id]?.text ?? '', loading: false, error: msg } }));
+      }
+    };
+
     return (
       <Animated.View 
         style={[
@@ -279,14 +304,42 @@ export default function ScriptureScreen() {
           <View style={styles.cardFooter}>
             <LinearGradient
               colors={getCategoryGradient(scripture.category)}
-              style={styles.categoryTag}
+              style={styles.categoryPill}
             >
-              <Text style={styles.categoryText}>{scripture.category}</Text>
+              <Text style={styles.categoryPillText}>{scripture.category}</Text>
             </LinearGradient>
-            <TouchableOpacity style={styles.bookmarkButton}>
-              <Bookmark color={Colors.textSecondary} size={16} />
-            </TouchableOpacity>
+            <View style={styles.footerActions}>
+              <TouchableOpacity
+                testID={`inspire-${scripture.id}`}
+                style={styles.inspireButton}
+                onPress={handleInspire}
+                disabled={Boolean(insights[scripture.id]?.loading)}
+              >
+                {insights[scripture.id]?.loading ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : (
+                  <>
+                    <Wand2 size={16} color={Colors.primary} />
+                    <Text style={styles.inspireText}>Inspire</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bookmarkBtn}>
+                <Bookmark color={Colors.textSecondary} size={16} />
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {insights[scripture.id]?.text ? (
+            <View style={styles.insightContainer}>
+              <Text style={styles.insightTitle}>Motivational Insight</Text>
+              <Text style={styles.insightText}>{insights[scripture.id]?.text}</Text>
+            </View>
+          ) : null}
+
+          {insights[scripture.id]?.error ? (
+            <Text style={styles.errorText}>Failed to generate insight: {insights[scripture.id]?.error}</Text>
+          ) : null}
         </LinearGradient>
       </Animated.View>
     );
@@ -690,20 +743,65 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  categoryTag: {
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryPill: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
-  categoryText: {
+  categoryPillText: {
     fontSize: 13,
     fontWeight: 'bold',
     color: 'white',
   },
-  bookmarkButton: {
+  bookmarkBtn: {
     padding: 10,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  inspireButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+  },
+  inspireText: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  insightContainer: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  insightTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  insightText: {
+    color: Colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  errorText: {
+    color: '#EF4444',
+    marginTop: 8,
+    fontSize: 12,
   },
   emptyState: {
     alignItems: 'center',
