@@ -2,6 +2,10 @@
   "buildCommand": "echo 'No build needed for serverless functions'",
   "rewrites": [
     {
+      "source": "/api/health",
+      "destination": "/api/index"
+    },
+    {
       "source": "/api/tts",
       "destination": "/api/index"
     },
