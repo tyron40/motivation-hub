@@ -7,6 +7,14 @@ import OpenAI from "openai";
 
 const app = new Hono();
 
+app.options("*", (c) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  c.header('Access-Control-Allow-Headers', '*');
+  c.header('Access-Control-Max-Age', '600');
+  return c.body(null, 204);
+});
+
 app.use("*", cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -27,17 +35,26 @@ app.use("*", async (c, next) => {
 
 app.get("/", (c) => {
   console.log("[Hono] Root endpoint hit");
-  return c.json({ status: "ok", message: "API is running", timestamp: new Date().toISOString() });
+  return c.json({ ok: true, status: "ok", message: "API is running", timestamp: new Date().toISOString() }, 200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+  });
 });
 
 app.get("/api", (c) => {
   console.log("[Hono] /api endpoint hit");
-  return c.json({ status: "ok", message: "tRPC API is running", timestamp: new Date().toISOString() });
+  return c.json({ ok: true, status: "ok", message: "tRPC API is running", timestamp: new Date().toISOString() }, 200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+  });
 });
 
 app.get("/health", (c) => {
   console.log("[Hono] Health check (no /api prefix)");
   return c.json({ 
+    ok: true,
     status: "healthy", 
     timestamp: new Date().toISOString(),
     env: {
@@ -45,12 +62,18 @@ app.get("/health", (c) => {
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
     }
+  }, 200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+    'Cache-Control': 'no-cache',
   });
 });
 
 app.get("/api/health", (c) => {
   console.log("[Hono] Health check (with /api prefix)");
   return c.json({ 
+    ok: true,
     status: "healthy", 
     timestamp: new Date().toISOString(),
     env: {
@@ -58,6 +81,11 @@ app.get("/api/health", (c) => {
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
     }
+  }, 200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': '*',
+    'Cache-Control': 'no-cache',
   });
 });
 

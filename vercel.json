@@ -2,7 +2,15 @@
   "buildCommand": "echo 'No build needed for serverless functions'",
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/api/tts",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/chat",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/trpc/:path*",
       "destination": "/api/index"
     }
   ],
