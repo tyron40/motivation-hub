@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   Animated,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/auth-context';
@@ -131,9 +132,11 @@ export default function AuthScreen() {
               <Animated.View style={[styles.landingContent, { opacity: fadeAnim }]}>
                 <View style={styles.heroSection}>
                   <View style={styles.appIconContainer}>
-                    <View style={styles.appIcon}>
-                      <Sparkles color="#FFD700" size={40} strokeWidth={2.5} />
-                    </View>
+                    <Image 
+                      source={require('@/assets/images/icon.png')}
+                      style={styles.appIconImage}
+                      resizeMode="cover"
+                    />
                   </View>
                   <Text style={styles.heroTitle}>Motivation Hub</Text>
                   <Text style={styles.heroSubtitle}>
@@ -143,24 +146,24 @@ export default function AuthScreen() {
 
                 <View style={styles.featuresContainer}>
                   <View style={styles.featureCard}>
-                    <View style={styles.featureIcon}>
-                      <Mic color="#6C5CE7" size={24} />
+                    <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(108, 92, 231, 0.15)' }]}>
+                      <Mic color="#6C5CE7" size={28} />
                     </View>
                     <Text style={styles.featureTitle}>Inspiring Speeches</Text>
                     <Text style={styles.featureText}>Access thousands of motivational talks</Text>
                   </View>
 
                   <View style={styles.featureCard}>
-                    <View style={styles.featureIcon}>
-                      <MessageCircle color="#00D9FF" size={24} />
+                    <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(0, 217, 255, 0.15)' }]}>
+                      <MessageCircle color="#00D9FF" size={28} />
                     </View>
                     <Text style={styles.featureTitle}>AI Voice Coach</Text>
                     <Text style={styles.featureText}>Get personalized guidance anytime</Text>
                   </View>
 
                   <View style={styles.featureCard}>
-                    <View style={styles.featureIcon}>
-                      <BookOpen color="#FF6B6B" size={24} />
+                    <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(255, 107, 107, 0.15)' }]}>
+                      <BookOpen color="#FF6B6B" size={28} />
                     </View>
                     <Text style={styles.featureTitle}>Scripture Wisdom</Text>
                     <Text style={styles.featureText}>Daily inspiration from sacred texts</Text>
@@ -345,21 +348,21 @@ const styles = StyleSheet.create({
   },
   appIconContainer: {
     marginBottom: 16,
-  },
-  appIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 22,
-    backgroundColor: '#1A1A2E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
+    borderWidth: 4,
     borderColor: '#FFD700',
     shadowColor: '#FFD700',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
     elevation: 12,
+  },
+  appIconImage: {
+    width: '100%',
+    height: '100%',
   },
   iconContainer: {
     width: 80,
@@ -390,31 +393,38 @@ const styles = StyleSheet.create({
   },
   featureCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
   },
-  featureIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  featureIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   featureTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-    marginBottom: 6,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   featureText: {
     fontSize: 14,
-    color: '#999',
+    color: '#B0B0B0',
     lineHeight: 20,
+    textAlign: 'center',
   },
   ctaContainer: {
     marginTop: 16,
