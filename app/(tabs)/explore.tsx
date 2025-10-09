@@ -145,9 +145,9 @@ export default function ExploreScreen() {
                   <Text style={styles.resultsCount} testID="explore-results-count">
                     {searchQuery ? `${String(searchResults.length)} results found` : `All ${String(speeches.length)} speeches`}
                   </Text>
-                  {searchQuery && apiStatus === 'working' ? (
+                  {searchQuery && apiStatus === 'working' && (
                     <Text style={styles.searchHint}>Press antenna to search podcasts online</Text>
-                  ) : null}
+                  )}
                 </View>
                 {displaySpeeches
                   .filter((speech) => speech && typeof speech === 'object' && (speech as any).id && (speech as any).title)

@@ -51,6 +51,7 @@ export default function VoiceCoachScreen() {
   const isInitializedRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
   const isStartingRef = useRef<boolean>(false);
+  const [hasPermission, setHasPermission] = useState<boolean>(false);
   
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -205,6 +206,18 @@ export default function VoiceCoachScreen() {
       try {
         console.log('🔍 Checking backend health...');
         console.log('✅ Using direct API calls, no backend health check needed');
+        
+        console.log('🔐 Requesting microphone permissions on startup...');
+        const permissionResponse = await Audio.requestPermissionsAsync();
+        console.log('🔐 Permission response:', JSON.stringify(permissionResponse));
+        
+        if (permissionResponse.status === 'granted') {
+          console.log('✅ Microphone permission granted');
+          setHasPermission(true);
+        } else {
+          console.log('⚠️ Microphone permission not granted');
+          setHasPermission(false);
+        }
         
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -421,6 +434,7 @@ export default function VoiceCoachScreen() {
           console.error('❌ Microphone permission denied');
           isStartingRef.current = false;
           recordingStartTimeRef.current = null;
+          setHasPermission(false);
           
           const message = permissionResponse.canAskAgain 
             ? 'Microphone access is required to use voice chat. Please grant permission when prompted.'
@@ -433,12 +447,14 @@ export default function VoiceCoachScreen() {
           );
           return;
         }
+        
+        setHasPermission(true);
       }
       
       console.log('✅ Microphone permission granted');
       
       // Wait a bit after permission grant to ensure system is ready
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Set audio mode for recording
       console.log('🔧 Setting up audio mode for recording...');
@@ -489,16 +505,20 @@ export default function VoiceCoachScreen() {
       console.log('✅ Recording prepared successfully');
 
       console.log('▶️ Starting recording...');
-      await recordingInstance.startAsync();
       
-      // Set the start time IMMEDIATELY after starting
+      // Set the start time BEFORE starting to ensure we capture the full duration
       recordingStartTimeRef.current = Date.now();
       console.log('⏱️ Recording start time set:', recordingStartTimeRef.current);
       
+      await recordingInstance.startAsync();
+      console.log('✅ Recording.startAsync() completed');
+      
       // Verify recording is actually running
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 150));
       const recordingStatus = await recordingInstance.getStatusAsync();
       console.log('📊 Recording status after start:', JSON.stringify(recordingStatus));
+      console.log('📊 Is recording:', recordingStatus.isRecording);
+      console.log('📊 Duration so far:', recordingStatus.durationMillis, 'ms');
       
       if (!recordingStatus.isRecording) {
         console.error('❌ Recording failed to start properly');
@@ -667,28 +687,29 @@ export default function VoiceCoachScreen() {
       if (uri) {
         console.log('🎵 Processing recording with URI:', uri);
         
-        // Calculate elapsed time
+        // Calculate elapsed time using our timestamp
         const elapsedMs = startedAt ? Date.now() - startedAt : null;
-        const MIN_DURATION_MS = 500;
+        const MIN_DURATION_MS = 300;
         
-        if (elapsedMs !== null) {
-          console.log(`⏱️ Elapsed recording time: ${elapsedMs}ms (${(elapsedMs / 1000).toFixed(2)}s)`);
-          
-          if (elapsedMs < MIN_DURATION_MS) {
-            console.log(`⚠️ Recording too short: ${elapsedMs}ms (minimum: ${MIN_DURATION_MS}ms)`);
-            Alert.alert(
-              'Recording Too Short',
-              `Recording was only ${(elapsedMs / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`,
-              [{ text: 'Try Again' }]
-            );
-            setCurrentStatus('Ready to listen');
-            return;
-          }
-        }
+        // Also check native duration
+        const nativeDurationMs = status?.durationMillis ?? null;
         
-        // Log native duration when available
-        if (status && typeof status.durationMillis === 'number') {
-          console.log(`ℹ️ Native durationMillis reported: ${status.durationMillis}ms`);
+        console.log(`⏱️ Elapsed time (our timer): ${elapsedMs}ms`);
+        console.log(`⏱️ Native duration: ${nativeDurationMs}ms`);
+        
+        // Use whichever duration is available and longer
+        const actualDuration = Math.max(elapsedMs ?? 0, nativeDurationMs ?? 0);
+        console.log(`⏱️ Actual duration used: ${actualDuration}ms (${(actualDuration / 1000).toFixed(2)}s)`);
+        
+        if (actualDuration < MIN_DURATION_MS) {
+          console.log(`⚠️ Recording too short: ${actualDuration}ms (minimum: ${MIN_DURATION_MS}ms)`);
+          Alert.alert(
+            'Recording Too Short',
+            `Recording was only ${(actualDuration / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`,
+            [{ text: 'Try Again' }]
+          );
+          setCurrentStatus('Ready to listen');
+          return;
         }
         
         // Process the recording
@@ -1137,8 +1158,15 @@ Always end with encouragement and offer to continue the conversation.`;
         {/* Instructions */}
         <View style={styles.instructionsSection}>
           <Text style={styles.instructionsText}>
-            Hold the microphone button to speak with your coach
+            {hasPermission 
+              ? 'Hold the microphone button to speak with your coach'
+              : 'Microphone permission required - tap the button to enable'}
           </Text>
+          {!hasPermission && (
+            <Text style={styles.warningText}>
+              Grant microphone access to use voice features
+            </Text>
+          )}
           <TouchableOpacity 
             testID="voice-settings-button"
             style={styles.voiceSettingsButton}
