@@ -331,6 +331,14 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🎤 Starting recording...');
       
+      // Prevent multiple recordings
+      if (isRecording || isProcessing || isStartingRef.current) {
+        console.log('⚠️ Cannot start recording - already busy');
+        return;
+      }
+      
+      isStartingRef.current = true;
+      
       // Stop any playing audio FIRST before starting to record
       if (sound || isPlaying) {
         console.log('🔇 Stopping any existing playback...');
@@ -344,17 +352,8 @@ export default function VoiceCoachScreen() {
         } catch (e) {
           console.log('⚠️ Error stopping playback:', e);
         }
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
-      
-      // Prevent multiple recordings
-      if (isRecording || isProcessing || isStartingRef.current) {
-        console.log('⚠️ Cannot start recording - already busy');
-        return;
-      }
-      
-      isStartingRef.current = true;
-      recordingStartTimeRef.current = Date.now();
       
       // Ensure any existing recording is completely cleaned up first
       if (recording) {
@@ -410,21 +409,22 @@ export default function VoiceCoachScreen() {
 
       // Mobile: Request and check permissions
       console.log('🔐 Checking microphone permissions...');
-      const permissionResponse = await Audio.getPermissionsAsync();
-      console.log('🔐 Current permission status:', permissionResponse);
+      let permissionResponse = await Audio.getPermissionsAsync();
+      console.log('🔐 Current permission status:', JSON.stringify(permissionResponse));
       
       if (permissionResponse.status !== 'granted') {
         console.log('🔐 Permission not granted, requesting...');
-        const requestResponse = await Audio.requestPermissionsAsync();
-        console.log('🔐 Permission request result:', requestResponse);
+        permissionResponse = await Audio.requestPermissionsAsync();
+        console.log('🔐 Permission request result:', JSON.stringify(permissionResponse));
         
-        if (requestResponse.status !== 'granted') {
+        if (permissionResponse.status !== 'granted') {
           console.error('❌ Microphone permission denied');
           isStartingRef.current = false;
+          recordingStartTimeRef.current = null;
           
-          const message = requestResponse.canAskAgain 
+          const message = permissionResponse.canAskAgain 
             ? 'Microphone access is required to use voice chat. Please grant permission when prompted.'
-            : 'Microphone permission was denied. Please enable it in your device Settings > Privacy > Microphone.';
+            : 'Microphone permission was denied. Please enable it in your device Settings > Privacy > Microphone, then restart the app.';
           
           Alert.alert(
             'Microphone Permission Required', 
@@ -436,18 +436,12 @@ export default function VoiceCoachScreen() {
       }
       
       console.log('✅ Microphone permission granted');
+      
+      // Wait a bit after permission grant to ensure system is ready
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Reset audio mode first, then set for recording
-      console.log('🔧 Setting up audio mode...');
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      // Set audio mode for recording
+      console.log('🔧 Setting up audio mode for recording...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -455,6 +449,9 @@ export default function VoiceCoachScreen() {
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+      
+      console.log('✅ Audio mode configured for recording');
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       // Create new recording instance
       console.log('🆕 Creating new recording instance...');
@@ -494,19 +491,22 @@ export default function VoiceCoachScreen() {
       console.log('▶️ Starting recording...');
       await recordingInstance.startAsync();
       
+      // Set the start time IMMEDIATELY after starting
+      recordingStartTimeRef.current = Date.now();
+      console.log('⏱️ Recording start time set:', recordingStartTimeRef.current);
+      
       // Verify recording is actually running
+      await new Promise(resolve => setTimeout(resolve, 100));
       const recordingStatus = await recordingInstance.getStatusAsync();
-      console.log('📊 Recording status after start:', recordingStatus);
+      console.log('📊 Recording status after start:', JSON.stringify(recordingStatus));
       
       if (!recordingStatus.isRecording) {
         console.error('❌ Recording failed to start properly');
-        throw new Error('Recording did not start. Please check microphone permissions.');
+        recordingStartTimeRef.current = null;
+        throw new Error('Recording did not start. Please check microphone permissions and try again.');
       }
       
       setRecording(recordingInstance);
-      if (!recordingStartTimeRef.current) {
-        recordingStartTimeRef.current = Date.now();
-      }
       setIsRecording(true);
       setCurrentStatus('Listening... Speak now!');
       isStartingRef.current = false;
@@ -666,20 +666,31 @@ export default function VoiceCoachScreen() {
       // Check if we have a valid recording
       if (uri) {
         console.log('🎵 Processing recording with URI:', uri);
-        // Prefer elapsed wall-clock time over status.durationMillis (which can be 0 immediately after stop)
+        
+        // Calculate elapsed time
         const elapsedMs = startedAt ? Date.now() - startedAt : null;
+        const MIN_DURATION_MS = 500;
+        
         if (elapsedMs !== null) {
           console.log(`⏱️ Elapsed recording time: ${elapsedMs}ms (${(elapsedMs / 1000).toFixed(2)}s)`);
-          const MIN_MS = 300;
-          if (elapsedMs < MIN_MS) {
-            console.log('⚠️ Recording too short by elapsed time guard');
-            await new Promise(resolve => setTimeout(resolve, 200));
+          
+          if (elapsedMs < MIN_DURATION_MS) {
+            console.log(`⚠️ Recording too short: ${elapsedMs}ms (minimum: ${MIN_DURATION_MS}ms)`);
+            Alert.alert(
+              'Recording Too Short',
+              `Recording was only ${(elapsedMs / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`,
+              [{ text: 'Try Again' }]
+            );
+            setCurrentStatus('Ready to listen');
+            return;
           }
         }
-        // Log native duration when available but do not block on it
+        
+        // Log native duration when available
         if (status && typeof status.durationMillis === 'number') {
-          console.log(`ℹ️ Native durationMillis reported: ${status.durationMillis}`);
+          console.log(`ℹ️ Native durationMillis reported: ${status.durationMillis}ms`);
         }
+        
         // Process the recording
         await processAudioTranscription(uri);
       } else {
