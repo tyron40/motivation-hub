@@ -21,6 +21,8 @@ console.log('🔧 ========================================');
 console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
 console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
 console.log('🔧 FINAL URL BEING USED:', API_BASE);
+console.log('🔧 Basic auth user present:', !!process.env.EXPO_PUBLIC_BASIC_AUTH_USER);
+console.log('🔧 Basic auth header present:', !!process.env.EXPO_PUBLIC_API_AUTH_HEADER);
 console.log('🔧 ========================================');
 
 if (API_BASE.includes('rorktest.dev')) {
@@ -30,6 +32,20 @@ if (API_BASE.includes('rorktest.dev')) {
 
 const DEFAULT_TIMEOUT = 45000;
 const CONNECTION_TEST_TIMEOUT = 10000;
+
+function getAuthHeader(): Record<string, string> {
+  const preset = process.env.EXPO_PUBLIC_API_AUTH_HEADER ?? '';
+  if (preset) {
+    return { Authorization: preset };
+  }
+  const user = process.env.EXPO_PUBLIC_BASIC_AUTH_USER ?? '';
+  const pass = process.env.EXPO_PUBLIC_BASIC_AUTH_PASS ?? '';
+  if (user && pass) {
+    const token = typeof btoa === 'function' ? btoa(`${user}:${pass}`) : Buffer.from(`${user}:${pass}`).toString('base64');
+    return { Authorization: `Basic ${token}` };
+  }
+  return {};
+}
 
 async function testConnection(url: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -110,6 +126,7 @@ export async function generateTextToSpeech(params: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Cache-Control': 'no-cache',
+        ...getAuthHeader(),
       },
       body: JSON.stringify({
         text: params.text,
@@ -131,7 +148,9 @@ export async function generateTextToSpeech(params: {
         const errorText = await response.text();
         console.error('❌ TTS API error response:', errorText.substring(0, 200));
 
-        if (contentType?.includes('application/json')) {
+        if (response.status === 401 || response.status === 403) {
+          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER) to allow the app to access the API.';
+        } else if (contentType?.includes('application/json')) {
           try {
             const errorJson = JSON.parse(errorText);
             errorMessage = errorJson.error || errorJson.message || errorMessage;
@@ -220,6 +239,7 @@ export async function sendChatMessage(params: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Cache-Control': 'no-cache',
+        ...getAuthHeader(),
       },
       body: JSON.stringify({
         messages: params.messages,
@@ -240,7 +260,9 @@ export async function sendChatMessage(params: {
         const errorText = await response.text();
         console.error('❌ Chat API error response:', errorText.substring(0, 200));
 
-        if (contentType?.includes('application/json')) {
+        if (response.status === 401 || response.status === 403) {
+          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER).';
+        } else if (contentType?.includes('application/json')) {
           try {
             const errorJson = JSON.parse(errorText);
             errorMessage = errorJson.error || errorJson.message || errorMessage;
