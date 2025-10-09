@@ -70,7 +70,7 @@ export default function ExploreScreen() {
                 {apiStatus === 'testing' && (
                   <View style={styles.statusContent}>
                     <ActivityIndicator size={12} color={Colors.primary} />
-                    <Text style={styles.apiStatusText}>Testing API…</Text>
+                    <Text style={styles.apiStatusText}>Testing API...</Text>
                   </View>
                 )}
                 {apiStatus === 'working' && (
@@ -92,7 +92,7 @@ export default function ExploreScreen() {
               <TextInput
                 testID="explore-search-input"
                 style={styles.searchInput}
-                placeholder={apiStatus === 'working' ? 'Search podcasts for speeches…' : 'Search local speeches…'}
+                placeholder={apiStatus === 'working' ? 'Search podcasts for speeches...' : 'Search local speeches...'}
                 placeholderTextColor={Colors.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
