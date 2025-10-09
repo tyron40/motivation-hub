@@ -49,6 +49,7 @@ export default function VoiceCoachScreen() {
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const hasGreetedRef = useRef(false);
   const isInitializedRef = useRef(false);
+  const recordingStartTimeRef = useRef<number | null>(null);
   
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -501,6 +502,7 @@ export default function VoiceCoachScreen() {
       }
       
       setRecording(recordingInstance);
+      recordingStartTimeRef.current = Date.now();
       setIsRecording(true);
       setCurrentStatus('Listening... Speak now!');
       
@@ -577,6 +579,9 @@ export default function VoiceCoachScreen() {
       setIsRecording(false);
       setCurrentStatus('Processing...');
       
+      const startedAt = recordingStartTimeRef.current ?? null;
+      recordingStartTimeRef.current = null;
+      
       let uri: string | null = null;
       let status: any = null;
       let recordingToProcess = recording;
@@ -637,20 +642,24 @@ export default function VoiceCoachScreen() {
       // Check if we have a valid recording
       if (uri) {
         console.log('🎵 Processing recording with URI:', uri);
-        // Check recording duration
-        if (status && status.durationMillis !== undefined) {
-          console.log(`⏱️ Recording duration: ${status.durationMillis}ms (${(status.durationMillis / 1000).toFixed(2)}s)`);
-          if (status.durationMillis < 300) {
-            console.log('⚠️ Recording too short, likely no speech');
+        // Prefer elapsed wall-clock time over status.durationMillis (which can be 0 immediately after stop)
+        const elapsedMs = startedAt ? Date.now() - startedAt : null;
+        if (elapsedMs !== null) {
+          console.log(`⏱️ Elapsed recording time: ${elapsedMs}ms (${(elapsedMs / 1000).toFixed(2)}s)`);
+          const MIN_MS = 600;
+          if (elapsedMs < MIN_MS) {
+            console.log('⚠️ Recording too short by elapsed time guard');
             Alert.alert(
-              'Recording Too Short', 
-              `Recording was only ${(status.durationMillis / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`
+              'Recording Too Short',
+              `Recording was only ${(elapsedMs / 1000).toFixed(2)} seconds. Please hold the button while speaking.`
             );
             setCurrentStatus('Ready to listen');
             return;
           }
-        } else {
-          console.log('⚠️ No duration information available, proceeding anyway');
+        }
+        // Log native duration when available but do not block on it
+        if (status && typeof status.durationMillis === 'number') {
+          console.log(`ℹ️ Native durationMillis reported: ${status.durationMillis}`);
         }
         // Process the recording
         await processAudioTranscription(uri);
@@ -663,6 +672,7 @@ export default function VoiceCoachScreen() {
       console.error('❌ Error stopping recording:', error);
       setRecording(null);
       setIsRecording(false);
+      recordingStartTimeRef.current = null;
       Alert.alert('Recording Error', `Failed to process recording: ${(error as Error).message}`);
     }
   };
