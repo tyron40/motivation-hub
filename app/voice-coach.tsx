@@ -50,6 +50,7 @@ export default function VoiceCoachScreen() {
   const hasGreetedRef = useRef(false);
   const isInitializedRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
+  const isStartingRef = useRef<boolean>(false);
   
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -348,10 +349,13 @@ export default function VoiceCoachScreen() {
       }
       
       // Prevent multiple recordings
-      if (isRecording || isProcessing) {
+      if (isRecording || isProcessing || isStartingRef.current) {
         console.log('⚠️ Cannot start recording - already busy');
         return;
       }
+      
+      isStartingRef.current = true;
+      recordingStartTimeRef.current = Date.now();
       
       // Ensure any existing recording is completely cleaned up first
       if (recording) {
@@ -502,7 +506,9 @@ export default function VoiceCoachScreen() {
       }
       
       setRecording(recordingInstance);
-      recordingStartTimeRef.current = Date.now();
+      if (!recordingStartTimeRef.current) {
+        recordingStartTimeRef.current = Date.now();
+      }
       setIsRecording(true);
       setCurrentStatus('Listening... Speak now!');
       
@@ -513,6 +519,8 @@ export default function VoiceCoachScreen() {
       // Clean up on error
       setRecording(null);
       setIsRecording(false);
+      recordingStartTimeRef.current = null;
+      isStartingRef.current = false;
       
       // Reset audio mode on error
       try {
@@ -534,6 +542,18 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🛑 Stopping recording...');
       
+      // Wait if start is still initializing
+      if (isStartingRef.current) {
+        console.log('⏳ Waiting for recording to initialize before stopping...');
+        let waited = 0;
+        while (isStartingRef.current && waited < 800) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(resolve => setTimeout(resolve, 50));
+          waited += 50;
+        }
+      }
+      isStartingRef.current = false;
+
       // Web stop path
       if (Platform.OS === 'web') {
         try {
@@ -646,15 +666,10 @@ export default function VoiceCoachScreen() {
         const elapsedMs = startedAt ? Date.now() - startedAt : null;
         if (elapsedMs !== null) {
           console.log(`⏱️ Elapsed recording time: ${elapsedMs}ms (${(elapsedMs / 1000).toFixed(2)}s)`);
-          const MIN_MS = 600;
+          const MIN_MS = 300;
           if (elapsedMs < MIN_MS) {
             console.log('⚠️ Recording too short by elapsed time guard');
-            Alert.alert(
-              'Recording Too Short',
-              `Recording was only ${(elapsedMs / 1000).toFixed(2)} seconds. Please hold the button while speaking.`
-            );
-            setCurrentStatus('Ready to listen');
-            return;
+            await new Promise(resolve => setTimeout(resolve, 200));
           }
         }
         // Log native duration when available but do not block on it
@@ -826,6 +841,7 @@ export default function VoiceCoachScreen() {
       }
     } finally {
       setIsProcessing(false);
+      isStartingRef.current = false;
       if (!isPlaying) {
         setCurrentStatus('Ready to listen');
       }
