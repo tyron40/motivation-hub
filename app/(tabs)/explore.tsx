@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
+import {
+  StyleSheet,
+  Text,
+  View,
   TextInput,
   ScrollView,
   TouchableOpacity,
@@ -15,14 +15,12 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { useSpeechContext, useSpeechSearch } from '@/hooks/speech-context';
-
 import { router } from 'expo-router';
-import ErrorBoundary from '@/components/ErrorBoundary';
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearchingOnline, setIsSearchingOnline] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<'testing' | 'working' | 'failed' | null>(null);
   const { toggleFavorite, setCurrentSpeech, speeches, searchOnlineSpeeches, isLoading } = useSpeechContext();
   const searchResults = useSpeechSearch(searchQuery);
@@ -39,7 +37,7 @@ export default function ExploreScreen() {
 
   const handleOnlineSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsSearchingOnline(true);
     try {
       console.log(`🔍 Searching podcasts for: "${searchQuery}"`);
@@ -55,7 +53,7 @@ export default function ExploreScreen() {
   const displaySpeeches = searchQuery ? searchResults : speeches;
 
   return (
-    <ErrorBoundary>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
         colors={[Colors.background, '#1A1A2E']}
@@ -171,7 +169,7 @@ export default function ExploreScreen() {
           </ScrollView>
         </View>
       </LinearGradient>
-    </ErrorBoundary>
+    </>
   );
 }
 
