@@ -344,7 +344,6 @@ export default function VoiceCoachScreen() {
         } catch (e) {
           console.log('⚠️ Error stopping playback:', e);
         }
-        // Add delay after stopping audio
         await new Promise(resolve => setTimeout(resolve, 200));
       }
       
@@ -370,12 +369,10 @@ export default function VoiceCoachScreen() {
           console.log('⚠️ Error cleaning up existing recording:', e);
         }
         setRecording(null);
-        
-        // Wait longer to ensure cleanup is complete
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // Web path using MediaRecorder (web does not use Expo AV)
+      // Web path using MediaRecorder
       if (Platform.OS === 'web') {
         try {
           console.log('🌐 Starting web recording via MediaRecorder');
@@ -401,38 +398,41 @@ export default function VoiceCoachScreen() {
 
           setIsRecording(true);
           setCurrentStatus('Listening... Speak now!');
+          isStartingRef.current = false;
           return;
         } catch (webErr) {
           console.error('❌ Web recording error:', webErr);
+          isStartingRef.current = false;
           Alert.alert('Microphone Error', 'Unable to access your microphone. Please allow microphone permissions in your browser.');
           return;
         }
       }
 
-      // Request permissions
-      console.log('🔐 Requesting microphone permissions...');
-      const { status, canAskAgain, granted } = await Audio.requestPermissionsAsync();
-      console.log('🔐 Permission status:', { status, canAskAgain, granted });
+      // Mobile: Request and check permissions
+      console.log('🔐 Checking microphone permissions...');
+      const permissionResponse = await Audio.getPermissionsAsync();
+      console.log('🔐 Current permission status:', permissionResponse);
       
-      if (status !== 'granted') {
-        console.error('❌ Microphone permission denied');
-        Alert.alert(
-          'Microphone Permission Required', 
-          'Please grant microphone permission in your device settings to use voice chat.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => {
-              if (Platform.OS === 'ios') {
-                // iOS settings
-                console.log('Opening iOS settings...');
-              } else if (Platform.OS === 'android') {
-                // Android settings
-                console.log('Opening Android settings...');
-              }
-            }}
-          ]
-        );
-        return;
+      if (permissionResponse.status !== 'granted') {
+        console.log('🔐 Permission not granted, requesting...');
+        const requestResponse = await Audio.requestPermissionsAsync();
+        console.log('🔐 Permission request result:', requestResponse);
+        
+        if (requestResponse.status !== 'granted') {
+          console.error('❌ Microphone permission denied');
+          isStartingRef.current = false;
+          
+          const message = requestResponse.canAskAgain 
+            ? 'Microphone access is required to use voice chat. Please grant permission when prompted.'
+            : 'Microphone permission was denied. Please enable it in your device Settings > Privacy > Microphone.';
+          
+          Alert.alert(
+            'Microphone Permission Required', 
+            message,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
       }
       
       console.log('✅ Microphone permission granted');
@@ -446,7 +446,6 @@ export default function VoiceCoachScreen() {
         shouldDuckAndroid: true,
       });
       
-      // Small delay before enabling recording
       await new Promise(resolve => setTimeout(resolve, 100));
       
       await Audio.setAudioModeAsync({
@@ -463,7 +462,6 @@ export default function VoiceCoachScreen() {
       
       console.log('🔧 Preparing recording...');
       
-      // Recording configuration optimized for speech-to-text
       const recordingOptions = {
         android: {
           extension: '.m4a',
@@ -511,6 +509,7 @@ export default function VoiceCoachScreen() {
       }
       setIsRecording(true);
       setCurrentStatus('Listening... Speak now!');
+      isStartingRef.current = false;
       
       console.log('✅ Recording started successfully and verified');
     } catch (error) {
@@ -534,7 +533,12 @@ export default function VoiceCoachScreen() {
         console.error('Error resetting audio mode:', resetError);
       }
       
-      Alert.alert('Recording Error', `Failed to start recording: ${(error as Error).message}`);
+      const errorMessage = (error as Error).message;
+      const userMessage = errorMessage.includes('permission') 
+        ? 'Microphone permission is required. Please enable it in your device settings.'
+        : `Failed to start recording: ${errorMessage}`;
+      
+      Alert.alert('Recording Error', userMessage);
     }
   };
 
