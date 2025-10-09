@@ -76,7 +76,9 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
               <Text style={styles.featuredSpeaker}>{String(speech.speaker || '')}</Text>
               <View style={styles.featuredMeta}>
                 <View style={styles.duration}>
-                  <Clock color={Colors.text} size={14} />
+                  <View style={styles.durationIcon}>
+                    <Clock color={Colors.text} size={14} />
+                  </View>
                   <Text style={styles.durationText}>{formatDuration(speech.duration)}</Text>
                 </View>
                 <TouchableOpacity onPress={onFavorite} style={styles.favoriteButton}>
@@ -106,7 +108,9 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
           <Text style={styles.compactSpeaker}>{String(speech.speaker || '')}</Text>
           <View style={styles.compactMeta}>
             <View style={styles.duration}>
-              <Clock color={Colors.textSecondary} size={12} />
+              <View style={styles.durationIcon}>
+                <Clock color={Colors.textSecondary} size={12} />
+              </View>
               <Text style={styles.compactDuration}>{formatDuration(speech.duration)}</Text>
             </View>
             <TouchableOpacity onPress={onFavorite}>
@@ -175,7 +179,9 @@ const styles = StyleSheet.create({
   duration: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+  },
+  durationIcon: {
+    marginRight: 4,
   },
   durationText: {
     color: Colors.text,

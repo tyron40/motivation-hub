@@ -67,19 +67,25 @@ export default function ExploreScreen() {
               <View style={styles.apiStatusBadge}>
                 {apiStatus === 'testing' && (
                   <View style={styles.statusContent}>
-                    <ActivityIndicator size={12} color={Colors.primary} />
+                    <View style={styles.statusIcon}>
+                      <ActivityIndicator size={12} color={Colors.primary} />
+                    </View>
                     <Text style={styles.apiStatusText}>Testing API...</Text>
                   </View>
                 )}
                 {apiStatus === 'working' && (
                   <View style={styles.statusContent}>
-                    <CheckCircle size={12} color="#10B981" />
+                    <View style={styles.statusIcon}>
+                      <CheckCircle size={12} color="#10B981" />
+                    </View>
                     <Text style={[styles.apiStatusText, { color: '#10B981' }]}>Podcasts Ready</Text>
                   </View>
                 )}
                 {apiStatus === 'failed' && (
                   <View style={styles.statusContent}>
-                    <XCircle size={12} color="#EF4444" />
+                    <View style={styles.statusIcon}>
+                      <XCircle size={12} color="#EF4444" />
+                    </View>
                     <Text style={[styles.apiStatusText, { color: '#EF4444' }]}>API Failed</Text>
                   </View>
                 )}
@@ -127,7 +133,9 @@ export default function ExploreScreen() {
 
             <View style={styles.quickActions}>
               <TouchableOpacity style={styles.actionButton} onPress={() => router.push('/videos')}>
-                <Video size={20} color={Colors.primary} />
+                <View style={styles.actionIcon}>
+                  <Video size={20} color={Colors.primary} />
+                </View>
                 <Text style={styles.actionButtonText}>Browse Videos</Text>
               </TouchableOpacity>
             </View>
@@ -204,7 +212,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   apiStatusText: {
     color: Colors.textSecondary,
@@ -277,7 +284,6 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: 'row',
     paddingTop: 12,
-    gap: 12,
   },
   actionButton: {
     flexDirection: 'row',
@@ -286,7 +292,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 8,
     borderWidth: 1,
     borderColor: Colors.primary + '30',
   },
@@ -298,6 +303,11 @@ const styles = StyleSheet.create({
   statusContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+  },
+  statusIcon: {
+    marginRight: 4,
+  },
+  actionIcon: {
+    marginRight: 8,
   },
 });
