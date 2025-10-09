@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
-import { Eye, EyeOff, Mail, Lock, User, Sparkles, Mic, BookOpen, MessageCircle, ArrowRight } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, Mic, BookOpen, MessageCircle, ArrowRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 type Screen = 'landing' | 'signin' | 'signup';
@@ -221,7 +221,11 @@ export default function AuthScreen() {
               <Animated.View style={[styles.authContent, { opacity: fadeAnim }]}>
                 <View style={styles.authHeader}>
                   <View style={styles.authIconContainer}>
-                    <Sparkles color="#FFD700" size={32} />
+                    <Image 
+                      source={require('@/assets/images/icon.png')}
+                      style={styles.authIconImage}
+                      resizeMode="cover"
+                    />
                   </View>
                   <Text style={styles.authTitle}>
                     {currentScreen === 'signup' ? 'Create Account' : 'Welcome Back'}
@@ -488,13 +492,22 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   authIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#FFD700',
     marginBottom: 20,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  authIconImage: {
+    width: '100%',
+    height: '100%',
   },
   authTitle: {
     fontSize: 28,
