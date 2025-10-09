@@ -123,62 +123,70 @@ export default function AuthScreen() {
           style={styles.gradient}
         >
           <SafeAreaView style={styles.safeArea}>
-            <Animated.View style={[styles.landingContent, { opacity: fadeAnim }]}>
-              <View style={styles.heroSection}>
-                <View style={styles.iconContainer}>
-                  <Sparkles color="#FFD700" size={48} strokeWidth={2} />
-                </View>
-                <Text style={styles.heroTitle}>Elevate Your Mind</Text>
-                <Text style={styles.heroSubtitle}>
-                  Transform your life with powerful motivational speeches, AI coaching, and scripture wisdom
-                </Text>
-              </View>
-
-              <View style={styles.featuresContainer}>
-                <View style={styles.featureCard}>
-                  <View style={styles.featureIcon}>
-                    <Mic color="#6C5CE7" size={24} />
+            <ScrollView 
+              contentContainerStyle={styles.landingScrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <Animated.View style={[styles.landingContent, { opacity: fadeAnim }]}>
+                <View style={styles.heroSection}>
+                  <View style={styles.appIconContainer}>
+                    <View style={styles.appIcon}>
+                      <Sparkles color="#FFD700" size={40} strokeWidth={2.5} />
+                    </View>
                   </View>
-                  <Text style={styles.featureTitle}>Inspiring Speeches</Text>
-                  <Text style={styles.featureText}>Access thousands of motivational talks</Text>
+                  <Text style={styles.heroTitle}>Motivation Hub</Text>
+                  <Text style={styles.heroSubtitle}>
+                    Transform your life with powerful motivational speeches, AI coaching, and scripture wisdom
+                  </Text>
                 </View>
 
-                <View style={styles.featureCard}>
-                  <View style={styles.featureIcon}>
-                    <MessageCircle color="#00D9FF" size={24} />
+                <View style={styles.featuresContainer}>
+                  <View style={styles.featureCard}>
+                    <View style={styles.featureIcon}>
+                      <Mic color="#6C5CE7" size={24} />
+                    </View>
+                    <Text style={styles.featureTitle}>Inspiring Speeches</Text>
+                    <Text style={styles.featureText}>Access thousands of motivational talks</Text>
                   </View>
-                  <Text style={styles.featureTitle}>AI Voice Coach</Text>
-                  <Text style={styles.featureText}>Get personalized guidance anytime</Text>
-                </View>
 
-                <View style={styles.featureCard}>
-                  <View style={styles.featureIcon}>
-                    <BookOpen color="#FF6B6B" size={24} />
+                  <View style={styles.featureCard}>
+                    <View style={styles.featureIcon}>
+                      <MessageCircle color="#00D9FF" size={24} />
+                    </View>
+                    <Text style={styles.featureTitle}>AI Voice Coach</Text>
+                    <Text style={styles.featureText}>Get personalized guidance anytime</Text>
                   </View>
-                  <Text style={styles.featureTitle}>Scripture Wisdom</Text>
-                  <Text style={styles.featureText}>Daily inspiration from sacred texts</Text>
+
+                  <View style={styles.featureCard}>
+                    <View style={styles.featureIcon}>
+                      <BookOpen color="#FF6B6B" size={24} />
+                    </View>
+                    <Text style={styles.featureTitle}>Scripture Wisdom</Text>
+                    <Text style={styles.featureText}>Daily inspiration from sacred texts</Text>
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.ctaContainer}>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => navigateToScreen('signup')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.primaryButtonText}>Get Started</Text>
-                  <ArrowRight color="#FFFFFF" size={20} />
-                </TouchableOpacity>
+                <View style={styles.ctaContainer}>
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={() => navigateToScreen('signup')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.primaryButtonText}>Get Started</Text>
+                    <ArrowRight color="#FFFFFF" size={20} />
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => navigateToScreen('signin')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.secondaryButtonText}>Sign In</Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => navigateToScreen('signin')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.secondaryButtonText}>Sign In</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            </ScrollView>
           </SafeAreaView>
         </LinearGradient>
       </View>
@@ -322,15 +330,36 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  landingScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 30,
+  },
   landingContent: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 20,
   },
   heroSection: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 32,
+  },
+  appIconContainer: {
+    marginBottom: 16,
+  },
+  appIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 22,
+    backgroundColor: '#1A1A2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFD700',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
   },
   iconContainer: {
     width: 80,
@@ -342,28 +371,28 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   heroTitle: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800' as const,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     letterSpacing: -0.5,
   },
   heroSubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#B0B0B0',
     textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
+    lineHeight: 22,
+    paddingHorizontal: 10,
   },
   featuresContainer: {
-    marginBottom: 48,
+    marginBottom: 32,
   },
   featureCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -388,7 +417,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   ctaContainer: {
-    marginTop: 'auto' as const,
+    marginTop: 16,
   },
   primaryButton: {
     backgroundColor: '#6C5CE7',

@@ -63,32 +63,34 @@ export default function ExploreScreen() {
           <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
             <View style={styles.titleRow}>
               <Text style={styles.title}>Explore</Text>
-              <View style={styles.apiStatusBadge}>
-                {apiStatus === 'testing' && (
-                  <View style={styles.statusContent}>
-                    <View style={styles.statusIcon}>
-                      <ActivityIndicator size={12} color={Colors.primary} />
+              {apiStatus && (
+                <View style={styles.apiStatusBadge}>
+                  {apiStatus === 'testing' && (
+                    <View style={styles.statusContent}>
+                      <View style={styles.statusIcon}>
+                        <ActivityIndicator size={12} color={Colors.primary} />
+                      </View>
+                      <Text style={styles.apiStatusText}>Testing API...</Text>
                     </View>
-                    <Text style={styles.apiStatusText}>Testing API...</Text>
-                  </View>
-                )}
-                {apiStatus === 'working' && (
-                  <View style={styles.statusContent}>
-                    <View style={styles.statusIcon}>
-                      <CheckCircle size={12} color="#10B981" />
+                  )}
+                  {apiStatus === 'working' && (
+                    <View style={styles.statusContent}>
+                      <View style={styles.statusIcon}>
+                        <CheckCircle size={12} color="#10B981" />
+                      </View>
+                      <Text style={[styles.apiStatusText, { color: '#10B981' }]}>Podcasts Ready</Text>
                     </View>
-                    <Text style={[styles.apiStatusText, { color: '#10B981' }]}>Podcasts Ready</Text>
-                  </View>
-                )}
-                {apiStatus === 'failed' && (
-                  <View style={styles.statusContent}>
-                    <View style={styles.statusIcon}>
-                      <XCircle size={12} color="#EF4444" />
+                  )}
+                  {apiStatus === 'failed' && (
+                    <View style={styles.statusContent}>
+                      <View style={styles.statusIcon}>
+                        <XCircle size={12} color="#EF4444" />
+                      </View>
+                      <Text style={[styles.apiStatusText, { color: '#EF4444' }]}>API Failed</Text>
                     </View>
-                    <Text style={[styles.apiStatusText, { color: '#EF4444' }]}>API Failed</Text>
-                  </View>
-                )}
-              </View>
+                  )}
+                </View>
+              )}
             </View>
             <View style={styles.searchContainer}>
               <Search color={Colors.textSecondary} size={20} />
