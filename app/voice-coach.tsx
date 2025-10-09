@@ -41,6 +41,9 @@ export default function VoiceCoachScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const webRecorderRef = useRef<any | null>(null);
+  const webStreamRef = useRef<any | null>(null);
+  const webChunksRef = useRef<Blob[]>([]);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('Initializing voice coach...');
   const [showVoiceModal, setShowVoiceModal] = useState(false);
@@ -367,6 +370,40 @@ export default function VoiceCoachScreen() {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
+      // Web path using MediaRecorder (web does not use Expo AV)
+      if (Platform.OS === 'web') {
+        try {
+          console.log('🌐 Starting web recording via MediaRecorder');
+          const navAny = navigator as any;
+          const stream = await navAny.mediaDevices.getUserMedia({ audio: true });
+          webStreamRef.current = stream;
+
+          const MrCtor = (window as any).MediaRecorder;
+          const mimeType = 'audio/webm;codecs=opus';
+          const mr = new MrCtor(stream, { mimeType });
+          webChunksRef.current = [];
+
+          mr.onstart = () => console.log('✅ Web MediaRecorder started');
+          mr.ondataavailable = (e: any) => {
+            if (e.data && e.data.size > 0) {
+              webChunksRef.current.push(e.data);
+            }
+          };
+          mr.onerror = (e: any) => console.error('❌ MediaRecorder error:', e);
+
+          webRecorderRef.current = mr;
+          mr.start();
+
+          setIsRecording(true);
+          setCurrentStatus('Listening... Speak now!');
+          return;
+        } catch (webErr) {
+          console.error('❌ Web recording error:', webErr);
+          Alert.alert('Microphone Error', 'Unable to access your microphone. Please allow microphone permissions in your browser.');
+          return;
+        }
+      }
+
       // Request permissions
       console.log('🔐 Requesting microphone permissions...');
       const { status, canAskAgain, granted } = await Audio.requestPermissionsAsync();
@@ -495,6 +532,42 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🛑 Stopping recording...');
       
+      // Web stop path
+      if (Platform.OS === 'web') {
+        try {
+          setIsRecording(false);
+          setCurrentStatus('Processing...');
+          const mr: any = webRecorderRef.current;
+          const stream: any = webStreamRef.current;
+          if (!mr) {
+            console.log('⚠️ No web MediaRecorder instance');
+            setCurrentStatus('Ready to listen');
+            return;
+          }
+          const getBlob = new Promise<Blob>((resolve) => {
+            mr.onstop = () => {
+              const blob = new Blob(webChunksRef.current, { type: 'audio/webm' });
+              console.log('📦 Web recording blob size:', blob.size);
+              resolve(blob);
+            };
+          });
+          mr.stop();
+          const blob = await getBlob;
+          if (stream) {
+            stream.getTracks().forEach((t: any) => t.stop());
+            webStreamRef.current = null;
+          }
+          webRecorderRef.current = null;
+          await processWebTranscription(blob);
+          return;
+        } catch (e) {
+          console.error('❌ Error stopping web recording:', e);
+          Alert.alert('Recording Error', 'Failed to capture audio from the browser.');
+          setCurrentStatus('Ready to listen');
+          return;
+        }
+      }
+
       if (!recording) {
         console.log('⚠️ No recording instance found');
         setIsRecording(false);
@@ -749,6 +822,59 @@ export default function VoiceCoachScreen() {
     }
   };
 
+  const processWebTranscription = async (blob: Blob) => {
+    try {
+      setIsProcessing(true);
+      console.log('🔄 Processing web audio transcription...');
+      console.log('📦 Blob size:', blob.size);
+
+      const formData = new FormData();
+      formData.append('audio', blob as any, 'recording.webm');
+
+      console.log('🌐 Calling STT API: https://toolkit.rork.com/stt/transcribe/ (web)');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const transcriptionResponse = await fetch('https://toolkit.rork.com/stt/transcribe/', {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      console.log('📡 Transcription response status:', transcriptionResponse.status);
+
+      if (!transcriptionResponse.ok) {
+        const errorText = await transcriptionResponse.text();
+        console.error('❌ Transcription error response:', errorText);
+        throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
+      }
+
+      const data = await transcriptionResponse.json();
+      const text: string | undefined = data?.text;
+      console.log('🎯 Extracted text:', text);
+
+      if (!text || text.trim().length === 0) {
+        Alert.alert('No Speech Detected', 'Please try again and speak clearly.');
+        setCurrentStatus('Ready to listen');
+        return;
+      }
+
+      const userMessage: Message = { role: 'user', content: text.trim(), timestamp: Date.now() };
+      setMessages((prev) => {
+        const updated = [...prev, userMessage];
+        getAIResponse(updated);
+        return updated;
+      });
+    } catch (error) {
+      console.error('❌ Web transcription error:', error);
+      Alert.alert('Processing Error', (error as Error).message);
+    } finally {
+      setIsProcessing(false);
+      if (!isPlaying) setCurrentStatus('Ready to listen');
+    }
+  };
+
   const getAIResponse = async (conversationMessages: Message[]) => {
     try {
       console.log('🤖 Getting AI response...');
@@ -931,6 +1057,7 @@ Always end with encouragement and offer to continue the conversation.`;
           {/* Main Record Button */}
           <Animated.View style={[styles.recordButtonContainer, { transform: [{ scale: pulseAnim }] }]}>
             <TouchableOpacity
+              testID="record-button"
               style={[
                 styles.recordButton,
                 isRecording && styles.recordButtonActive,
@@ -972,6 +1099,7 @@ Always end with encouragement and offer to continue the conversation.`;
             Hold the microphone button to speak with your coach
           </Text>
           <TouchableOpacity 
+            testID="voice-settings-button"
             style={styles.voiceSettingsButton}
             onPress={() => setShowVoiceModal(true)}
           >
