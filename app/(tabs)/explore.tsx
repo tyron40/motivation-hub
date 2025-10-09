@@ -11,11 +11,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Radio, CheckCircle, XCircle, Video } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { useSpeechContext, useSpeechSearch } from '@/hooks/speech-context';
-import { router } from 'expo-router';
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -151,7 +150,7 @@ export default function ExploreScreen() {
               <View>
                 <View style={styles.resultsHeader}>
                   <Text style={styles.resultsCount} testID="explore-results-count">
-                    {searchQuery ? `${String(searchResults.length)} results found` : `All ${String(speeches.length)} speeches`}
+                    {searchQuery ? `${searchResults.length} results found` : `All ${speeches.length} speeches`}
                   </Text>
                   {searchQuery && apiStatus === 'working' && (
                     <Text style={styles.searchHint}>Press antenna to search podcasts online</Text>
