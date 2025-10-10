@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Play, Pause, SkipForward, SkipBack, Volume2 } from 'lucide-react-native';
+import Slider from '@react-native-community/slider';
 
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
@@ -11,6 +12,8 @@ interface AudioOnlyVideoPlayerProps {
   autoplay?: boolean;
   onEnd?: () => void;
   onError?: (error: string) => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
 }
 
 export default function AudioOnlyVideoPlayer({
@@ -20,14 +23,27 @@ export default function AudioOnlyVideoPlayer({
   channelTitle,
   autoplay = false,
   onEnd,
-  onError
+  onError,
+  onNext,
+  onPrevious
 }: AudioOnlyVideoPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(autoplay);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Validate videoId
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, []);
+
   if (!videoId || typeof videoId !== 'string' || videoId.trim().length === 0) {
     console.warn('⚠️ AudioOnlyVideoPlayer: Invalid videoId provided:', videoId);
     return (
@@ -108,13 +124,27 @@ export default function AudioOnlyVideoPlayer({
 
     function onPlayerReady(event) {
       isReady = true;
+      var videoDuration = player.getDuration();
       window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'ready'
+        type: 'ready',
+        duration: videoDuration
       }));
       if (player && player.playVideo) {
         player.playVideo();
         console.log('Auto-playing video immediately');
       }
+      
+      setInterval(function() {
+        if (player && player.getCurrentTime) {
+          var currentTime = player.getCurrentTime();
+          var duration = player.getDuration();
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'timeUpdate',
+            currentTime: currentTime,
+            duration: duration
+          }));
+        }
+      }, 500);
     }
 
     function onPlayerStateChange(event) {
@@ -149,13 +179,10 @@ export default function AudioOnlyVideoPlayer({
           case 'pause':
             player.pauseVideo();
             break;
-          case 'seekForward':
-            var currentTime = player.getCurrentTime();
-            player.seekTo(currentTime + 10, true);
-            break;
-          case 'seekBackward':
-            var currentTime = player.getCurrentTime();
-            player.seekTo(Math.max(0, currentTime - 10), true);
+          case 'seekTo':
+            if (data.time !== undefined) {
+              player.seekTo(data.time, true);
+            }
             break;
         }
       } catch(e) {
@@ -174,17 +201,28 @@ export default function AudioOnlyVideoPlayer({
       switch(data.type) {
         case 'ready':
           setIsLoading(false);
+          if (data.duration) {
+            setDuration(data.duration);
+          }
           break;
         case 'stateChange':
-          // YouTube Player States: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
           if (data.state === 1) {
             setIsPlaying(true);
           } else if (data.state === 2 || data.state === 0) {
             setIsPlaying(false);
           }
           break;
+        case 'timeUpdate':
+          if (!isSeeking && data.currentTime !== undefined) {
+            setCurrentTime(data.currentTime);
+          }
+          if (data.duration !== undefined) {
+            setDuration(data.duration);
+          }
+          break;
         case 'ended':
           setIsPlaying(false);
+          setCurrentTime(0);
           onEnd?.();
           break;
         case 'error':
@@ -199,8 +237,8 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
-  const sendCommand = (command: string) => {
-    const message = JSON.stringify({ command });
+  const sendCommand = (command: string, data?: any) => {
+    const message = JSON.stringify({ command, ...data });
     if (Platform.OS === 'web') {
       webViewRef.current?.postMessage(message);
     } else {
@@ -219,12 +257,27 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
-  const seekForward = () => {
-    sendCommand('seekForward');
+  const handleNext = () => {
+    if (onNext) {
+      onNext();
+    }
   };
 
-  const seekBackward = () => {
-    sendCommand('seekBackward');
+  const handlePrevious = () => {
+    if (onPrevious) {
+      onPrevious();
+    }
+  };
+
+  const handleSeek = (value: number) => {
+    setCurrentTime(value);
+    sendCommand('seekTo', { time: value });
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (error) {
@@ -287,14 +340,38 @@ export default function AudioOnlyVideoPlayer({
           )}
         </View>
 
+        {/* Progress Slider */}
+        <View style={styles.progressContainer}>
+          <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={duration || 1}
+            value={currentTime}
+            onValueChange={(value: number) => {
+              setIsSeeking(true);
+              setCurrentTime(value);
+            }}
+            onSlidingComplete={(value: number) => {
+              setIsSeeking(false);
+              handleSeek(value);
+            }}
+            minimumTrackTintColor="#ff6b6b"
+            maximumTrackTintColor="#ddd"
+            thumbTintColor="#ff6b6b"
+            disabled={isLoading}
+          />
+          <Text style={styles.timeText}>{formatTime(duration)}</Text>
+        </View>
+
         {/* Playback Controls */}
         <View style={styles.controls}>
           <TouchableOpacity 
-            onPress={seekBackward} 
+            onPress={handlePrevious} 
             style={styles.controlButton}
-            disabled={isLoading}
+            disabled={isLoading || !onPrevious}
           >
-            <SkipBack size={24} color={isLoading ? "#666" : "#333"} />
+            <SkipBack size={24} color={isLoading || !onPrevious ? "#ccc" : "#333"} />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -310,11 +387,11 @@ export default function AudioOnlyVideoPlayer({
           </TouchableOpacity>
 
           <TouchableOpacity 
-            onPress={seekForward} 
+            onPress={handleNext} 
             style={styles.controlButton}
-            disabled={isLoading}
+            disabled={isLoading || !onNext}
           >
-            <SkipForward size={24} color={isLoading ? "#666" : "#333"} />
+            <SkipForward size={24} color={isLoading || !onNext ? "#ccc" : "#333"} />
           </TouchableOpacity>
         </View>
       </View>
@@ -392,6 +469,25 @@ const styles = StyleSheet.create({
   artist: {
     fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+  },
+  progressContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  slider: {
+    flex: 1,
+    height: 40,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+    minWidth: 40,
     textAlign: 'center',
   },
   controls: {

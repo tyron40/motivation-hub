@@ -12,14 +12,45 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Heart, Share2, Youtube, MoreVertical } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useCurrentSpeech, useSpeechContext } from '@/hooks/speech-context';
+import { Speech } from '@/types/speech';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 
 export default function PlayerScreen() {
   const { currentSpeech } = useCurrentSpeech();
-  const { toggleFavorite } = useSpeechContext();
+  const { toggleFavorite, speeches, setCurrentSpeech } = useSpeechContext();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const handleNext = () => {
+    if (!currentSpeech || !speeches || speeches.length === 0) return;
+    
+    const currentIndex = speeches.findIndex((s: Speech) => s.id === currentSpeech.id);
+    if (currentIndex === -1) return;
+    
+    const nextIndex = (currentIndex + 1) % speeches.length;
+    const nextSpeech = speeches[nextIndex];
+    
+    if (nextSpeech) {
+      console.log('⏭️ Skipping to next video:', nextSpeech.title);
+      setCurrentSpeech(nextSpeech);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (!currentSpeech || !speeches || speeches.length === 0) return;
+    
+    const currentIndex = speeches.findIndex((s: Speech) => s.id === currentSpeech.id);
+    if (currentIndex === -1) return;
+    
+    const previousIndex = currentIndex === 0 ? speeches.length - 1 : currentIndex - 1;
+    const previousSpeech = speeches[previousIndex];
+    
+    if (previousSpeech) {
+      console.log('⏮️ Skipping to previous video:', previousSpeech.title);
+      setCurrentSpeech(previousSpeech);
+    }
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -83,7 +114,10 @@ export default function PlayerScreen() {
                 }}
                 onEnd={() => {
                   console.log('Audio playback ended');
+                  handleNext();
                 }}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
               />
             </View>
           ) : (
