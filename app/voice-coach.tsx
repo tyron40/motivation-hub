@@ -10,10 +10,11 @@ import {
   Modal,
   ScrollView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
-import { Mic, MicOff, User, Settings, Check } from 'lucide-react-native';
+import { Stack, router } from 'expo-router';
+import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
@@ -161,6 +162,7 @@ export default function VoiceCoachScreen() {
     hasGreetedRef.current = true;
     
     const userName = profile.name || 'friend';
+    const coachName = profile.coachCharacter?.name || 'Coach Alex';
     const timeOfDay = new Date().getHours();
     let greeting = 'Hello';
     if (timeOfDay < 12) greeting = 'Good morning';
@@ -169,7 +171,7 @@ export default function VoiceCoachScreen() {
     
     const greetingMessage: Message = {
       role: 'assistant',
-      content: `${greeting}, ${userName}! I'm Coach Alex, your personal motivation coach. I'm here to help you overcome challenges, build confidence, and achieve your goals. What's on your mind today?`,
+      content: `${greeting}, ${userName}! I'm ${coachName}, your personal motivation coach. I'm here to help you overcome challenges, build confidence, and achieve your goals. What's on your mind today?`,
       timestamp: Date.now(),
     };
     
@@ -191,7 +193,7 @@ export default function VoiceCoachScreen() {
       console.error('❌ Failed to speak greeting:', error);
       setCurrentStatus('Ready to listen');
     }
-  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, speakMessage]);
+  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, profile.coachCharacter, speakMessage]);
 
   useEffect(() => {
     let isMounted = true;
@@ -972,7 +974,9 @@ export default function VoiceCoachScreen() {
       console.log('📝 Conversation messages:', conversationMessages.length);
       
       const userName = profile.name || 'friend';
-      const systemPrompt = `You are an AI motivation coach named "Coach Alex". You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
+      const coachName = profile.coachCharacter?.name || 'Coach Alex';
+      const coachDescription = profile.coachCharacter?.description || 'Energetic and motivating, perfect for daily inspiration';
+      const systemPrompt = `You are an AI motivation coach named "${coachName}". ${coachDescription}. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
 
 Key traits:
 - Warm, encouraging, and empathetic
@@ -1118,11 +1122,28 @@ Always end with encouragement and offer to continue the conversation.`;
               { transform: [{ scale: avatarScale }] }
             ]}
           >
-            <User size={80} color={Colors.primary} />
+            {profile.coachCharacter?.imageUrl ? (
+              <Image 
+                source={{ uri: profile.coachCharacter.imageUrl }} 
+                style={styles.avatarImage}
+              />
+            ) : (
+              <User size={80} color={Colors.primary} />
+            )}
           </Animated.View>
           
-          <Text style={styles.coachName}>Coach Alex</Text>
-          <Text style={styles.coachTitle}>Your Personal Motivation Coach</Text>
+          <View style={styles.coachInfo}>
+            <Text style={styles.coachName}>{profile.coachCharacter?.name || 'Coach Alex'}</Text>
+            <TouchableOpacity 
+              style={styles.changeCoachButton}
+              onPress={() => router.push('/coach-character')}
+            >
+              <Sparkles size={14} color={Colors.primary} />
+              <Text style={styles.changeCoachText}>Change Coach</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.coachTitle}>{profile.coachCharacter?.description || 'Your Personal Motivation Coach'}</Text>
           <Text style={styles.voiceIndicator}>
             Speaking as: {voiceCharacters.find(v => v.id === profile.preferredVoice)?.name || 'Alloy'}
           </Text>
@@ -1286,6 +1307,33 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 3,
     borderColor: Colors.primary,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  coachInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  changeCoachButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary + '40',
+  },
+  changeCoachText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '500',
   },
   coachName: {
     fontSize: 24,

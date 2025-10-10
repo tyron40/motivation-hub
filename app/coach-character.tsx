@@ -70,6 +70,7 @@ export default function CoachCharacterScreen() {
     profile.coachCharacter || PRESET_CHARACTERS[0]
   );
   const [customDescription, setCustomDescription] = useState('');
+  const [customName, setCustomName] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCharacter, setGeneratedCharacter] = useState<CoachCharacter | null>(null);
 
@@ -82,6 +83,11 @@ export default function CoachCharacterScreen() {
   const handleGenerateCustomCharacter = async () => {
     if (!customDescription.trim()) {
       Alert.alert('Error', 'Please describe your ideal coach');
+      return;
+    }
+
+    if (!customName.trim()) {
+      Alert.alert('Error', 'Please enter a name for your coach');
       return;
     }
 
@@ -109,7 +115,7 @@ export default function CoachCharacterScreen() {
 
       const customCharacter: CoachCharacter = {
         id: `custom-${Date.now()}`,
-        name: 'My Custom Coach',
+        name: customName.trim(),
         imageUrl,
         description: customDescription,
         isCustom: true,
@@ -205,6 +211,16 @@ export default function CoachCharacterScreen() {
             </Text>
 
             <View style={styles.customSection}>
+              <Text style={styles.inputLabel}>Coach Name</Text>
+              <TextInput
+                style={styles.customNameInput}
+                placeholder="E.g., Coach Sarah, Mentor John, etc."
+                placeholderTextColor={Colors.textSecondary}
+                value={customName}
+                onChangeText={setCustomName}
+              />
+
+              <Text style={styles.inputLabel}>Character Description</Text>
               <TextInput
                 style={styles.customInput}
                 placeholder="E.g., A wise elderly mentor with gray hair and glasses, wearing professional attire..."
@@ -382,6 +398,21 @@ const styles = StyleSheet.create({
   },
   customSection: {
     marginTop: 16,
+  },
+  inputLabel: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  customNameInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 16,
+    color: Colors.text,
+    fontSize: 16,
+    marginBottom: 16,
   },
   customInput: {
     backgroundColor: 'rgba(255,255,255,0.1)',
