@@ -11,9 +11,10 @@ import {
   Alert,
   Modal,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain } from 'lucide-react-native';
+import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
@@ -60,12 +61,16 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const typingAnim = useRef(new Animated.Value(0)).current;
+  const micAnim = useRef(new Animated.Value(1)).current;
 
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
     try {
@@ -323,6 +328,197 @@ export default function ChatScreen() {
     }
   };
 
+  const startRecording = async () => {
+    try {
+      console.log('🎤 Requesting microphone permissions...');
+      const permission = await Audio.requestPermissionsAsync();
+      
+      if (!permission.granted) {
+        if (Platform.OS !== 'web') {
+          Alert.alert('Permission Required', 'Please enable microphone access to use voice input.');
+        } else {
+          console.error('Microphone permission denied');
+        }
+        return;
+      }
+
+      console.log('✅ Microphone permission granted');
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      console.log('🎤 Starting recording...');
+      const { recording: newRecording } = await Audio.Recording.createAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.wav',
+          outputFormat: Audio.IOSOutputFormat.LINEARPCM,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      });
+
+      setRecording(newRecording);
+      setIsRecording(true);
+      console.log('✅ Recording started');
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(micAnim, {
+            toValue: 1.3,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(micAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } catch (error) {
+      console.error('❌ Failed to start recording:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Recording Error', 'Failed to start recording. Please try again.');
+      }
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) {
+      console.warn('⚠️ No recording to stop');
+      return;
+    }
+
+    try {
+      console.log('🛑 Stopping recording...');
+      setIsRecording(false);
+      micAnim.stopAnimation();
+      micAnim.setValue(1);
+
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      console.log('✅ Recording stopped, URI:', uri);
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      setRecording(null);
+
+      if (uri) {
+        await transcribeAudio(uri);
+      } else {
+        console.error('❌ No recording URI available');
+        if (Platform.OS !== 'web') {
+          Alert.alert('Error', 'Failed to save recording');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to stop recording:', error);
+      setIsRecording(false);
+      setRecording(null);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'Failed to process recording');
+      }
+    }
+  };
+
+  const transcribeAudio = async (uri: string) => {
+    try {
+      console.log('🎯 Starting transcription for URI:', uri);
+      setIsTranscribing(true);
+
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      const formData = new FormData();
+      
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('audio', blob, `recording.${fileType}`);
+      } else {
+        const audioFile = {
+          uri,
+          name: `recording.${fileType}`,
+          type: `audio/${fileType}`,
+        } as any;
+        formData.append('audio', audioFile);
+      }
+
+      console.log('📤 Sending audio to transcription service...');
+      const response = await fetch('https://toolkit.rork.com/stt/transcribe/', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Transcription response:', data);
+
+      if (data.text && data.text.trim()) {
+        setInputText(data.text.trim());
+        console.log('✅ Transcription successful:', data.text);
+      } else {
+        console.warn('⚠️ Empty transcription result');
+        if (Platform.OS !== 'web') {
+          Alert.alert('No Speech Detected', 'Please try speaking again.');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Transcription error:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Transcription Error', 'Failed to transcribe audio. Please try again.');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recording) {
+        console.log('🧹 Cleaning up recording on unmount');
+        recording.stopAndUnloadAsync().catch(err => 
+          console.error('Error cleaning up recording:', err)
+        );
+      }
+      if (sound) {
+        console.log('🧹 Cleaning up sound on unmount');
+        sound.unloadAsync().catch(err => 
+          console.error('Error cleaning up sound:', err)
+        );
+      }
+    };
+  }, [recording, sound]);
+
   const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
     const bubbleAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -553,28 +749,63 @@ export default function ChatScreen() {
 
           <View style={styles.inputContainer}>
             <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Ask for motivation, advice, or inspiration..."
-                placeholderTextColor={Colors.textSecondary}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!inputText.trim() || isLoading) && styles.sendButtonDisabled
-                ]}
-                onPress={() => sendMessage(inputText)}
-                disabled={!inputText.trim() || isLoading}
-              >
-                <Send 
-                  color={(!inputText.trim() || isLoading) ? Colors.textSecondary : Colors.background} 
-                  size={20} 
-                />
-              </TouchableOpacity>
+              {!isRecording && (
+                <>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ask for motivation, advice, or inspiration..."
+                    placeholderTextColor={Colors.textSecondary}
+                    value={inputText}
+                    onChangeText={setInputText}
+                    multiline
+                    maxLength={500}
+                    editable={!isTranscribing}
+                  />
+                  <TouchableOpacity
+                    style={styles.micButton}
+                    onPress={startRecording}
+                    disabled={isLoading || isTranscribing}
+                  >
+                    {isTranscribing ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <Mic color={Colors.primary} size={20} />
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      (!inputText.trim() || isLoading || isTranscribing) && styles.sendButtonDisabled
+                    ]}
+                    onPress={() => sendMessage(inputText)}
+                    disabled={!inputText.trim() || isLoading || isTranscribing}
+                  >
+                    <Send 
+                      color={(!inputText.trim() || isLoading || isTranscribing) ? Colors.textSecondary : Colors.background} 
+                      size={20} 
+                    />
+                  </TouchableOpacity>
+                </>
+              )}
+              {isRecording && (
+                <View style={styles.recordingContainer}>
+                  <Animated.View style={{ transform: [{ scale: micAnim }] }}>
+                    <View style={styles.recordingIndicator}>
+                      <Mic color={Colors.background} size={24} />
+                    </View>
+                  </Animated.View>
+                  <View style={styles.recordingTextContainer}>
+                    <Text style={styles.recordingText}>Recording...</Text>
+                    <Text style={styles.recordingSubtext}>Tap to stop</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.stopRecordingButton}
+                    onPress={stopRecording}
+                  >
+                    <MicOff color={Colors.background} size={20} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -909,6 +1140,61 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  micButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  recordingIndicator: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  recordingTextContainer: {
+    flex: 1,
+  },
+  recordingText: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  recordingSubtext: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  stopRecordingButton: {
+    backgroundColor: '#EF4444',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   settingsButton: {
     padding: 10,
