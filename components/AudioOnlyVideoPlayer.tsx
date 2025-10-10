@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Play, Pause, SkipForward, SkipBack, Volume2 } from 'lucide-react-native';
-import Slider from '@react-native-community/slider';
+import CustomSlider from './CustomSlider';
 
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
@@ -343,7 +343,7 @@ export default function AudioOnlyVideoPlayer({
         {/* Progress Slider */}
         <View style={styles.progressContainer}>
           <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-          <Slider
+          <CustomSlider
             style={styles.slider}
             minimumValue={0}
             maximumValue={duration || 1}
