@@ -149,14 +149,14 @@ export default function ExploreScreen() {
                 <Text style={styles.emptySubtext}>Try searching for different keywords</Text>
               </View>
             ) : (
-              <View>
+              <View style={styles.resultsContainer}>
                 <View style={styles.resultsHeader}>
                   <Text style={styles.resultsCount} testID="explore-results-count">
                     {searchQuery ? `${searchResults.length} results found` : `All ${speeches.length} speeches`}
                   </Text>
-                  {searchQuery && apiStatus === 'working' && (
+                  {searchQuery && apiStatus === 'working' ? (
                     <Text style={styles.searchHint}>Press antenna to search podcasts online</Text>
-                  )}
+                  ) : null}
                 </View>
                 {displaySpeeches
                   .filter((speech) => speech && typeof speech === 'object' && (speech as any).id && (speech as any).title)
@@ -265,6 +265,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 14,
     marginTop: 8,
+  },
+  resultsContainer: {
+    flex: 1,
   },
   onlineSearchButton: {
     padding: 8,
