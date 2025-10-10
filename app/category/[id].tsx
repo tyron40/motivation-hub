@@ -8,12 +8,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { RefreshCw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { categories } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
+import type { Speech } from '@/types/speech';
 
 export default function CategoryScreen() {
   const { id } = useLocalSearchParams();
@@ -39,11 +40,14 @@ export default function CategoryScreen() {
   // Auto-load online speeches when category loads
   useEffect(() => {
     if (category && !hasLoadedOnline) {
+      console.log(`📂 Category page loaded: ${category.name}`);
       handleLoadOnlineSpeeches();
     }
-  }, [category]);
+  }, [category, hasLoadedOnline]);
 
-  const handleSpeechPress = (speech: any) => {
+  const handleSpeechPress = (speech: Speech) => {
+    console.log('🎵 Selected speech:', speech.title);
+    console.log('🎵 Speech type:', speech.youtubeId ? 'YouTube' : 'Audio');
     setCurrentSpeech(speech);
     router.push('/player');
   };
@@ -61,11 +65,21 @@ export default function CategoryScreen() {
   }
 
   return (
-    <LinearGradient
-      colors={[Colors.background, '#1A1A2E']}
-      style={styles.container}
-    >
-      <View style={styles.safeArea}>
+    <>
+      <Stack.Screen 
+        options={{ 
+          title: category.name,
+          headerStyle: {
+            backgroundColor: '#1A1A2E',
+          },
+          headerTintColor: '#FFFFFF',
+        }} 
+      />
+      <LinearGradient
+        colors={[Colors.background, '#1A1A2E']}
+        style={styles.container}
+      >
+        <View style={styles.safeArea}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -109,6 +123,7 @@ export default function CategoryScreen() {
         </ScrollView>
       </View>
     </LinearGradient>
+    </>
   );
 }
 
