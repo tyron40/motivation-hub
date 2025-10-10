@@ -392,34 +392,79 @@ export default function VoiceCoachScreen() {
       if (Platform.OS === 'web') {
         try {
           console.log('🌐 Starting web recording via MediaRecorder');
-          const navAny = navigator as any;
-          const stream = await navAny.mediaDevices.getUserMedia({ audio: true });
+          
+          // Check if mediaDevices is available
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Your browser does not support audio recording. Please use a modern browser like Chrome, Firefox, or Safari.');
+          }
+          
+          console.log('🔐 Requesting microphone access from browser...');
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            } 
+          });
+          console.log('✅ Microphone access granted');
+          console.log('🎤 Audio tracks:', stream.getAudioTracks().length);
+          
           webStreamRef.current = stream;
 
           const MrCtor = (window as any).MediaRecorder;
+          if (!MrCtor) {
+            throw new Error('MediaRecorder is not supported in your browser.');
+          }
+          
           const mimeType = 'audio/webm;codecs=opus';
+          console.log('🎵 Creating MediaRecorder with mimeType:', mimeType);
           const mr = new MrCtor(stream, { mimeType });
           webChunksRef.current = [];
 
-          mr.onstart = () => console.log('✅ Web MediaRecorder started');
+          mr.onstart = () => {
+            console.log('✅ Web MediaRecorder started');
+            console.log('🎤 Recording state:', mr.state);
+          };
           mr.ondataavailable = (e: any) => {
+            console.log('📦 Data available, size:', e.data?.size || 0);
             if (e.data && e.data.size > 0) {
               webChunksRef.current.push(e.data);
             }
           };
-          mr.onerror = (e: any) => console.error('❌ MediaRecorder error:', e);
+          mr.onerror = (e: any) => {
+            console.error('❌ MediaRecorder error:', e);
+            Alert.alert('Recording Error', 'An error occurred while recording. Please try again.');
+          };
 
           webRecorderRef.current = mr;
           mr.start();
+          console.log('▶️ MediaRecorder.start() called');
 
           setIsRecording(true);
           setCurrentStatus('Listening... Speak now!');
+          setHasPermission(true);
           isStartingRef.current = false;
           return;
-        } catch (webErr) {
+        } catch (webErr: any) {
           console.error('❌ Web recording error:', webErr);
+          console.error('❌ Error name:', webErr?.name);
+          console.error('❌ Error message:', webErr?.message);
           isStartingRef.current = false;
-          Alert.alert('Microphone Error', 'Unable to access your microphone. Please allow microphone permissions in your browser.');
+          
+          let errorMessage = 'Unable to access your microphone.';
+          
+          if (webErr.name === 'NotAllowedError' || webErr.name === 'PermissionDeniedError') {
+            errorMessage = 'Microphone permission was denied. Please allow microphone access in your browser settings and try again.';
+          } else if (webErr.name === 'NotFoundError' || webErr.name === 'DevicesNotFoundError') {
+            errorMessage = 'No microphone found. Please connect a microphone and try again.';
+          } else if (webErr.name === 'NotReadableError' || webErr.name === 'TrackStartError') {
+            errorMessage = 'Your microphone is already in use by another application. Please close other apps using the microphone and try again.';
+          } else if (webErr.message) {
+            errorMessage = webErr.message;
+          }
+          
+          Alert.alert('Microphone Error', errorMessage);
+          setHasPermission(false);
           return;
         }
       }
