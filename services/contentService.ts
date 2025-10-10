@@ -1,6 +1,10 @@
-import { trpcClient } from '@/lib/trpc';
 import { Speech } from '@/types/speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  fetchContentByCategory as fetchYouTubeByCategory,
+  searchYouTubeContent,
+  fetchTrendingYouTubeContent
+} from './youtubeDirectService';
 
 const CACHE_DURATION = 1000 * 60 * 60 * 24;
 const CACHE_PREFIX = 'content_cache_';
@@ -92,19 +96,15 @@ export async function fetchFreshContentByCategory(
       }
     }
     
-    console.log(`📺 Fetching fresh content for ${category} from backend`);
+    console.log(`📺 Fetching fresh content for ${category} directly from YouTube API`);
     
-    const result = await trpcClient.content.fetch.query({
-      category,
-      limit,
-      refresh: !useCache,
-    });
+    const videos = await fetchYouTubeByCategory(category, limit);
     
-    if (result.videos.length > 0) {
-      await setCachedContent(category, result.videos);
+    if (videos.length > 0) {
+      await setCachedContent(category, videos);
     }
     
-    return result.videos.map((video: any) => convertVideoToSpeech(video, category));
+    return videos.map((video: any) => convertVideoToSpeech(video, category));
   } catch (error) {
     console.error(`❌ Error fetching content for ${category}:`, error);
     
@@ -123,14 +123,11 @@ export async function searchFreshContent(
   limit: number = 20
 ): Promise<Speech[]> {
   try {
-    console.log(`🔍 Searching for: "${query}"`);
+    console.log(`🔍 Searching YouTube directly for: "${query}"`);
     
-    const result = await trpcClient.content.search.query({
-      query,
-      limit,
-    });
+    const videos = await searchYouTubeContent(query, limit);
     
-    return result.videos.map((video: any) => 
+    return videos.map((video: any) => 
       convertVideoToSpeech(video, 'Search Results')
     );
   } catch (error) {
@@ -151,17 +148,15 @@ export async function fetchTrendingContent(
       }
     }
     
-    console.log('📈 Fetching trending content');
+    console.log('📈 Fetching trending content directly from YouTube API');
     
-    const result = await trpcClient.content.trending.query({
-      limit,
-    });
+    const videos = await fetchTrendingYouTubeContent(limit);
     
-    if (result.videos.length > 0) {
-      await setCachedContent('trending', result.videos);
+    if (videos.length > 0) {
+      await setCachedContent('trending', videos);
     }
     
-    return result.videos.map((video: any) => 
+    return videos.map((video: any) => 
       convertVideoToSpeech(video, 'Trending')
     );
   } catch (error) {
