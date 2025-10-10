@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
-import { fetchRealSpeeches, fetchSpeechesByCategory, searchSpeeches as searchPodcastSpeeches } from '@/services/speechService';
+import { fetchRealSpeeches } from '@/services/speechService';
 import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent } from '@/services/contentService';
 
 interface SpeechContextValue {
@@ -115,7 +115,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     const initializeSpeeches = async () => {
-      console.log('📺 Initializing app with YouTube motivational speeches...');
+      console.log('📺 Initializing app with YouTube API speeches...');
       
       try {
         if (isMounted) {
@@ -131,22 +131,22 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         // Add timeout to prevent hanging on network requests
         timeoutId = setTimeout(() => {
           if (isMounted) {
-            console.warn('⚠️ YouTube speeches loading timeout, using mock data');
+            console.warn('⚠️ YouTube API loading timeout, using mock data');
             setIsLoading(false);
           }
         }, 15000); // 15 second timeout
         
-        // Then try to load real speeches in the background
+        // Load trending content from YouTube API via backend
         try {
-          const realSpeeches = await fetchRealSpeeches();
+          const trendingSpeeches = await fetchTrendingContent(20, true);
           
           if (timeoutId) {
             clearTimeout(timeoutId);
           }
           
-          if (Array.isArray(realSpeeches) && realSpeeches.length > 0 && isMounted) {
+          if (Array.isArray(trendingSpeeches) && trendingSpeeches.length > 0 && isMounted) {
             // Validate speeches before setting them
-            const validSpeeches = realSpeeches.filter(speech => 
+            const validSpeeches = trendingSpeeches.filter(speech => 
               speech && 
               typeof speech === 'object' && 
               speech.id && 
@@ -158,7 +158,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
             );
             
             if (validSpeeches.length > 0) {
-              console.log(`✅ Loaded ${validSpeeches.length} valid YouTube speeches`);
+              console.log(`✅ Loaded ${validSpeeches.length} valid YouTube speeches from API`);
               setSpeeches(validSpeeches);
             } else {
               console.log('⚠️ No valid YouTube speeches found, keeping mock data');
@@ -167,7 +167,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
             console.log('⚠️ No YouTube speeches found, keeping mock data');
           }
         } catch (fetchError) {
-          console.error('❌ Error loading YouTube speeches, keeping mock data:', fetchError);
+          console.error('❌ Error loading YouTube speeches from API, keeping mock data:', fetchError);
           // Mock data is already set, so no need to set it again
         }
       } catch (error) {
@@ -353,7 +353,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     try {
-      console.log(`📺 Loading YouTube speeches for category: ${category}`);
+      console.log(`📺 Loading YouTube API speeches for category: ${category}`);
       
       // Add timeout to prevent hanging
       timeoutId = setTimeout(() => {
@@ -361,8 +361,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         setIsLoading(false);
       }, 10000);
       
-      // Load all 500 speeches for the category
-      const categorySpeeches = await fetchSpeechesByCategory(category, 500);
+      // Load speeches from YouTube API via backend
+      const categorySpeeches = await fetchFreshContentByCategory(category, 50, true);
       
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -404,15 +404,15 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
               return prev; // Return previous state if merge fails
             }
           });
-          console.log(`✅ Loaded ${validSpeeches.length} valid YouTube speeches for ${category}`);
+          console.log(`✅ Loaded ${validSpeeches.length} valid YouTube API speeches for ${category}`);
         } else {
-          console.log(`⚠️ No valid YouTube speeches found for category: ${category}`);
+          console.log(`⚠️ No valid YouTube API speeches found for category: ${category}`);
         }
       } else {
-        console.log(`⚠️ No YouTube speeches returned for category: ${category}`);
+        console.log(`⚠️ No YouTube API speeches returned for category: ${category}`);
       }
     } catch (error) {
-      console.error(`❌ Error loading YouTube speeches for ${category}:`, error);
+      console.error(`❌ Error loading YouTube API speeches for ${category}:`, error);
     } finally {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -513,8 +513,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const searchOnlineSpeeches = useCallback(async (query: string) => {
     setIsLoading(true);
     try {
-      console.log(`🎧 Searching PodcastIndex for: ${query}`);
-      const searchResults = await searchPodcastSpeeches(query, 10);
+      console.log(`🔍 Searching YouTube API for: ${query}`);
+      const searchResults = await searchFreshContent(query, 20);
       if (searchResults.length > 0) {
         // Validate search results before setting them
         const validResults = searchResults.filter(speech => {
@@ -534,9 +534,13 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         });
         
         if (validResults.length > 0) {
-          // Replace current speeches with search results
-          setSpeeches(validResults);
-          console.log(`✅ Found ${validResults.length} valid podcast speeches for "${query}"`);
+          // Merge with existing speeches, avoiding duplicates
+          setSpeeches(prev => {
+            const existingIds = new Set(prev.map(s => s.id));
+            const newSpeeches = validResults.filter(s => !existingIds.has(s.id));
+            return [...prev, ...newSpeeches];
+          });
+          console.log(`✅ Found ${validResults.length} valid YouTube API speeches for "${query}"`);
         } else {
           console.log('⚠️ No valid search results found');
         }
@@ -544,7 +548,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         console.log('⚠️ No search results found');
       }
     } catch (error) {
-      console.error(`❌ Error searching PodcastIndex for "${query}":`, error);
+      console.error(`❌ Error searching YouTube API for "${query}":`, error);
     } finally {
       setIsLoading(false);
     }
