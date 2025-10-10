@@ -753,12 +753,18 @@ export default function VoiceCoachScreen() {
       console.log('🔄 Processing audio transcription...');
       console.log('📁 Audio URI:', audioUri);
       
+      // Verify the audio file exists and has content
+      if (!audioUri || audioUri.trim().length === 0) {
+        throw new Error('Invalid audio URI - recording may have failed');
+      }
+      
       // Create FormData for speech-to-text
       const formData = new FormData();
       const uriParts = audioUri.split('.');
       const fileType = uriParts[uriParts.length - 1];
       
       console.log('📄 File type detected:', fileType);
+      console.log('📄 Full URI:', audioUri);
       
       // Properly format the audio file for FormData
       const mimeType = fileType === 'wav' ? 'audio/wav' : 
@@ -772,22 +778,28 @@ export default function VoiceCoachScreen() {
         type: mimeType,
       } as any;
       
-      console.log('📦 Audio file object:', audioFile);
+      console.log('📦 Audio file object:', JSON.stringify(audioFile));
+      console.log('📦 Appending to FormData...');
       formData.append('audio', audioFile);
+      console.log('✅ Audio appended to FormData');
       
       console.log('🚀 Sending transcription request...');
+      console.log('🚀 Request details:', {
+        url: 'https://toolkit.rork.com/stt/transcribe/',
+        method: 'POST',
+        fileName: audioFile.name,
+        fileType: audioFile.type,
+      });
       
       // Transcribe audio with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-      
-      console.log('📤 Sending FormData with audio file:', {
-        uri: audioUri,
-        name: audioFile.name,
-        type: audioFile.type,
-      });
+      const timeoutId = setTimeout(() => {
+        console.log('⏱️ Request timeout after 30 seconds');
+        controller.abort();
+      }, 30000);
       
       console.log('🌐 Calling STT API: https://toolkit.rork.com/stt/transcribe/');
+      console.log('⏱️ Timeout set to 30 seconds');
       
       const transcriptionResponse = await fetch('https://toolkit.rork.com/stt/transcribe/', {
         method: 'POST',
@@ -797,29 +809,49 @@ export default function VoiceCoachScreen() {
       
       clearTimeout(timeoutId);
       
-      console.log('📡 Transcription response status:', transcriptionResponse.status);
+      console.log('📡 Transcription response received');
+      console.log('📡 Response status:', transcriptionResponse.status);
+      console.log('📡 Response statusText:', transcriptionResponse.statusText);
       console.log('📡 Response headers:', JSON.stringify(Object.fromEntries(transcriptionResponse.headers.entries())));
       
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
         console.error('❌ Transcription error response:', errorText.substring(0, 200));
+        console.error('❌ Full error (first 500 chars):', errorText.substring(0, 500));
         
         // Check if it's an HTML error page (503/504)
         if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
           throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
         }
         
-        throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
+        // More specific error messages
+        if (transcriptionResponse.status === 400) {
+          throw new Error('Invalid audio format. Please try recording again.');
+        } else if (transcriptionResponse.status === 413) {
+          throw new Error('Audio file too large. Please record a shorter message.');
+        } else if (transcriptionResponse.status === 415) {
+          throw new Error('Unsupported audio format. Please try again.');
+        }
+        
+        throw new Error(`Transcription failed (${transcriptionResponse.status}): ${errorText.substring(0, 100)}`);
       }
       
       // Get response as text first to debug
       const responseText = await transcriptionResponse.text();
-      console.log('📥 Raw response text (first 200 chars):', responseText.substring(0, 200));
+      console.log('📥 Raw response received');
+      console.log('📥 Response length:', responseText.length);
+      console.log('📥 Response (first 200 chars):', responseText.substring(0, 200));
       console.log('📥 Response content-type:', transcriptionResponse.headers.get('content-type'));
+      
+      if (!responseText || responseText.trim().length === 0) {
+        console.error('❌ Empty response from STT service');
+        throw new Error('Empty response from speech-to-text service');
+      }
       
       let transcriptionData;
       try {
         transcriptionData = JSON.parse(responseText);
+        console.log('✅ Successfully parsed JSON response');
       } catch (parseError) {
         console.error('❌ Failed to parse JSON response:', parseError);
         console.error('❌ Response was (first 500 chars):', responseText.substring(0, 500));
@@ -841,18 +873,21 @@ export default function VoiceCoachScreen() {
         }
       }
       
-      console.log('📥 Transcription response data:', transcriptionData);
+      console.log('📥 Transcription response data:', JSON.stringify(transcriptionData));
       
       // Handle different response formats
       const text = transcriptionData.text || transcriptionData.transcription || transcriptionData.result;
-      console.log('🎯 Extracted text:', JSON.stringify(text));
+      console.log('🎯 Extracted text type:', typeof text);
+      console.log('🎯 Extracted text value:', JSON.stringify(text));
+      console.log('🎯 Text is string:', typeof text === 'string');
+      console.log('🎯 Text length:', text?.length || 0);
       
       if (text && typeof text === 'string' && text.trim().length > 0) {
-        console.log('✅ Valid transcribed text:', text);
-        console.log('📏 Text length:', text.trim().length);
+        const cleanedText = text.trim();
+        console.log('✅ Valid transcribed text:', cleanedText);
+        console.log('📏 Cleaned text length:', cleanedText.length);
         
         // Filter out common transcription errors and noise
-        const cleanedText = text.trim();
         // Very lenient noise filtering - only filter empty or single character responses
         const noisePatterns = ['.', '...', '', ' '];
         
@@ -895,10 +930,31 @@ export default function VoiceCoachScreen() {
       }
     } catch (error) {
       console.error('❌ Error processing transcription:', error);
+      console.error('❌ Error type:', error?.constructor?.name);
+      console.error('❌ Error message:', (error as Error)?.message);
+      console.error('❌ Error stack:', (error as Error)?.stack);
+      
       if ((error as Error).name === 'AbortError') {
-        Alert.alert('Timeout Error', 'Speech processing took too long. Please try again.');
+        console.error('❌ Request timed out after 30 seconds');
+        Alert.alert(
+          'Timeout Error', 
+          'Speech processing took too long. This could mean:\n\n1. Poor internet connection\n2. Audio file too large\n3. Service temporarily unavailable\n\nPlease try again with a shorter message.',
+          [{ text: 'OK' }]
+        );
+      } else if ((error as Error).message?.includes('Network request failed') || 
+                 (error as Error).message?.includes('Failed to fetch')) {
+        console.error('❌ Network error - cannot reach STT service');
+        Alert.alert(
+          'Connection Error', 
+          'Cannot reach the speech-to-text service. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
       } else {
-        Alert.alert('Processing Error', `Failed to process your voice: ${(error as Error).message}`);
+        Alert.alert(
+          'Processing Error', 
+          `Failed to process your voice: ${(error as Error).message}\n\nPlease try:\n1. Speaking more clearly\n2. Holding the button longer\n3. Checking your internet connection`,
+          [{ text: 'OK' }]
+        );
       }
     } finally {
       setIsProcessing(false);
