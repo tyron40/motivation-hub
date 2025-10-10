@@ -40,7 +40,7 @@ export default function VoiceCoachScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
@@ -51,6 +51,7 @@ export default function VoiceCoachScreen() {
   const isInitializedRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
   const isStartingRef = useRef<boolean>(false);
+  const isStoppingRef = useRef<boolean>(false);
   const [hasPermission, setHasPermission] = useState<boolean>(false);
   
   // Animation values
@@ -260,11 +261,12 @@ export default function VoiceCoachScreen() {
         }
         
         try {
-          if (recording) {
-            const status = await recording.getStatusAsync();
+          if (recordingRef.current) {
+            const status = await recordingRef.current.getStatusAsync();
             if (status.canRecord || status.isRecording) {
-              await recording.stopAndUnloadAsync();
+              await recordingRef.current.stopAndUnloadAsync();
             }
+            recordingRef.current = null;
             console.log('✅ Recording cleaned up');
           }
         } catch (e) {
@@ -286,7 +288,7 @@ export default function VoiceCoachScreen() {
       
       cleanup();
     };
-  }, [handleInitialGreeting, profile.name, recording, sound]);
+  }, [handleInitialGreeting, profile.name, sound]);
 
   // Pulse animation for recording
   useEffect(() => {
@@ -345,7 +347,7 @@ export default function VoiceCoachScreen() {
       console.log('🎤 Starting recording...');
       
       // Prevent multiple recordings
-      if (isRecording || isProcessing || isStartingRef.current) {
+      if (isRecording || isProcessing || isStartingRef.current || isStoppingRef.current) {
         console.log('⚠️ Cannot start recording - already busy');
         return;
       }
@@ -369,18 +371,18 @@ export default function VoiceCoachScreen() {
       }
       
       // Ensure any existing recording is completely cleaned up first
-      if (recording) {
+      if (recordingRef.current) {
         try {
           console.log('🧹 Cleaning up existing recording...');
-          const status = await recording.getStatusAsync();
+          const status = await recordingRef.current.getStatusAsync();
           if (status.canRecord || status.isRecording) {
-            await recording.stopAndUnloadAsync();
+            await recordingRef.current.stopAndUnloadAsync();
           }
           console.log('✅ Existing recording cleaned up');
         } catch (e) {
           console.log('⚠️ Error cleaning up existing recording:', e);
         }
-        setRecording(null);
+        recordingRef.current = null;
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
@@ -451,7 +453,7 @@ export default function VoiceCoachScreen() {
         setHasPermission(true);
       }
       
-      console.log('✅ Microphone permission granted');
+      console.log('��� Microphone permission granted');
       
       // Wait a bit after permission grant to ensure system is ready
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -523,10 +525,11 @@ export default function VoiceCoachScreen() {
       if (!recordingStatus.isRecording) {
         console.error('❌ Recording failed to start properly');
         recordingStartTimeRef.current = null;
+        await recordingInstance.stopAndUnloadAsync();
         throw new Error('Recording did not start. Please check microphone permissions and try again.');
       }
       
-      setRecording(recordingInstance);
+      recordingRef.current = recordingInstance;
       setIsRecording(true);
       setCurrentStatus('Listening... Speak now!');
       isStartingRef.current = false;
@@ -536,7 +539,7 @@ export default function VoiceCoachScreen() {
       console.error('❌ Error starting recording:', error);
       
       // Clean up on error
-      setRecording(null);
+      recordingRef.current = null;
       setIsRecording(false);
       recordingStartTimeRef.current = null;
       isStartingRef.current = false;
@@ -566,6 +569,14 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🛑 Stopping recording...');
       
+      // Prevent multiple stop calls
+      if (isStoppingRef.current) {
+        console.log('⚠️ Already stopping recording');
+        return;
+      }
+      
+      isStoppingRef.current = true;
+      
       // Wait if start is still initializing
       if (isStartingRef.current) {
         console.log('⏳ Waiting for recording to initialize before stopping...');
@@ -588,6 +599,7 @@ export default function VoiceCoachScreen() {
           if (!mr) {
             console.log('⚠️ No web MediaRecorder instance');
             setCurrentStatus('Ready to listen');
+            isStoppingRef.current = false;
             return;
           }
           const getBlob = new Promise<Blob>((resolve) => {
@@ -610,13 +622,15 @@ export default function VoiceCoachScreen() {
           console.error('❌ Error stopping web recording:', e);
           Alert.alert('Recording Error', 'Failed to capture audio from the browser.');
           setCurrentStatus('Ready to listen');
+          isStoppingRef.current = false;
           return;
         }
       }
 
-      if (!recording) {
+      if (!recordingRef.current) {
         console.log('⚠️ No recording instance found');
         setIsRecording(false);
+        isStoppingRef.current = false;
         return;
       }
       
@@ -628,7 +642,7 @@ export default function VoiceCoachScreen() {
       
       let uri: string | null = null;
       let status: any = null;
-      let recordingToProcess = recording;
+      let recordingToProcess = recordingRef.current;
       
       try {
         // Wait a bit for the recording to finalize
@@ -667,7 +681,7 @@ export default function VoiceCoachScreen() {
           console.error('❌ Could not get URI:', uriError);
         }
       } finally {
-        setRecording(null);
+        recordingRef.current = null;
       }
       
       // Reset audio mode
@@ -709,6 +723,7 @@ export default function VoiceCoachScreen() {
             [{ text: 'Try Again' }]
           );
           setCurrentStatus('Ready to listen');
+          isStoppingRef.current = false;
           return;
         }
         
@@ -721,10 +736,12 @@ export default function VoiceCoachScreen() {
       }
     } catch (error) {
       console.error('❌ Error stopping recording:', error);
-      setRecording(null);
+      recordingRef.current = null;
       setIsRecording(false);
       recordingStartTimeRef.current = null;
       Alert.alert('Recording Error', `Failed to process recording: ${(error as Error).message}`);
+    } finally {
+      isStoppingRef.current = false;
     }
   };
 
@@ -760,7 +777,7 @@ export default function VoiceCoachScreen() {
       
       // Transcribe audio with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
       
       console.log('📤 Sending FormData with audio file:', {
         uri: audioUri,
@@ -783,8 +800,14 @@ export default function VoiceCoachScreen() {
       
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
-        console.error('❌ Transcription error response:', errorText);
-        throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText}`);
+        console.error('❌ Transcription error response:', errorText.substring(0, 200));
+        
+        // Check if it's an HTML error page (503/504)
+        if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
+          throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
+        }
+        
+        throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
       }
       
       // Get response as text first to debug
@@ -908,7 +931,13 @@ export default function VoiceCoachScreen() {
 
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
-        console.error('❌ Transcription error response:', errorText);
+        console.error('❌ Transcription error response:', errorText.substring(0, 200));
+        
+        // Check if it's an HTML error page (503/504)
+        if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
+          throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
+        }
+        
         throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
       }
 
@@ -1436,7 +1465,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   recordButtonContainer: {
-    // Container for animated record button
   },
   modalOverlay: {
     flex: 1,
