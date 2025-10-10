@@ -7,12 +7,17 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
+  Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut } from 'lucide-react-native';
+import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
+import { useUserProfile } from '@/hooks/user-profile-context';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { SpeechCard } from '@/components/SpeechCard';
@@ -23,6 +28,7 @@ function ProfileContent() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const { user, signOut } = useAuth();
+  const { profile: userProfileData, updateProfile } = useUserProfile();
   
   // Always call hooks at the top level
   const context = useSpeechContext();
@@ -109,9 +115,41 @@ function ProfileContent() {
         >
           <View style={styles.header}>
             <View style={styles.profileInfo}>
-              <View style={styles.avatar}>
-                <User color={Colors.text} size={40} />
-              </View>
+              <TouchableOpacity 
+                style={styles.avatar}
+                onPress={async () => {
+                  if (Platform.OS === 'web') {
+                    Alert.alert('Not Available', 'Image upload is not available on web');
+                    return;
+                  }
+                  
+                  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                  if (status !== 'granted') {
+                    Alert.alert('Permission Required', 'Please grant camera roll permissions');
+                    return;
+                  }
+                  
+                  const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    aspect: [1, 1],
+                    quality: 0.8,
+                  });
+                  
+                  if (!result.canceled && result.assets[0]) {
+                    await updateProfile({ profileImageUri: result.assets[0].uri });
+                  }
+                }}
+              >
+                {userProfileData?.profileImageUri ? (
+                  <Image source={{ uri: userProfileData.profileImageUri }} style={styles.avatarImage} />
+                ) : (
+                  <User color={Colors.text} size={40} />
+                )}
+                <View style={styles.cameraIcon}>
+                  <Camera color={Colors.background} size={16} />
+                </View>
+              </TouchableOpacity>
               <View>
                 <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
                 <Text style={styles.subtitle}>{user?.email || 'Motivation Hub Member'}</Text>
@@ -235,6 +273,28 @@ function ProfileContent() {
             
             <TouchableOpacity 
               style={styles.menuItem}
+              onPress={() => router.push('/playlists')}
+            >
+              <View style={styles.menuItemLeft}>
+                <ListMusic color={Colors.categories.productivity} size={20} />
+                <Text style={styles.menuItemText}>My Playlists</Text>
+              </View>
+              <ChevronRight color={Colors.textSecondary} size={20} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/coach-character')}
+            >
+              <View style={styles.menuItemLeft}>
+                <Sparkles color={Colors.categories.confidence} size={20} />
+                <Text style={styles.menuItemText}>Choose Coach Character</Text>
+              </View>
+              <ChevronRight color={Colors.textSecondary} size={20} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
               onPress={() => router.push('/voice-coach')}
             >
               <View style={styles.menuItemLeft}>
@@ -317,6 +377,25 @@ const styles = StyleSheet.create({
     marginRight: 16,
     borderWidth: 2,
     borderColor: Colors.primary + '30',
+    position: 'relative',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 36,
+  },
+  cameraIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: Colors.primary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.background,
   },
   name: {
     color: Colors.text,

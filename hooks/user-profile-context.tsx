@@ -6,6 +6,14 @@ interface UserProfile {
   name: string;
   preferredVoice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
   voiceEnabled: boolean;
+  profileImageUri?: string;
+  coachCharacter?: {
+    id: string;
+    name: string;
+    imageUrl: string;
+    description: string;
+    isCustom: boolean;
+  };
 }
 
 const defaultProfile: UserProfile = {

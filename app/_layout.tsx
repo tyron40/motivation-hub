@@ -9,6 +9,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SpeechProvider, useSpeechContext } from "@/hooks/speech-context";
 import { UserProfileProvider } from "@/hooks/user-profile-context";
 import { AuthProvider, useAuth } from "@/hooks/auth-context";
+import { PlaylistProvider } from "@/hooks/playlist-context";
+import { ScriptureFavoritesProvider } from "@/hooks/scripture-favorites-context";
+import { ChatSessionsProvider } from "@/hooks/chat-sessions-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -209,6 +212,19 @@ function RootLayoutNav() {
                 headerShown: false,
               }} 
             />
+            <Stack.Screen 
+              name="playlists" 
+              options={{ 
+                title: 'My Playlists',
+              }} 
+            />
+            <Stack.Screen 
+              name="coach-character" 
+              options={{ 
+                title: 'Choose Your Coach',
+                presentation: 'modal',
+              }} 
+            />
           </>
         ) : (
           <Stack.Screen 
@@ -288,9 +304,15 @@ export default function RootLayout() {
                 <ErrorBoundary>
                   <UserProfileProvider>
                     <ErrorBoundary>
-                      <SpeechProvider>
-                        <RootLayoutNav />
-                      </SpeechProvider>
+                      <PlaylistProvider>
+                        <ScriptureFavoritesProvider>
+                          <ChatSessionsProvider>
+                            <SpeechProvider>
+                              <RootLayoutNav />
+                            </SpeechProvider>
+                          </ChatSessionsProvider>
+                        </ScriptureFavoritesProvider>
+                      </PlaylistProvider>
                     </ErrorBoundary>
                   </UserProfileProvider>
                 </ErrorBoundary>

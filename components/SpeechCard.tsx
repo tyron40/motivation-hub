@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Share, Alert, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Heart, Clock, User } from 'lucide-react-native';
+import { Play, Heart, Clock, User, Share2, ListPlus } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Speech } from '@/types/speech';
 
@@ -9,6 +9,7 @@ interface SpeechCardProps {
   speech: Speech;
   onPress: () => void;
   onFavorite: () => void;
+  onAddToPlaylist?: () => void;
   variant?: 'featured' | 'compact';
 }
 
@@ -16,6 +17,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
   speech, 
   onPress, 
   onFavorite,
+  onAddToPlaylist,
   variant = 'compact' 
 }) => {
   const [imageError, setImageError] = useState<boolean>(false);
@@ -77,6 +79,39 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     return `${mins} min`;
   };
 
+  const handleShare = async () => {
+    try {
+      const message = `Check out "${speech.title}" by ${speech.speaker}\n\n${speech.description || 'A motivational speech to inspire you!'}`;
+      
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: speech.title,
+            text: message,
+            url: speech.youtubeId ? `https://youtube.com/watch?v=${speech.youtubeId}` : undefined,
+          });
+        } else {
+          await navigator.clipboard.writeText(message);
+          Alert.alert('Copied!', 'Speech details copied to clipboard');
+        }
+      } else {
+        const result = await Share.share({
+          message,
+          url: speech.youtubeId ? `https://youtube.com/watch?v=${speech.youtubeId}` : undefined,
+        });
+        
+        if (result.action === Share.sharedAction) {
+          console.log('✅ Speech shared successfully');
+        }
+      }
+    } catch (error) {
+      console.error('Error sharing speech:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Share Error', 'Failed to share this speech');
+      }
+    }
+  };
+
   if (variant === 'featured') {
     return (
       <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: fadeAnim }}>
@@ -100,13 +135,23 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
                   </View>
                   <Text style={styles.durationText}>{formatDuration(speech.duration)}</Text>
                 </View>
-                <TouchableOpacity onPress={onFavorite} style={styles.favoriteButton}>
-                  <Heart 
-                    color={Colors.text} 
-                    size={20} 
-                    fill={speech.isFavorite ? Colors.text : 'transparent'}
-                  />
-                </TouchableOpacity>
+                <View style={styles.featuredActions}>
+                  <TouchableOpacity onPress={handleShare} style={styles.actionBtn}>
+                    <Share2 color={Colors.text} size={18} />
+                  </TouchableOpacity>
+                  {onAddToPlaylist && (
+                    <TouchableOpacity onPress={onAddToPlaylist} style={styles.actionBtn}>
+                      <ListPlus color={Colors.text} size={18} />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={onFavorite} style={styles.favoriteButton}>
+                    <Heart 
+                      color={Colors.text} 
+                      size={20} 
+                      fill={speech.isFavorite ? Colors.text : 'transparent'}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
               <TouchableOpacity style={styles.playButton} onPress={onPress}>
                 <Play color={Colors.background} size={24} fill={Colors.background} />
@@ -134,13 +179,23 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
               </View>
               <Text style={styles.compactDuration}>{formatDuration(speech.duration)}</Text>
             </View>
-            <TouchableOpacity onPress={onFavorite}>
-              <Heart 
-                color={Colors.accent} 
-                size={18} 
-                fill={speech.isFavorite ? Colors.accent : 'transparent'}
-              />
-            </TouchableOpacity>
+            <View style={styles.compactActions}>
+              <TouchableOpacity onPress={handleShare} style={styles.compactActionBtn}>
+                <Share2 color={Colors.textSecondary} size={16} />
+              </TouchableOpacity>
+              {onAddToPlaylist && (
+                <TouchableOpacity onPress={onAddToPlaylist} style={styles.compactActionBtn}>
+                  <ListPlus color={Colors.textSecondary} size={16} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onFavorite}>
+                <Heart 
+                  color={Colors.accent} 
+                  size={18} 
+                  fill={speech.isFavorite ? Colors.accent : 'transparent'}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         </View>
@@ -273,5 +328,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.textSecondary + '30',
+  },
+  featuredActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionBtn: {
+    padding: 4,
+  },
+  compactActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  compactActionBtn: {
+    padding: 2,
   },
 });
