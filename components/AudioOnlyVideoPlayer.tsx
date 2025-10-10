@@ -112,7 +112,9 @@ export default function AudioOnlyVideoPlayer({
           'mute': 0,
           'enablejsapi': 1,
           'origin': window.location.origin || 'https://localhost',
-          'widget_referrer': window.location.href || 'https://localhost'
+          'widget_referrer': window.location.href || 'https://localhost',
+          'fs': 0,
+          'iv_load_policy': 3
         },
         events: {
           'onReady': onPlayerReady,
@@ -129,28 +131,58 @@ export default function AudioOnlyVideoPlayer({
         type: 'ready',
         duration: videoDuration
       }));
-      if (player && player.playVideo) {
-        player.playVideo();
-        console.log('Auto-playing video immediately');
-      }
+      
+      setTimeout(function() {
+        if (player && player.playVideo) {
+          try {
+            player.unMute();
+            player.setVolume(100);
+            player.playVideo();
+            console.log('Starting playback after ready');
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'playbackStarted'
+            }));
+          } catch(e) {
+            console.error('Error starting playback:', e);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'error',
+              error: 'PLAYBACK_START_FAILED'
+            }));
+          }
+        }
+      }, 500);
       
       setInterval(function() {
         if (player && player.getCurrentTime) {
           var currentTime = player.getCurrentTime();
           var duration = player.getDuration();
+          var state = player.getPlayerState();
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'timeUpdate',
             currentTime: currentTime,
-            duration: duration
+            duration: duration,
+            state: state
           }));
         }
       }, 500);
     }
 
     function onPlayerStateChange(event) {
+      var stateNames = {
+        '-1': 'UNSTARTED',
+        '0': 'ENDED',
+        '1': 'PLAYING',
+        '2': 'PAUSED',
+        '3': 'BUFFERING',
+        '5': 'CUED'
+      };
+      
+      console.log('Player state changed to:', stateNames[event.data] || event.data);
+      
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'stateChange',
-        state: event.data
+        state: event.data,
+        stateName: stateNames[event.data] || 'UNKNOWN'
       }));
       
       if (event.data == YT.PlayerState.ENDED) {
@@ -158,12 +190,36 @@ export default function AudioOnlyVideoPlayer({
           type: 'ended'
         }));
       }
+      
+      if (event.data == -1 || event.data == 5) {
+        setTimeout(function() {
+          if (player && player.getPlayerState && (player.getPlayerState() == -1 || player.getPlayerState() == 5)) {
+            console.log('Video stuck in unstarted/cued state, attempting to play');
+            try {
+              player.playVideo();
+            } catch(e) {
+              console.error('Error attempting to play stuck video:', e);
+            }
+          }
+        }, 1000);
+      }
     }
 
     function onPlayerError(event) {
+      var errorMessages = {
+        2: 'Invalid video ID',
+        5: 'HTML5 player error',
+        100: 'Video not found or private',
+        101: 'Video not allowed to be played in embedded players',
+        150: 'Video not allowed to be played in embedded players'
+      };
+      
+      console.error('YouTube player error:', event.data, errorMessages[event.data] || 'Unknown error');
+      
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'error',
-        error: event.data
+        error: event.data,
+        errorMessage: errorMessages[event.data] || 'Unknown error'
       }));
     }
 
@@ -198,35 +254,51 @@ export default function AudioOnlyVideoPlayer({
     try {
       const data = JSON.parse(event.nativeEvent.data);
       
+      console.log('📨 WebView message:', data.type, data.stateName || '');
+      
       switch(data.type) {
         case 'ready':
+          console.log('✅ Player ready, duration:', data.duration);
           setIsLoading(false);
           if (data.duration) {
             setDuration(data.duration);
           }
           break;
+        case 'playbackStarted':
+          console.log('▶️ Playback started successfully');
+          setIsPlaying(true);
+          break;
         case 'stateChange':
+          console.log('🔄 State change:', data.stateName, '(', data.state, ')');
           if (data.state === 1) {
             setIsPlaying(true);
+            setIsLoading(false);
           } else if (data.state === 2 || data.state === 0) {
             setIsPlaying(false);
+          } else if (data.state === 3) {
+            console.log('⏳ Buffering...');
           }
           break;
         case 'timeUpdate':
           if (!isSeeking && data.currentTime !== undefined) {
             setCurrentTime(data.currentTime);
           }
-          if (data.duration !== undefined) {
+          if (data.duration !== undefined && data.duration > 0) {
             setDuration(data.duration);
+          }
+          if (data.state === 1 && !isPlaying) {
+            setIsPlaying(true);
           }
           break;
         case 'ended':
+          console.log('⏹️ Playback ended');
           setIsPlaying(false);
           setCurrentTime(0);
           onEnd?.();
           break;
         case 'error':
-          const errorMsg = `Failed to play audio: Error code ${data.error}`;
+          const errorMsg = data.errorMessage || `Failed to play audio: Error code ${data.error}`;
+          console.error('❌ Player error:', errorMsg);
           setError(errorMsg);
           setIsLoading(false);
           onError?.(errorMsg);
@@ -250,10 +322,13 @@ export default function AudioOnlyVideoPlayer({
   };
 
   const togglePlayPause = () => {
+    console.log('🎵 Toggle play/pause, currently:', isPlaying ? 'playing' : 'paused');
     if (isPlaying) {
       sendCommand('pause');
+      setIsPlaying(false);
     } else {
       sendCommand('play');
+      setIsPlaying(true);
     }
   };
 
