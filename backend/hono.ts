@@ -5,6 +5,8 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import OpenAI from "openai";
 
+console.log('[Backend] Hono server initializing with content.trending support');
+
 const app = new Hono();
 
 app.options("*", (c) => {
@@ -61,6 +63,7 @@ app.get("/health", (c) => {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasYouTubeKey: !!process.env.YOUTUBE_API_KEY,
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -80,6 +83,7 @@ app.get("/api/health", (c) => {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasYouTubeKey: !!process.env.YOUTUBE_API_KEY,
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
