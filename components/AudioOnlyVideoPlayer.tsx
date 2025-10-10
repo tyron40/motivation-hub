@@ -150,7 +150,7 @@ export default function AudioOnlyVideoPlayer({
             }));
           }
         }
-      }, 500);
+      }, 1000);
       
       setInterval(function() {
         if (player && player.getCurrentTime) {
@@ -196,12 +196,21 @@ export default function AudioOnlyVideoPlayer({
           if (player && player.getPlayerState && (player.getPlayerState() == -1 || player.getPlayerState() == 5)) {
             console.log('Video stuck in unstarted/cued state, attempting to play');
             try {
+              player.unMute();
+              player.setVolume(100);
               player.playVideo();
             } catch(e) {
               console.error('Error attempting to play stuck video:', e);
             }
           }
-        }, 1000);
+        }, 1500);
+      }
+      
+      if (event.data == 3) {
+        console.log('Video buffering...');
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'buffering'
+        }));
       }
     }
 

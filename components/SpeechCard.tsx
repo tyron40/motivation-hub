@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Heart, Clock, User } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -19,6 +19,24 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
   variant = 'compact' 
 }) => {
   const [imageError, setImageError] = useState<boolean>(false);
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [scaleAnim, fadeAnim]);
   
   // Ensure speech is a valid object
   if (!speech || typeof speech !== 'object' || !speech.title || !speech.speaker) {
@@ -61,13 +79,14 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
 
   if (variant === 'featured') {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
-        <LinearGradient
-          colors={[Colors.gradient.start, Colors.gradient.end]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.featuredCard}
-        >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: fadeAnim }}>
+        <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
+          <LinearGradient
+            colors={[Colors.gradient.start, Colors.gradient.end]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.featuredCard}
+          >
           {renderImage(styles.featuredImage)}
           <View style={styles.featuredOverlay}>
             <View style={styles.featuredContent}>
@@ -94,14 +113,16 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-        </LinearGradient>
-      </TouchableOpacity>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
     );
   }
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.compactCard}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: fadeAnim }}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+        <View style={styles.compactCard}>
         {renderImage(styles.compactImage)}
         <View style={styles.compactContent}>
           <Text style={styles.compactTitle} numberOfLines={2}>{String(speech.title || '')}</Text>
@@ -122,8 +143,9 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 

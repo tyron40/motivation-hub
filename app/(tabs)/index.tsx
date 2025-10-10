@@ -16,6 +16,7 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
+import { ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 
 export default function HomeScreen() {
@@ -25,13 +26,16 @@ export default function HomeScreen() {
   if (!speechContext) {
     console.error('Speech context not available');
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Loading...</Text>
-      </View>
+      <LinearGradient colors={[Colors.background, '#1A1A2E']} style={styles.container}>
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading Motivation Hub...</Text>
+        </View>
+      </LinearGradient>
     );
   }
   
-  const { toggleFavorite, setCurrentSpeech } = speechContext;
+  const { toggleFavorite, setCurrentSpeech, isLoading } = speechContext;
 
   const handleSpeechPress = (speech: any) => {
     try {
@@ -225,5 +229,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

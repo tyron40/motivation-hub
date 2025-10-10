@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, StyleSheet, Platform, PanResponder } from 'react-native';
-import Slider from '@react-native-community/slider';
+import { View, StyleSheet, PanResponder } from 'react-native';
 
 interface CustomSliderProps {
   style?: any;
@@ -97,22 +96,7 @@ export default function CustomSlider({
     }
   }, [value, isDragging]);
 
-  if (Platform.OS !== 'web') {
-    return (
-      <Slider
-        style={style}
-        minimumValue={minimumValue}
-        maximumValue={maximumValue}
-        value={value}
-        onValueChange={onValueChange}
-        onSlidingComplete={onSlidingComplete}
-        minimumTrackTintColor={minimumTrackTintColor}
-        maximumTrackTintColor={maximumTrackTintColor}
-        thumbTintColor={thumbTintColor}
-        disabled={disabled}
-      />
-    );
-  }
+
 
   const percentage = ((localValue - minimumValue) / (maximumValue - minimumValue)) * 100;
 

@@ -1,5 +1,8 @@
 const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
 
+const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 1000 * 60 * 30;
+
 interface YouTubeVideo {
   id: string;
   title: string;
@@ -92,6 +95,14 @@ export async function fetchYouTubeVideosDirect(
     return [];
   }
 
+  const cacheKey = `${query}-${maxResults}`;
+  const cached = REQUEST_CACHE.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`✅ Using cached YouTube data for: "${query}"`);
+    return cached.data;
+  }
+
   try {
     console.log(`🔍 Fetching YouTube videos for: "${query}"`);
     
@@ -151,6 +162,13 @@ export async function fetchYouTubeVideosDirect(
       viewCount: parseInt(item.statistics.viewCount || '0'),
       category: query,
     }));
+
+    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
+    
+    if (REQUEST_CACHE.size > 50) {
+      const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
+      REQUEST_CACHE.delete(oldestKey);
+    }
 
     console.log(`✅ Successfully fetched ${videos.length} YouTube videos`);
     return videos;
