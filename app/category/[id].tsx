@@ -15,25 +15,49 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { categories } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
+import { fetchContentByCategory } from '@/services/youtubeDirectService';
 
 export default function CategoryScreen() {
   const { id } = useLocalSearchParams();
   const { toggleFavorite, setCurrentSpeech, getSpeechesByCategory, loadSpeechesByCategory, isLoading } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
+  const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
+  const [loadingYoutube, setLoadingYoutube] = useState(false);
   
   const category = categories.find(c => c.id === id);
-  const categorySpeeches = category ? getSpeechesByCategory(category.name) : [];
+  const contextSpeeches = category ? getSpeechesByCategory(category.name) : [];
+  const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
 
   const handleLoadOnlineSpeeches = async () => {
     if (!category) return;
     
     try {
-      // Load all 500 speeches for the category
-      await loadSpeechesByCategory(category.name);
+      setLoadingYoutube(true);
+      console.log(`🔄 Loading YouTube speeches for ${category.name} from API...`);
+      
+      const videos = await fetchContentByCategory(category.name, 50);
+      console.log(`✅ Loaded ${videos.length} YouTube videos for ${category.name}`);
+      
+      const speeches: Speech[] = videos.map(video => ({
+        id: video.id,
+        title: video.title,
+        speaker: video.channelTitle,
+        duration: video.duration,
+        category: category.name,
+        imageUrl: video.thumbnail,
+        audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        youtubeId: video.id,
+        description: video.description,
+        playCount: Math.floor(video.viewCount / 1000),
+        tags: [category.name.toLowerCase(), 'youtube']
+      }));
+      
+      setYoutubeSpeeches(speeches);
       setHasLoadedOnline(true);
-      console.log(`Loaded ${categorySpeeches.length} YouTube speeches for ${category.name}`);
     } catch (error) {
-      console.error(`Failed to load YouTube speeches for ${category.name}:`, error);
+      console.error(`❌ Failed to load YouTube speeches for ${category.name}:`, error);
+    } finally {
+      setLoadingYoutube(false);
     }
   };
 
@@ -94,14 +118,14 @@ export default function CategoryScreen() {
             <TouchableOpacity 
               style={styles.loadButton}
               onPress={handleLoadOnlineSpeeches}
-              disabled={isLoading}
+              disabled={loadingYoutube}
             >
-              {isLoading ? (
+              {loadingYoutube ? (
                 <ActivityIndicator size="small" color={Colors.primary} />
               ) : (
                 <>
                   <RefreshCw size={16} color={Colors.primary} />
-                  <Text style={styles.loadButtonText}>{hasLoadedOnline ? 'Refresh' : 'Load All 500 Speeches'}</Text>
+                  <Text style={styles.loadButtonText}>{hasLoadedOnline ? 'Refresh from YouTube API' : 'Load from YouTube API'}</Text>
                 </>
               )}
             </TouchableOpacity>

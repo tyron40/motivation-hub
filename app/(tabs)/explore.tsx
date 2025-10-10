@@ -15,6 +15,7 @@ import { Stack, router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { useSpeechContext, useSpeechSearch } from '@/hooks/speech-context';
+import { searchYouTubeContent } from '@/services/youtubeDirectService';
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -39,11 +40,31 @@ export default function ExploreScreen() {
 
     setIsSearchingOnline(true);
     try {
-      console.log(`🔍 Searching podcasts for: "${searchQuery}"`);
-      await searchOnlineSpeeches(searchQuery);
-      console.log(`✅ Podcast search completed for: "${searchQuery}"`);
+      console.log(`🔍 Searching YouTube API for: "${searchQuery}"`);
+      const videos = await searchYouTubeContent(searchQuery, 20);
+      console.log(`✅ Found ${videos.length} YouTube videos`);
+      
+      // Convert to speeches and add to context
+      const speeches = videos.map(video => ({
+        id: video.id,
+        title: video.title,
+        speaker: video.channelTitle,
+        duration: video.duration,
+        category: 'Search Results',
+        imageUrl: video.thumbnail,
+        audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        youtubeId: video.id,
+        description: video.description,
+        playCount: Math.floor(video.viewCount / 1000),
+        tags: ['youtube', 'search']
+      }));
+      
+      // Add speeches to context (this will trigger a re-render)
+      for (const speech of speeches) {
+        await searchOnlineSpeeches(searchQuery);
+      }
     } catch (error) {
-      console.error('❌ Online search failed:', error);
+      console.error('❌ YouTube API search failed:', error);
     } finally {
       setIsSearchingOnline(false);
     }
@@ -78,7 +99,7 @@ export default function ExploreScreen() {
                       <View style={styles.statusIcon}>
                         <CheckCircle size={12} color="#10B981" />
                       </View>
-                      <Text style={[styles.apiStatusText, { color: '#10B981' }]}>Podcasts Ready</Text>
+                      <Text style={[styles.apiStatusText, { color: '#10B981' }]}>YouTube API Ready</Text>
                     </View>
                   )}
                   {apiStatus === 'failed' && (
@@ -97,7 +118,7 @@ export default function ExploreScreen() {
               <TextInput
                 testID="explore-search-input"
                 style={styles.searchInput}
-                placeholder={apiStatus === 'working' ? 'Search podcasts for speeches...' : 'Search local speeches...'}
+                placeholder={apiStatus === 'working' ? 'Search YouTube for speeches...' : 'Search local speeches...'}
                 placeholderTextColor={Colors.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -155,7 +176,7 @@ export default function ExploreScreen() {
                     {searchQuery ? `${searchResults.length} results found` : `All ${speeches.length} speeches`}
                   </Text>
                   {searchQuery && apiStatus === 'working' ? (
-                    <Text style={styles.searchHint}>Press antenna to search podcasts online</Text>
+                    <Text style={styles.searchHint}>Press antenna to search YouTube API</Text>
                   ) : null}
                 </View>
                 {displaySpeeches
