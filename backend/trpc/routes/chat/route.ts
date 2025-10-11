@@ -33,6 +33,8 @@ export const chatRouter = createTRPCRouter({
         body: JSON.stringify({
           model: "gpt-4o-mini",
           messages: input.messages,
+          temperature: 0.7,
+          max_tokens: 500,
         }),
       });
 
