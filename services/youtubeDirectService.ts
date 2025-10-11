@@ -88,7 +88,7 @@ function parseDuration(duration: string): number {
 
 export async function fetchYouTubeVideosDirect(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 50
 ): Promise<YouTubeVideo[]> {
   if (!YOUTUBE_API_KEY) {
     console.warn('⚠️ YouTube API key not configured. Add EXPO_PUBLIC_YOUTUBE_API_KEY to your .env file');
@@ -180,7 +180,7 @@ export async function fetchYouTubeVideosDirect(
 
 export async function fetchContentByCategory(
   category: string,
-  limit: number = 10
+  limit: number = 50
 ): Promise<YouTubeVideo[]> {
   const categoryKey = category.toLowerCase();
   const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
@@ -196,14 +196,14 @@ export async function fetchContentByCategory(
 
 export async function searchYouTubeContent(
   query: string,
-  limit: number = 20
+  limit: number = 50
 ): Promise<YouTubeVideo[]> {
   console.log(`🔍 Searching YouTube for: "${query}"`);
   return await fetchYouTubeVideosDirect(query, limit);
 }
 
 export async function fetchTrendingYouTubeContent(
-  limit: number = 20
+  limit: number = 50
 ): Promise<YouTubeVideo[]> {
   console.log('📈 Fetching trending motivational content');
   

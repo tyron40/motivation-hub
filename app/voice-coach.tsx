@@ -1074,6 +1074,8 @@ export default function VoiceCoachScreen() {
       console.log('🤖 Getting AI response...');
       console.log('📝 Conversation messages:', conversationMessages.length);
       
+      setCurrentStatus('Coach is thinking...');
+      
       const userName = profile.name || 'friend';
       const coachName = profile.coachCharacter?.name || 'Coach Alex';
       const coachDescription = profile.coachCharacter?.description || 'Energetic and motivating, perfect for daily inspiration';
@@ -1083,7 +1085,7 @@ Key traits:
 - Warm, encouraging, and empathetic
 - Use the user's name when provided (${userName})
 - Provide actionable, practical advice
-- Keep responses conversational and under 200 words
+- Keep responses conversational and under 150 words for faster delivery
 - Focus on building confidence, resilience, and positive mindset
 - Ask follow-up questions to better understand their situation
 - Share brief motivational insights or techniques
@@ -1113,12 +1115,11 @@ Always end with encouragement and offer to continue the conversation.`;
         timestamp: Date.now(),
       };
       
-      console.log('✅ Adding assistant message:', assistantMessage.content);
+      console.log('✅ AI response received, speaking immediately...');
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Always try to speak the response (voice is enabled by default)
       if (profile.voiceEnabled !== false) {
-        console.log('🔊 Speaking AI response...');
+        console.log('🔊 Speaking AI response immediately...');
         setCurrentStatus('Coach is speaking...');
         try {
           await speakMessage(completion);
@@ -1136,7 +1137,6 @@ Always end with encouragement and offer to continue the conversation.`;
       console.error('❌ Error type:', error?.constructor?.name);
       console.error('❌ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       
-      // Provide a fallback response
       const fallbackMessage: Message = {
         role: 'assistant',
         content: 'I\'m having trouble connecting right now, but I\'m still here to help! Could you try saying that again?',
@@ -1146,7 +1146,6 @@ Always end with encouragement and offer to continue the conversation.`;
       setMessages(prev => [...prev, fallbackMessage]);
       setCurrentStatus('Ready to listen');
       
-      // Try to speak the fallback
       if (profile.voiceEnabled !== false) {
         try {
           await speakMessage(fallbackMessage.content);

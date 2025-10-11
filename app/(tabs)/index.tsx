@@ -45,7 +45,7 @@ export default function HomeScreen() {
       try {
         setLoadingYoutube(true);
         console.log('🔄 Loading YouTube speeches from API...');
-        const videos = await fetchTrendingYouTubeContent(20);
+        const videos = await fetchTrendingYouTubeContent(50);
         console.log(`✅ Loaded ${videos.length} YouTube videos`);
         
         const speeches = videos.map(video => ({

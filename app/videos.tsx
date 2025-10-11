@@ -76,7 +76,7 @@ export default function VideosScreen() {
   }, []);
 
   // Search videos
-  const searchVideos = async (query: string, maxResults: number = 20, category?: string) => {
+  const searchVideos = async (query: string, maxResults: number = 50, category?: string) => {
     try {
       setIsLoading(true);
       console.log(`Searching for: ${query} in category: ${category || 'All'}`);
@@ -106,7 +106,7 @@ export default function VideosScreen() {
   };
 
   // Get category videos
-  const getCategoryVideos = async (category: string, limit: number = 20) => {
+  const getCategoryVideos = async (category: string, limit: number = 50) => {
     try {
       setIsLoading(true);
       console.log(`Loading videos for category: ${category}`);
@@ -143,7 +143,7 @@ export default function VideosScreen() {
 
     searchVideos(
       searchTerm,
-      20,
+      50,
       selectedCategory !== 'All' ? selectedCategory : undefined
     );
   };
@@ -151,7 +151,7 @@ export default function VideosScreen() {
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
     
-    getCategoryVideos(category, 20);
+    getCategoryVideos(category, 50);
   };
 
   const handleVideoPress = (video: Video) => {
