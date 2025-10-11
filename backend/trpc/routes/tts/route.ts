@@ -33,10 +33,10 @@ export const ttsRouter = createTRPCRouter({
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "tts-1-hd",
+          model: "tts-1",
           input: input.text,
           voice: input.voice || "alloy",
-          speed: 1.0,
+          speed: 1.1,
         }),
       });
 
