@@ -63,7 +63,7 @@ app.get("/health", (c) => {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
-      hasYouTubeKey: !!process.env.YOUTUBE_API_KEY,
+      hasYouTubeKey: !!(process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY),
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -83,7 +83,7 @@ app.get("/api/health", (c) => {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
-      hasYouTubeKey: !!process.env.YOUTUBE_API_KEY,
+      hasYouTubeKey: !!(process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY),
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -197,6 +197,241 @@ const handleChat = async (c: any) => {
 
 app.post("/api/chat", handleChat);
 app.post("/chat", handleChat);
+
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
+
+const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
+  motivation: [
+    'motivational speech 2024',
+    'david goggins motivation',
+    'best motivational speech',
+    'powerful motivation',
+    'morning motivation speech',
+  ],
+  success: [
+    'success mindset speech',
+    'entrepreneur motivation',
+    'business success speech',
+    'wealth mindset',
+    'success principles',
+  ],
+  mindset: [
+    'growth mindset speech',
+    'mental toughness',
+    'champion mindset',
+    'positive thinking speech',
+    'mindset transformation',
+  ],
+  inspiration: [
+    'inspirational speech',
+    'life changing speech',
+    'inspiring stories',
+    'overcome adversity',
+    'never give up speech',
+  ],
+  study: [
+    'study motivation',
+    'focus and concentration',
+    'academic success',
+    'learning motivation',
+    'student motivation',
+  ],
+  'high energy': [
+    'high energy motivation',
+    'pump up speech',
+    'workout motivation',
+    'intense motivation',
+    'energy boost speech',
+  ],
+  'daily motivation': [
+    'daily motivation speech',
+    'morning routine motivation',
+    'daily inspiration',
+    'start your day right',
+    'daily mindset',
+  ],
+  'powerful speeches': [
+    'powerful motivational speech',
+    'life changing speech',
+    'greatest speeches',
+    'legendary speeches',
+    'iconic motivational speech',
+  ],
+};
+
+function parseDuration(duration: string): number {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  
+  const hours = parseInt(match[1] || '0');
+  const minutes = parseInt(match[2] || '0');
+  const seconds = parseInt(match[3] || '0');
+  
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
+  if (!YOUTUBE_API_KEY) {
+    console.warn('[YouTube] API key not configured');
+    return [];
+  }
+
+  try {
+    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+    searchUrl.searchParams.set('part', 'snippet');
+    searchUrl.searchParams.set('q', query);
+    searchUrl.searchParams.set('type', 'video');
+    searchUrl.searchParams.set('maxResults', maxResults.toString());
+    searchUrl.searchParams.set('order', 'relevance');
+    searchUrl.searchParams.set('videoDuration', 'medium');
+    searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+    console.log('[YouTube] Fetching search results...');
+    const searchResponse = await fetch(searchUrl.toString());
+    if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      console.error('[YouTube] Search API error:', searchResponse.status, errorText);
+      throw new Error(`YouTube API error: ${searchResponse.status}`);
+    }
+
+    const searchData = await searchResponse.json();
+    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+
+    if (!videoIds) {
+      return [];
+    }
+
+    const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+    detailsUrl.searchParams.set('id', videoIds);
+    detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+    console.log('[YouTube] Fetching video details...');
+    const detailsResponse = await fetch(detailsUrl.toString());
+    if (!detailsResponse.ok) {
+      const errorText = await detailsResponse.text();
+      console.error('[YouTube] Videos API error:', detailsResponse.status, errorText);
+      throw new Error(`YouTube API error: ${detailsResponse.status}`);
+    }
+
+    const detailsData = await detailsResponse.json();
+
+    return detailsData.items.map((item: any) => ({
+      id: item.id,
+      title: item.snippet.title,
+      description: item.snippet.description,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+      channelTitle: item.snippet.channelTitle,
+      channelId: item.snippet.channelId,
+      publishedAt: item.snippet.publishedAt,
+      duration: parseDuration(item.contentDetails.duration),
+      viewCount: parseInt(item.statistics.viewCount || '0'),
+      category: query,
+    }));
+  } catch (error) {
+    console.error('[YouTube] Error fetching videos:', error);
+    throw error;
+  }
+}
+
+const handleYouTubeCategory = async (c: any) => {
+  try {
+    console.log('[YouTube] Category request received');
+    const body = await c.req.json();
+    const { category, limit = 10 } = body;
+
+    if (!category) {
+      return c.json({ error: 'Category is required' }, 400);
+    }
+
+    const categoryKey = category.toLowerCase();
+    const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
+    const queryIndex = new Date().getDate() % searchQueries.length;
+    const todayQuery = searchQueries[queryIndex];
+
+    console.log(`[YouTube] Fetching category: ${category}, query: "${todayQuery}"`);
+    const videos = await fetchYouTubeVideos(todayQuery, limit);
+
+    return c.json({
+      videos,
+      category,
+      query: todayQuery,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[YouTube] Category error:', error);
+    return c.json({
+      error: 'Failed to fetch YouTube content',
+      details: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
+};
+
+const handleYouTubeSearch = async (c: any) => {
+  try {
+    console.log('[YouTube] Search request received');
+    const body = await c.req.json();
+    const { query, limit = 20 } = body;
+
+    if (!query) {
+      return c.json({ error: 'Query is required' }, 400);
+    }
+
+    console.log(`[YouTube] Searching for: "${query}"`);
+    const videos = await fetchYouTubeVideos(query, limit);
+
+    return c.json({
+      videos,
+      query,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[YouTube] Search error:', error);
+    return c.json({
+      error: 'Failed to search YouTube',
+      details: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
+};
+
+const handleYouTubeTrending = async (c: any) => {
+  try {
+    console.log('[YouTube] Trending request received');
+    const body = await c.req.json();
+    const { limit = 20 } = body;
+
+    const trendingQueries = [
+      'motivational speech 2024',
+      'best motivational speech',
+      'powerful motivation',
+    ];
+
+    const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % trendingQueries.length;
+    const query = trendingQueries[queryIndex];
+
+    console.log(`[YouTube] Fetching trending with query: "${query}"`);
+    const videos = await fetchYouTubeVideos(query, limit);
+
+    return c.json({
+      videos,
+      query,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[YouTube] Trending error:', error);
+    return c.json({
+      error: 'Failed to fetch trending content',
+      details: error instanceof Error ? error.message : String(error),
+    }, 500);
+  }
+};
+
+app.post('/api/youtube/category', handleYouTubeCategory);
+app.post('/youtube/category', handleYouTubeCategory);
+app.post('/api/youtube/search', handleYouTubeSearch);
+app.post('/youtube/search', handleYouTubeSearch);
+app.post('/api/youtube/trending', handleYouTubeTrending);
+app.post('/youtube/trending', handleYouTubeTrending);
 
 app.all("/trpc/*", async (c) => {
   console.log("[Hono] tRPC request:", c.req.method, c.req.url);

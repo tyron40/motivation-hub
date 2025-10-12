@@ -1,10 +1,122 @@
 import { Speech } from '@/types/speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  fetchContentByCategory as fetchYouTubeByCategory,
-  searchYouTubeContent,
-  fetchTrendingYouTubeContent
-} from './youtubeDirectService';
+
+const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+
+function sanitizeBaseUrl(input: string | undefined): string {
+  const unsafe = input ?? '';
+  const lowered = unsafe.toLowerCase();
+  const isBad = !unsafe ||
+    lowered.includes('rorktest.dev') ||
+    lowered.includes('localhost') ||
+    lowered.startsWith('http://') ||
+    lowered.startsWith('https://a-');
+
+  const finalUrl = isBad ? PRODUCTION_API_URL : unsafe;
+  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+}
+
+const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+
+interface YouTubeVideo {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  channelTitle: string;
+  channelId: string;
+  publishedAt: string;
+  duration: number;
+  viewCount: number;
+  category: string;
+}
+
+async function fetchYouTubeByCategory(category: string, limit: number): Promise<YouTubeVideo[]> {
+  try {
+    console.log(`📺 Fetching YouTube content via Vercel backend for: ${category}`);
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/category`);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/category`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ category, limit }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube API error:', response.status, errorText);
+      throw new Error(`YouTube API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Fetched ${data.videos?.length || 0} videos from backend`);
+    return data.videos || [];
+  } catch (error) {
+    console.error('❌ Error fetching YouTube content:', error);
+    throw error;
+  }
+}
+
+async function searchYouTubeContent(query: string, limit: number): Promise<YouTubeVideo[]> {
+  try {
+    console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/search`);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ query, limit }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube search error:', response.status, errorText);
+      throw new Error(`YouTube search error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Found ${data.videos?.length || 0} videos from backend`);
+    return data.videos || [];
+  } catch (error) {
+    console.error('❌ Error searching YouTube:', error);
+    throw error;
+  }
+}
+
+async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[]> {
+  try {
+    console.log('📈 Fetching trending YouTube content via Vercel backend');
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/trending`);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/trending`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ limit }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube trending error:', response.status, errorText);
+      throw new Error(`YouTube trending error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`✅ Fetched ${data.videos?.length || 0} trending videos from backend`);
+    return data.videos || [];
+  } catch (error) {
+    console.error('❌ Error fetching trending content:', error);
+    throw error;
+  }
+}
 
 const CACHE_DURATION = 1000 * 60 * 60 * 24;
 const CACHE_PREFIX = 'content_cache_';
@@ -96,7 +208,7 @@ export async function fetchFreshContentByCategory(
       }
     }
     
-    console.log(`📺 Fetching fresh content for ${category} directly from YouTube API`);
+    console.log(`📺 Fetching fresh content for ${category} via Vercel backend`);
     
     const videos = await fetchYouTubeByCategory(category, limit);
     
@@ -123,7 +235,7 @@ export async function searchFreshContent(
   limit: number = 20
 ): Promise<Speech[]> {
   try {
-    console.log(`🔍 Searching YouTube directly for: "${query}"`);
+    console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
     
     const videos = await searchYouTubeContent(query, limit);
     
@@ -148,7 +260,7 @@ export async function fetchTrendingContent(
       }
     }
     
-    console.log('📈 Fetching trending content directly from YouTube API');
+    console.log('📈 Fetching trending content via Vercel backend');
     
     const videos = await fetchTrendingYouTubeContent(limit);
     
