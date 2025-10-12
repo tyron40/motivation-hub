@@ -15,7 +15,7 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { categories } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
+import { fetchContentByCategory } from '@/services/youtubeDirectService';
 
 export default function CategoryScreen() {
   const { id } = useLocalSearchParams();
@@ -33,12 +33,24 @@ export default function CategoryScreen() {
     
     try {
       setLoadingYoutube(true);
-      console.log(`🔄 Loading YouTube speeches for ${category.name}...`);
+      console.log(`🔄 Loading YouTube speeches for ${category.name} from API...`);
       
-      const videos = await getVideosByCategory(category.name, 10);
+      const videos = await fetchContentByCategory(category.name, 50);
       console.log(`✅ Loaded ${videos.length} YouTube videos for ${category.name}`);
       
-      const speeches: Speech[] = videos.map(video => convertVideoToSpeech(video));
+      const speeches: Speech[] = videos.map(video => ({
+        id: video.id,
+        title: video.title,
+        speaker: video.channelTitle,
+        duration: video.duration,
+        category: category.name,
+        imageUrl: video.thumbnail,
+        audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
+        youtubeId: video.id,
+        description: video.description,
+        playCount: Math.floor(video.viewCount / 1000),
+        tags: [category.name.toLowerCase(), 'youtube']
+      }));
       
       setYoutubeSpeeches(speeches);
       setHasLoadedOnline(true);

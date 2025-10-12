@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
 import { fetchRealSpeeches } from '@/services/speechService';
-import { getVideosByCategory, searchVideos as searchYouTubeVideos, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent } from '@/services/contentService';
 
 interface SpeechContextValue {
   speeches: Speech[];
@@ -136,10 +136,9 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
           }
         }, 15000); // 15 second timeout
         
-        // Load trending content from YouTube
+        // Load trending content from YouTube API via backend
         try {
-          const trendingVideos = await getTrendingVideos(20);
-          const trendingSpeeches = trendingVideos.map(video => convertVideoToSpeech(video));
+          const trendingSpeeches = await fetchTrendingContent(20, true);
           
           if (timeoutId) {
             clearTimeout(timeoutId);
@@ -362,9 +361,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         setIsLoading(false);
       }, 10000);
       
-      // Load speeches from YouTube
-      const categoryVideos = await getVideosByCategory(category, 10);
-      const categorySpeeches = categoryVideos.map(video => convertVideoToSpeech(video));
+      // Load speeches from YouTube API via backend
+      const categorySpeeches = await fetchFreshContentByCategory(category, 50, true);
       
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -423,13 +421,12 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, []);
 
-  // Load fresh content from YouTube
+  // Load fresh content from YouTube API via backend
   const loadFreshContent = useCallback(async (category: string, useCache: boolean = true) => {
     setIsLoading(true);
     try {
       console.log(`📺 Loading fresh content for category: ${category}`);
-      const freshVideos = await getVideosByCategory(category, 10);
-      const freshSpeeches = freshVideos.map(video => convertVideoToSpeech(video));
+      const freshSpeeches = await fetchFreshContentByCategory(category, 10, useCache);
       
       if (freshSpeeches.length > 0) {
         const validSpeeches = freshSpeeches.filter(speech => 
@@ -456,16 +453,15 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, []);
 
-  // Search fresh content from YouTube
+  // Search fresh content from YouTube API via backend
   const searchFreshContentHandler = useCallback(async (query: string) => {
     setIsLoading(true);
     try {
       console.log(`🔍 Searching fresh content for: ${query}`);
-      const searchResults = await searchYouTubeVideos(query, 20);
-      const searchSpeeches = searchResults.map(video => convertVideoToSpeech(video));
+      const searchResults = await searchFreshContent(query, 20);
       
-      if (searchSpeeches.length > 0) {
-        const validResults = searchSpeeches.filter(speech => 
+      if (searchResults.length > 0) {
+        const validResults = searchResults.filter(speech => 
           speech && 
           typeof speech === 'object' && 
           speech.id && 
@@ -485,13 +481,12 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, []);
 
-  // Load trending content from YouTube
+  // Load trending content from YouTube API via backend
   const loadTrendingContentHandler = useCallback(async (useCache: boolean = true) => {
     setIsLoading(true);
     try {
       console.log('📈 Loading trending content');
-      const trendingVideos = await getTrendingVideos(20);
-      const trendingSpeeches = trendingVideos.map(video => convertVideoToSpeech(video));
+      const trendingSpeeches = await fetchTrendingContent(20, useCache);
       
       if (trendingSpeeches.length > 0) {
         const validSpeeches = trendingSpeeches.filter(speech => 
@@ -518,12 +513,11 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const searchOnlineSpeeches = useCallback(async (query: string) => {
     setIsLoading(true);
     try {
-      console.log(`🔍 Searching YouTube for: ${query}`);
-      const searchResults = await searchYouTubeVideos(query, 20);
-      const searchSpeeches = searchResults.map(video => convertVideoToSpeech(video));
-      if (searchSpeeches.length > 0) {
+      console.log(`🔍 Searching YouTube API for: ${query}`);
+      const searchResults = await searchFreshContent(query, 20);
+      if (searchResults.length > 0) {
         // Validate search results before setting them
-        const validResults = searchSpeeches.filter(speech => {
+        const validResults = searchResults.filter(speech => {
           try {
             return speech && 
               typeof speech === 'object' && 
