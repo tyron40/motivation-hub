@@ -15,7 +15,7 @@ import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
-import { fetchTrendingYouTubeContent } from '@/services/youtubeDirectService';
+import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
@@ -24,7 +24,26 @@ export default function HomeScreen() {
   const speechContext = useSpeechContext();
   const insets = useSafeAreaInsets();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
-  const [loadingYoutube, setLoadingYoutube] = React.useState(false);
+  
+  const { toggleFavorite, setCurrentSpeech } = speechContext || {};
+
+  React.useEffect(() => {
+    const loadYouTubeSpeeches = async () => {
+      try {
+        console.log('🔄 Loading YouTube speeches...');
+        const videos = await getTrendingVideos(20);
+        console.log(`✅ Loaded ${videos.length} YouTube videos`);
+        
+        const speeches = videos.map(video => convertVideoToSpeech(video));
+        
+        setYoutubeSpeeches(speeches);
+      } catch (error) {
+        console.error('❌ Failed to load YouTube speeches:', error);
+      }
+    };
+    
+    loadYouTubeSpeeches();
+  }, []);
   
   if (!speechContext) {
     console.error('Speech context not available');
@@ -37,41 +56,6 @@ export default function HomeScreen() {
       </LinearGradient>
     );
   }
-  
-  const { toggleFavorite, setCurrentSpeech, isLoading } = speechContext;
-
-  React.useEffect(() => {
-    const loadYouTubeSpeeches = async () => {
-      try {
-        setLoadingYoutube(true);
-        console.log('🔄 Loading YouTube speeches from API...');
-        const videos = await fetchTrendingYouTubeContent(100);
-        console.log(`✅ Loaded ${videos.length} YouTube videos`);
-        
-        const speeches = videos.map(video => ({
-          id: video.id,
-          title: video.title,
-          speaker: video.channelTitle,
-          duration: video.duration,
-          category: 'Motivation',
-          imageUrl: video.thumbnail,
-          audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
-          youtubeId: video.id,
-          description: video.description,
-          playCount: Math.floor(video.viewCount / 1000),
-          tags: ['motivation', 'youtube']
-        }));
-        
-        setYoutubeSpeeches(speeches);
-      } catch (error) {
-        console.error('❌ Failed to load YouTube speeches:', error);
-      } finally {
-        setLoadingYoutube(false);
-      }
-    };
-    
-    loadYouTubeSpeeches();
-  }, []);
 
   const handleSpeechPress = (speech: any) => {
     try {

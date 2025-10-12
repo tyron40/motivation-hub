@@ -15,7 +15,7 @@ import { Stack, router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { useSpeechContext, useSpeechSearch } from '@/hooks/speech-context';
-import { searchYouTubeContent } from '@/services/youtubeDirectService';
+
 
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -40,31 +40,10 @@ export default function ExploreScreen() {
 
     setIsSearchingOnline(true);
     try {
-      console.log(`🔍 Searching YouTube API for: "${searchQuery}"`);
-      const videos = await searchYouTubeContent(searchQuery, 100);
-      console.log(`✅ Found ${videos.length} YouTube videos`);
-      
-      // Convert to speeches and add to context
-      const speeches = videos.map(video => ({
-        id: video.id,
-        title: video.title,
-        speaker: video.channelTitle,
-        duration: video.duration,
-        category: 'Search Results',
-        imageUrl: video.thumbnail,
-        audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
-        youtubeId: video.id,
-        description: video.description,
-        playCount: Math.floor(video.viewCount / 1000),
-        tags: ['youtube', 'search']
-      }));
-      
-      // Add speeches to context (this will trigger a re-render)
-      for (const speech of speeches) {
-        await searchOnlineSpeeches(searchQuery);
-      }
+      console.log(`🔍 Searching for: "${searchQuery}"`);
+      await searchOnlineSpeeches(searchQuery);
     } catch (error) {
-      console.error('❌ YouTube API search failed:', error);
+      console.error('❌ Search failed:', error);
     } finally {
       setIsSearchingOnline(false);
     }
