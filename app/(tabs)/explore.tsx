@@ -41,7 +41,7 @@ export default function ExploreScreen() {
     setIsSearchingOnline(true);
     try {
       console.log(`🔍 Searching YouTube API for: "${searchQuery}"`);
-      const videos = await searchYouTubeContent(searchQuery, 50);
+      const videos = await searchYouTubeContent(searchQuery, 100);
       console.log(`✅ Found ${videos.length} YouTube videos`);
       
       // Convert to speeches and add to context
