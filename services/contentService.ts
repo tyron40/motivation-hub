@@ -36,14 +36,21 @@ async function fetchYouTubeByCategory(category: string, limit: number): Promise<
     console.log(`📺 Fetching YouTube content via Vercel backend for: ${category}`);
     console.log(`🔗 API URL: ${API_BASE}/api/youtube/category`);
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
     const response = await fetch(`${API_BASE}/api/youtube/category`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({ category, limit }),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -54,8 +61,14 @@ async function fetchYouTubeByCategory(category: string, limit: number): Promise<
     const data = await response.json();
     console.log(`✅ Fetched ${data.videos?.length || 0} videos from backend`);
     return data.videos || [];
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error fetching YouTube content:', error);
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timeout - server took too long to respond');
+    }
+    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
+    }
     throw error;
   }
 }
@@ -65,14 +78,21 @@ async function searchYouTubeContent(query: string, limit: number): Promise<YouTu
     console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
     console.log(`🔗 API URL: ${API_BASE}/api/youtube/search`);
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
     const response = await fetch(`${API_BASE}/api/youtube/search`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({ query, limit }),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -83,8 +103,14 @@ async function searchYouTubeContent(query: string, limit: number): Promise<YouTu
     const data = await response.json();
     console.log(`✅ Found ${data.videos?.length || 0} videos from backend`);
     return data.videos || [];
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error searching YouTube:', error);
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timeout - server took too long to respond');
+    }
+    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
+    }
     throw error;
   }
 }
@@ -94,14 +120,21 @@ async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[
     console.log('📈 Fetching trending YouTube content via Vercel backend');
     console.log(`🔗 API URL: ${API_BASE}/api/youtube/trending`);
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
     const response = await fetch(`${API_BASE}/api/youtube/trending`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
       },
       body: JSON.stringify({ limit }),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -112,8 +145,14 @@ async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[
     const data = await response.json();
     console.log(`✅ Fetched ${data.videos?.length || 0} trending videos from backend`);
     return data.videos || [];
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error fetching trending content:', error);
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timeout - server took too long to respond');
+    }
+    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
+    }
     throw error;
   }
 }
