@@ -1,107 +1,107 @@
 {
-"expo": {
-  "name": "Motivation Hub",
-  "slug": "motivational-app",
-  "version": "1.0.0",
-  "orientation": "portrait",
-  "icon": "./assets/images/icon.png",
-  "scheme": "myapp",
-  "userInterfaceStyle": "automatic",
-  "newArchEnabled": true,
-  "splash": {
-    "image": "./assets/images/splash-icon.png",
-    "resizeMode": "contain",
-    "backgroundColor": "#ffffff"
-  },
-  "ios": {
-    "supportsTablet": true,
-    "bundleIdentifier": "app.rork.motivational-speech-app",
-    "buildNumber": "45",
-    "infoPlist": {
-      "UIBackgroundModes": [
-        "audio"
-      ],
-      "NSMicrophoneUsageDescription": "This app needs microphone access for voice coaching and speech recording features",
-      "NSPhotoLibraryUsageDescription": "This app needs access to your photos",
-      "NSCameraUsageDescription": "This app needs camera access",
-      "NSSpeechRecognitionUsageDescription": "This app uses speech recognition for voice coaching features",
-      "NSAppTransportSecurity": {
-        "NSAllowsArbitraryLoads": false,
-        "NSExceptionDomains": {
-          "googleapis.com": {
-            "NSIncludesSubdomains": true,
-            "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
-            "NSTemporaryExceptionRequiresForwardSecrecy": true,
-            "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
-          },
-          "vercel.app": {
-            "NSIncludesSubdomains": true,
-            "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
-            "NSTemporaryExceptionRequiresForwardSecrecy": true,
-            "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
-          },
-          "youtube.com": {
-            "NSIncludesSubdomains": true,
-            "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
-            "NSTemporaryExceptionRequiresForwardSecrecy": true,
-            "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
-          },
-          "supabase.co": {
-            "NSIncludesSubdomains": true,
-            "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
-            "NSTemporaryExceptionRequiresForwardSecrecy": true,
-            "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+  "expo": {
+    "name": "Motivation Hub",
+    "slug": "motivational-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.rork.motivational-speech-app",
+      "buildNumber": "45",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSMicrophoneUsageDescription": "This app needs microphone access for voice coaching and speech recording features",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos",
+        "NSCameraUsageDescription": "This app needs camera access",
+        "NSSpeechRecognitionUsageDescription": "This app uses speech recognition for voice coaching features",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "googleapis.com": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            },
+            "vercel.app": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            },
+            "youtube.com": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            },
+            "supabase.co": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            }
           }
         }
       }
-    }
-  },
-  "android": {
-    "adaptiveIcon": {
-      "foregroundImage": "./assets/images/adaptive-icon.png",
-      "backgroundColor": "#ffffff"
     },
-    "package": "app.rork.motivational-speech-app",
-    "versionCode": 45,
-    "permissions": [
-      "RECORD_AUDIO",
-      "READ_EXTERNAL_STORAGE",
-      "WRITE_EXTERNAL_STORAGE",
-      "INTERNET",
-      "CAMERA",
-      "MODIFY_AUDIO_SETTINGS",
-      "ACCESS_NETWORK_STATE"
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "app.rork.motivational-speech-app",
+      "versionCode": 45,
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
+        "CAMERA",
+        "MODIFY_AUDIO_SETTINGS",
+        "ACCESS_NETWORK_STATE"
+      ],
+      "usesCleartextTraffic": false
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://rork.com/"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "This app needs microphone access for voice coaching and speech recording features"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photos",
+          "cameraPermission": "This app needs camera access"
+        }
+      ]
     ],
-    "usesCleartextTraffic": false
-  },
-  "web": {
-    "favicon": "./assets/images/favicon.png"
-  },
-  "plugins": [
-    [
-      "expo-router",
-      {
-        "origin": "https://rork.com/"
+    "extra": {
+      "eas": {
+        "projectId": "7389ef4c-4537-4e7b-9081-c30a7e9c22bd"
       }
-    ],
-    [
-      "expo-av",
-      {
-        "microphonePermission": "This app needs microphone access for voice coaching and speech recording features"
-      }
-    ],
-    [
-      "expo-image-picker",
-      {
-        "photosPermission": "This app needs access to your photos",
-        "cameraPermission": "This app needs camera access"
-      }
-    ]
-  ],
-  "extra": {
-    "eas": {
-      "projectId": "7389ef4c-4537-4e7b-9081-c30a7e9c22bd"
     }
   }
-}
 }
