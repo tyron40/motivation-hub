@@ -1,7 +1,7 @@
 import { Speech } from '@/types/speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
 
 function sanitizeBaseUrl(input: string | undefined): string {
   const unsafe = input ?? '';
@@ -52,22 +52,49 @@ async function fetchYouTubeByCategory(category: string, limit: number): Promise<
     
     clearTimeout(timeoutId);
 
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Response content-type:', contentType);
+    console.log('📡 Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ YouTube API error:', response.status, errorText);
+      console.error('❌ YouTube API error:', response.status, errorText.substring(0, 500));
       throw new Error(`YouTube API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('📥 Response length:', responseText.length);
+    console.log('📥 Response preview:', responseText.substring(0, 200));
+
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Response is not JSON, content-type:', contentType);
+      console.error('❌ Response body:', responseText.substring(0, 500));
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Failed to parse response as JSON:', parseError);
+      console.error('❌ Response was:', responseText.substring(0, 500));
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+    }
+
     console.log(`✅ Fetched ${data.videos?.length || 0} videos from backend`);
     return data.videos || [];
   } catch (error: any) {
     console.error('❌ Error fetching YouTube content:', error);
+    console.error('❌ Error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack?.substring(0, 200)
+    });
     if (error?.name === 'AbortError') {
       throw new Error('Request timeout - server took too long to respond');
     }
     if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
+      throw new Error(`Cannot connect to server at ${API_BASE}. Please check your internet connection and backend deployment.`);
     }
     throw error;
   }
