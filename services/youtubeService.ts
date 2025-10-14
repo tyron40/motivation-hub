@@ -1,6 +1,22 @@
-// YouTube Video Fetch Service - Using RSS feeds (no API quota!)
+// YouTube Video Fetch Service - Using Vercel Backend
 import { Speech } from '@/types/speech';
 
+const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+
+function sanitizeBaseUrl(input: string | undefined): string {
+  const unsafe = input ?? '';
+  const lowered = unsafe.toLowerCase();
+  const isBad = !unsafe ||
+    lowered.includes('rorktest.dev') ||
+    lowered.includes('localhost') ||
+    lowered.startsWith('http://') ||
+    lowered.startsWith('https://a-');
+
+  const finalUrl = isBad ? PRODUCTION_API_URL : unsafe;
+  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+}
+
+const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
 
 // Video interface for our service
 export interface YouTubeVideoData {
@@ -106,18 +122,73 @@ const CATEGORY_VIDEOS: Record<string, string[]> = {
   ]
 };
 
-// Get videos by category (using hardcoded YouTube IDs)
-export const getVideosByCategory = async (category: string, limit: number = 10): Promise<YouTubeVideoData[]> => {
-  console.log(`Fetching videos for category: ${category}`);
-  
+// Get videos by category (using Vercel backend)
+export const getVideosByCategory = async (category: string, limit: number = 50): Promise<YouTubeVideoData[]> => {
+  try {
+    console.log(`📺 Fetching videos for category: ${category} via Vercel backend`);
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/category`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/category`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+      body: JSON.stringify({ category, limit }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube API error:', response.status, errorText);
+      console.log('⚠️ Falling back to hardcoded videos');
+      return getFallbackVideos(category, limit);
+    }
+
+    const data = await response.json();
+    const videos = data.videos || [];
+    
+    console.log(`✅ Fetched ${videos.length} videos from backend`);
+    
+    return videos.map((video: any) => ({
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      thumbnail: video.thumbnail,
+      channelTitle: video.channelTitle,
+      channelId: video.channelId,
+      publishedAt: video.publishedAt,
+      duration: video.duration,
+      durationFormatted: formatDuration(video.duration),
+      viewCount: video.viewCount,
+      viewCountFormatted: formatViewCount(video.viewCount),
+      youtubeUrl: `https://www.youtube.com/watch?v=${video.id}`,
+      embedUrl: `https://www.youtube.com/embed/${video.id}`,
+      category: category
+    }));
+  } catch (error: any) {
+    console.error('❌ Error fetching videos:', error);
+    console.log('⚠️ Falling back to hardcoded videos');
+    return getFallbackVideos(category, limit);
+  }
+};
+
+// Fallback to hardcoded videos if backend fails
+function getFallbackVideos(category: string, limit: number): YouTubeVideoData[] {
   const categoryKey = category.toLowerCase();
   const videoIds = CATEGORY_VIDEOS[categoryKey] || CATEGORY_VIDEOS['motivation'];
   
-  // Create video data from IDs
-  const videos: YouTubeVideoData[] = videoIds.slice(0, limit).map((videoId, index) => {
-    // Get speaker name based on category and index
+  return videoIds.slice(0, Math.min(limit, videoIds.length)).map((videoId, index) => {
     const speakers = getSpeakersForCategory(categoryKey);
     const speaker = speakers[index % speakers.length];
+    const duration = Math.floor(Math.random() * 600) + 180;
+    const viewCount = Math.floor(Math.random() * 1000000) + 10000;
     
     return {
       id: videoId,
@@ -127,19 +198,16 @@ export const getVideosByCategory = async (category: string, limit: number = 10):
       channelTitle: speaker,
       channelId: `channel_${index}`,
       publishedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      duration: Math.floor(Math.random() * 600) + 180, // 3-13 minutes
-      durationFormatted: formatDuration(Math.floor(Math.random() * 600) + 180),
-      viewCount: Math.floor(Math.random() * 1000000) + 10000,
-      viewCountFormatted: formatViewCount(Math.floor(Math.random() * 1000000) + 10000),
+      duration: duration,
+      durationFormatted: formatDuration(duration),
+      viewCount: viewCount,
+      viewCountFormatted: formatViewCount(viewCount),
       youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
       embedUrl: `https://www.youtube.com/embed/${videoId}`,
       category: category
     };
   });
-  
-  console.log(`✅ Returned ${videos.length} videos for ${category}`);
-  return videos;
-};
+}
 
 // Helper functions
 const getSpeakersForCategory = (category: string): string[] => {
@@ -262,53 +330,150 @@ const formatViewCount = (count: number): string => {
   return `${count} views`;
 };
 
-export const searchVideos = async (query: string, limit: number = 10): Promise<YouTubeVideoData[]> => {
-  console.log(`⚠️ Video search not available without backend`);
-  return [];
+export const searchVideos = async (query: string, limit: number = 50): Promise<YouTubeVideoData[]> => {
+  try {
+    console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/search`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+      body: JSON.stringify({ query, limit }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube search error:', response.status, errorText);
+      return [];
+    }
+
+    const data = await response.json();
+    const videos = data.videos || [];
+    
+    console.log(`✅ Found ${videos.length} videos from backend`);
+    
+    return videos.map((video: any) => ({
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      thumbnail: video.thumbnail,
+      channelTitle: video.channelTitle,
+      channelId: video.channelId,
+      publishedAt: video.publishedAt,
+      duration: video.duration,
+      durationFormatted: formatDuration(video.duration),
+      viewCount: video.viewCount,
+      viewCountFormatted: formatViewCount(video.viewCount),
+      youtubeUrl: `https://www.youtube.com/watch?v=${video.id}`,
+      embedUrl: `https://www.youtube.com/embed/${video.id}`,
+      category: 'Search Results'
+    }));
+  } catch (error: any) {
+    console.error('❌ Error searching YouTube:', error);
+    return [];
+  }
 };
 
 export const getAvailableCategories = async (): Promise<string[]> => {
   return ['Motivation', 'Success', 'Inspiration', 'Study', 'Mindset', 'High Energy', 'Daily Motivation', 'Powerful Speeches'];
 };
 
-// Get trending/popular videos (using curated list)
-export const getTrendingVideos = async (limit: number = 20): Promise<YouTubeVideoData[]> => {
-  console.log('Fetching trending videos');
-  
-  // Mix videos from different categories for variety
+// Get trending/popular videos (using Vercel backend)
+export const getTrendingVideos = async (limit: number = 50): Promise<YouTubeVideoData[]> => {
+  try {
+    console.log('📈 Fetching trending YouTube content via Vercel backend');
+    console.log(`🔗 API URL: ${API_BASE}/api/youtube/trending`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    const response = await fetch(`${API_BASE}/api/youtube/trending`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+      body: JSON.stringify({ limit }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ YouTube trending error:', response.status, errorText);
+      console.log('⚠️ Falling back to hardcoded trending videos');
+      return getFallbackTrendingVideos(limit);
+    }
+
+    const data = await response.json();
+    const videos = data.videos || [];
+    
+    console.log(`✅ Fetched ${videos.length} trending videos from backend`);
+    
+    return videos.map((video: any) => ({
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      thumbnail: video.thumbnail,
+      channelTitle: video.channelTitle,
+      channelId: video.channelId,
+      publishedAt: video.publishedAt,
+      duration: video.duration,
+      durationFormatted: formatDuration(video.duration),
+      viewCount: video.viewCount,
+      viewCountFormatted: formatViewCount(video.viewCount),
+      youtubeUrl: `https://www.youtube.com/watch?v=${video.id}`,
+      embedUrl: `https://www.youtube.com/embed/${video.id}`,
+      category: 'Trending'
+    }));
+  } catch (error: any) {
+    console.error('❌ Error fetching trending content:', error);
+    console.log('⚠️ Falling back to hardcoded trending videos');
+    return getFallbackTrendingVideos(limit);
+  }
+};
+
+// Fallback trending videos
+function getFallbackTrendingVideos(limit: number): YouTubeVideoData[] {
   const trendingIds = [
-    'TLKxdTmk-zc', // David Goggins
-    'IdTMDpizis8', // Jocko Willink
-    'VSceuiPBpxY', // Kobe Bryant
-    'Lp7E973zozc', // Les Brown
-    'iCvmsMzlF7o', // Brené Brown
-    '9zSVu76AX3I', // Michael Jordan
-    'nI2VQ-ZsNr0', // Mel Robbins
-    'D_Vg4uyYwEk', // Steve Jobs
-    '5tSTk1083VY', // David Goggins
-    'ljqra3BcqWM', // Jocko Willink
+    'TLKxdTmk-zc', 'IdTMDpizis8', 'VSceuiPBpxY', 'Lp7E973zozc', 'iCvmsMzlF7o',
+    '9zSVu76AX3I', 'nI2VQ-ZsNr0', 'D_Vg4uyYwEk', '5tSTk1083VY', 'ljqra3BcqWM',
   ];
   
-  const videos: YouTubeVideoData[] = trendingIds.slice(0, limit).map((videoId, index) => ({
-    id: videoId,
-    title: getTitleForVideo('motivation', index),
-    description: getDescriptionForVideo('motivation', index),
-    thumbnail: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-    channelTitle: getSpeakersForCategory('motivation')[index % 4],
-    channelId: `channel_${index}`,
-    publishedAt: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
-    duration: Math.floor(Math.random() * 600) + 180,
-    durationFormatted: formatDuration(Math.floor(Math.random() * 600) + 180),
-    viewCount: Math.floor(Math.random() * 5000000) + 100000,
-    viewCountFormatted: formatViewCount(Math.floor(Math.random() * 5000000) + 100000),
-    youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    embedUrl: `https://www.youtube.com/embed/${videoId}`,
-    category: 'Trending'
-  }));
-  
-  console.log(`✅ Returned ${videos.length} trending videos`);
-  return videos;
-};
+  return trendingIds.slice(0, Math.min(limit, trendingIds.length)).map((videoId, index) => {
+    const duration = Math.floor(Math.random() * 600) + 180;
+    const viewCount = Math.floor(Math.random() * 5000000) + 100000;
+    
+    return {
+      id: videoId,
+      title: getTitleForVideo('motivation', index),
+      description: getDescriptionForVideo('motivation', index),
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+      channelTitle: getSpeakersForCategory('motivation')[index % 4],
+      channelId: `channel_${index}`,
+      publishedAt: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
+      duration: duration,
+      durationFormatted: formatDuration(duration),
+      viewCount: viewCount,
+      viewCountFormatted: formatViewCount(viewCount),
+      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      embedUrl: `https://www.youtube.com/embed/${videoId}`,
+      category: 'Trending'
+    };
+  });
+}
 
 // Convert YouTube video to Speech format
 export const convertVideoToSpeech = (video: YouTubeVideoData): Speech => {
