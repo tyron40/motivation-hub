@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
+import { fetchTrendingYouTubeContent } from '@/services/youtubeDirectService';
 
 export function DiagnosticInfo() {
   const [testResults, setTestResults] = useState<{
     envCheck: boolean;
+    youtubeApiCheck: boolean | null;
     healthCheck: boolean | null;
     ttsCheck: boolean | null;
     error: string | null;
   }>({
     envCheck: false,
+    youtubeApiCheck: null,
     healthCheck: null,
     ttsCheck: null,
     error: null,
@@ -17,11 +20,13 @@ export function DiagnosticInfo() {
   const [testing, setTesting] = useState(false);
 
   const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'NOT SET';
+  const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || 'NOT SET';
 
   const runDiagnostics = async () => {
     setTesting(true);
     const results = {
       envCheck: !!process.env.EXPO_PUBLIC_RORK_API_BASE_URL,
+      youtubeApiCheck: null as boolean | null,
       healthCheck: null as boolean | null,
       ttsCheck: null as boolean | null,
       error: null as string | null,
@@ -30,6 +35,21 @@ export function DiagnosticInfo() {
     try {
       console.log('🔍 Running diagnostics...');
       console.log('🔍 API Base URL:', API_BASE);
+      console.log('🔍 YouTube API Key:', YOUTUBE_API_KEY.substring(0, 10) + '...');
+      console.log('🔍 Platform:', Platform.OS);
+
+      console.log('🔍 Testing YouTube API (direct)...');
+      try {
+        const videos = await fetchTrendingYouTubeContent(5);
+        results.youtubeApiCheck = videos.length > 0;
+        console.log('✅ YouTube API check result:', videos.length, 'videos fetched');
+      } catch (error: any) {
+        console.error('❌ YouTube API error:', error);
+        results.youtubeApiCheck = false;
+        if (!results.error) {
+          results.error = `YouTube API: ${error?.message || 'Unknown error'}`;
+        }
+      }
 
       const healthUrl = `${API_BASE}/api/health`;
       console.log('🔍 Testing health endpoint:', healthUrl);
@@ -92,12 +112,39 @@ export function DiagnosticInfo() {
           <Text style={styles.label}>EXPO_PUBLIC_RORK_API_BASE_URL:</Text>
         </View>
         <Text style={styles.value}>{API_BASE}</Text>
+        
+        <View style={[styles.row, { marginTop: 12 }]}>
+          {YOUTUBE_API_KEY !== 'NOT SET' ? (
+            <CheckCircle size={20} color="#10b981" />
+          ) : (
+            <XCircle size={20} color="#ef4444" />
+          )}
+          <Text style={styles.label}>EXPO_PUBLIC_YOUTUBE_API_KEY:</Text>
+        </View>
+        <Text style={styles.value}>{YOUTUBE_API_KEY.substring(0, 20)}...</Text>
+        
+        <View style={[styles.row, { marginTop: 12 }]}>
+          <AlertCircle size={20} color="#6b7280" />
+          <Text style={styles.label}>Platform: {Platform.OS}</Text>
+        </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Endpoint Tests</Text>
+        <Text style={styles.sectionTitle}>API Tests</Text>
         
         <View style={styles.row}>
+          {testResults.youtubeApiCheck === null ? (
+            <AlertCircle size={20} color="#6b7280" />
+          ) : testResults.youtubeApiCheck ? (
+            <CheckCircle size={20} color="#10b981" />
+          ) : (
+            <XCircle size={20} color="#ef4444" />
+          )}
+          <Text style={styles.label}>YouTube API (Direct)</Text>
+        </View>
+        <Text style={styles.helperText}>Tests direct YouTube API calls from client</Text>
+        
+        <View style={[styles.row, { marginTop: 12 }]}>
           {testResults.healthCheck === null ? (
             <AlertCircle size={20} color="#6b7280" />
           ) : testResults.healthCheck ? (
@@ -105,10 +152,11 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>Health Check (/api/health)</Text>
+          <Text style={styles.label}>Vercel Health Check</Text>
         </View>
+        <Text style={styles.helperText}>Tests Vercel backend connectivity</Text>
 
-        <View style={styles.row}>
+        <View style={[styles.row, { marginTop: 12 }]}>
           {testResults.ttsCheck === null ? (
             <AlertCircle size={20} color="#6b7280" />
           ) : testResults.ttsCheck ? (
@@ -116,8 +164,9 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>TTS Endpoint (/api/tts)</Text>
+          <Text style={styles.label}>TTS Endpoint</Text>
         </View>
+        <Text style={styles.helperText}>Tests text-to-speech backend feature</Text>
       </View>
 
       {testResults.error && (
@@ -142,13 +191,17 @@ export function DiagnosticInfo() {
       </TouchableOpacity>
 
       <View style={styles.instructions}>
-        <Text style={styles.instructionsTitle}>📋 Troubleshooting Steps:</Text>
+        <Text style={styles.instructionsTitle}>📋 What This Means:</Text>
         <Text style={styles.instructionsText}>
-          1. Verify the URL above matches your Vercel deployment{'\n'}
-          2. Open the URL in your phone&apos;s browser to test connectivity{'\n'}
-          3. Check that your phone has internet access{'\n'}
-          4. If URL is &quot;NOT SET&quot;, rebuild the app after setting .env{'\n'}
-          5. Check Vercel deployment logs for errors
+          ✅ YouTube API (Direct): Your app fetches videos directly from YouTube.{' '}
+          This is the PRIMARY method and should work on TestFlight.{'\n\n'}
+          ⚠️ Vercel Backend: Only needed for AI Chat, Voice Coach, and TTS features.{' '}
+          If these fail, your YouTube videos will still work!{'\n\n'}
+          🔧 Troubleshooting:{'\n'}
+          1. If YouTube API fails: Check EXPO_PUBLIC_YOUTUBE_API_KEY in .env{'\n'}
+          2. If Vercel fails: Check backend deployment at Vercel dashboard{'\n'}
+          3. Test connectivity: Open Vercel URL in Safari on your device{'\n'}
+          4. Rebuild app after changing .env variables
         </Text>
       </View>
     </View>
@@ -199,6 +252,13 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 4,
     marginTop: 4,
+  },
+  helperText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginLeft: 28,
+    marginTop: 2,
+    fontStyle: 'italic' as const,
   },
   errorSection: {
     marginBottom: 20,
