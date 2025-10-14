@@ -1,7 +1,7 @@
 // YouTube Video Fetch Service - Using Vercel Backend
 import { Speech } from '@/types/speech';
 
-const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
 
 function sanitizeBaseUrl(input: string | undefined): string {
   const unsafe = input ?? '';
