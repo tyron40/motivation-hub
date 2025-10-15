@@ -80,7 +80,8 @@ export default function VoiceCoachScreen() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS via Vercel API...');
+      console.log('📤 Calling TTS via Vercel API (optimized for speed)...');
+      const ttsStartTime = Date.now();
       
       try {
         const result = await generateTTS({
@@ -88,7 +89,8 @@ export default function VoiceCoachScreen() {
           voice: preferredVoice as any,
         });
         
-        console.log('✅ TTS audio received from backend');
+        const ttsElapsed = Date.now() - ttsStartTime;
+        console.log(`✅ TTS audio received in ${ttsElapsed}ms`);
         
         const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
         
@@ -183,7 +185,7 @@ export default function VoiceCoachScreen() {
     console.log('🔊 Voice enabled:', profile.voiceEnabled !== false);
     console.log('🔊 Selected voice:', profile.preferredVoice || 'alloy');
     
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
     
     try {
       console.log('🎯 About to speak greeting message...');
@@ -230,7 +232,7 @@ export default function VoiceCoachScreen() {
         });
         console.log('✅ Audio mode initialized');
         
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         if (isMounted && !hasGreetedRef.current) {
           console.log('🎯 Triggering initial greeting, profile name:', profile.name);
@@ -1085,12 +1087,12 @@ Key traits:
 - Warm, encouraging, and empathetic
 - Use the user's name when provided (${userName})
 - Provide actionable, practical advice
-- Keep responses conversational and natural
+- Keep responses conversational and natural (2-3 sentences max for faster responses)
 - Focus on building confidence, resilience, and positive mindset
 - Ask follow-up questions to better understand their situation
 - Share motivational insights or techniques
 
-Always end with encouragement and offer to continue the conversation.`;
+IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow. Always end with encouragement.`;
 
       console.log('📤 Calling chat via Vercel API...');
       
@@ -1115,19 +1117,17 @@ Always end with encouragement and offer to continue the conversation.`;
         timestamp: Date.now(),
       };
       
-      console.log('✅ AI response received, speaking immediately...');
+      console.log('✅ AI response received, starting TTS immediately...');
       setMessages(prev => [...prev, assistantMessage]);
       
       if (profile.voiceEnabled !== false) {
-        console.log('🔊 Speaking AI response immediately...');
+        console.log('🔊 Starting TTS generation immediately (parallel)...');
         setCurrentStatus('Coach is speaking...');
-        try {
-          await speakMessage(completion);
-          console.log('✅ AI response spoken successfully');
-        } catch (error) {
+        
+        speakMessage(completion).catch(error => {
           console.error('❌ Failed to speak AI response:', error);
           setCurrentStatus('Ready to listen');
-        }
+        });
       } else {
         console.log('🔇 Voice disabled, skipping speech');
         setCurrentStatus('Ready to listen');
@@ -1147,11 +1147,9 @@ Always end with encouragement and offer to continue the conversation.`;
       setCurrentStatus('Ready to listen');
       
       if (profile.voiceEnabled !== false) {
-        try {
-          await speakMessage(fallbackMessage.content);
-        } catch {
+        speakMessage(fallbackMessage.content).catch(() => {
           console.log('Could not speak fallback message');
-        }
+        });
       }
     }
   };
