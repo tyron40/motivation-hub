@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
-import { fetchTrendingYouTubeContent } from '@/services/youtubeDirectService';
+import { getTrendingVideos } from '@/services/youtubeService';
 
 export function DiagnosticInfo() {
   const [testResults, setTestResults] = useState<{
@@ -20,7 +20,7 @@ export function DiagnosticInfo() {
   const [testing, setTesting] = useState(false);
 
   const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'NOT SET';
-  const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || 'NOT SET';
+
 
   const runDiagnostics = async () => {
     setTesting(true);
@@ -35,12 +35,11 @@ export function DiagnosticInfo() {
     try {
       console.log('🔍 Running diagnostics...');
       console.log('🔍 API Base URL:', API_BASE);
-      console.log('🔍 YouTube API Key:', YOUTUBE_API_KEY.substring(0, 10) + '...');
       console.log('🔍 Platform:', Platform.OS);
 
-      console.log('🔍 Testing YouTube API (direct)...');
+      console.log('🔍 Testing YouTube API (via backend)...');
       try {
-        const videos = await fetchTrendingYouTubeContent(5);
+        const videos = await getTrendingVideos(5);
         results.youtubeApiCheck = videos.length > 0;
         console.log('✅ YouTube API check result:', videos.length, 'videos fetched');
       } catch (error: any) {
@@ -113,16 +112,7 @@ export function DiagnosticInfo() {
         </View>
         <Text style={styles.value}>{API_BASE}</Text>
         
-        <View style={[styles.row, { marginTop: 12 }]}>
-          {YOUTUBE_API_KEY !== 'NOT SET' ? (
-            <CheckCircle size={20} color="#10b981" />
-          ) : (
-            <XCircle size={20} color="#ef4444" />
-          )}
-          <Text style={styles.label}>EXPO_PUBLIC_YOUTUBE_API_KEY:</Text>
-        </View>
-        <Text style={styles.value}>{YOUTUBE_API_KEY.substring(0, 20)}...</Text>
-        
+
         <View style={[styles.row, { marginTop: 12 }]}>
           <AlertCircle size={20} color="#6b7280" />
           <Text style={styles.label}>Platform: {Platform.OS}</Text>
@@ -140,9 +130,9 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>YouTube API (Direct)</Text>
+          <Text style={styles.label}>YouTube API (via Backend)</Text>
         </View>
-        <Text style={styles.helperText}>Tests direct YouTube API calls from client</Text>
+        <Text style={styles.helperText}>Tests YouTube API calls through Vercel backend</Text>
         
         <View style={[styles.row, { marginTop: 12 }]}>
           {testResults.healthCheck === null ? (
@@ -193,15 +183,14 @@ export function DiagnosticInfo() {
       <View style={styles.instructions}>
         <Text style={styles.instructionsTitle}>📋 What This Means:</Text>
         <Text style={styles.instructionsText}>
-          ✅ YouTube API (Direct): Your app fetches videos directly from YouTube.{' '}
-          This is the PRIMARY method and should work on TestFlight.{'\n\n'}
-          ⚠️ Vercel Backend: Only needed for AI Chat, Voice Coach, and TTS features.{' '}
-          If these fail, your YouTube videos will still work!{'\n\n'}
+          ✅ YouTube API (via Backend): Your app fetches videos through Vercel backend.{' '}
+          This keeps your API key secure and works on all platforms.{'\n\n'}
+          ⚠️ All features require Vercel backend: YouTube videos, AI Chat, Voice Coach, and TTS.{'\n\n'}
           🔧 Troubleshooting:{'\n'}
-          1. If YouTube API fails: Check EXPO_PUBLIC_YOUTUBE_API_KEY in .env{'\n'}
+          1. If YouTube API fails: Check YOUTUBE_API_KEY in Vercel environment variables{'\n'}
           2. If Vercel fails: Check backend deployment at Vercel dashboard{'\n'}
           3. Test connectivity: Open Vercel URL in Safari on your device{'\n'}
-          4. Rebuild app after changing .env variables
+          4. Ensure EXPO_PUBLIC_RORK_API_BASE_URL points to your Vercel deployment
         </Text>
       </View>
     </View>
