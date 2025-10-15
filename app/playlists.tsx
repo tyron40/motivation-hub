@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Plus, ListMusic, Trash2, Edit3, Music } from 'lucide-react-native';
+import { Plus, ListMusic, Trash2, Edit3, Music, ArrowLeft } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
 import Colors from '@/constants/colors';
 import { usePlaylists } from '@/hooks/playlist-context';
@@ -98,7 +98,13 @@ export default function PlaylistsScreen() {
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <View style={styles.headerLeft}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <ArrowLeft color={Colors.text} size={24} />
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
               <LinearGradient
                 colors={[Colors.primary, Colors.secondary]}
                 style={styles.headerIcon}
@@ -292,10 +298,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  headerLeft: {
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 12,
+    marginHorizontal: 12,
   },
   headerIcon: {
     width: 40,

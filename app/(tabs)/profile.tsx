@@ -197,79 +197,14 @@ function ProfileContent() {
           <View style={styles.section}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => setShowFavorites(!showFavorites)}
+              onPress={() => router.push('/favorites')}
             >
               <View style={styles.menuItemLeft}>
                 <Heart color={Colors.categories.relationships} size={20} />
                 <Text style={styles.menuItemText}>Favorites ({String(favorites.length)})</Text>
               </View>
-              <ChevronRight 
-                color={Colors.textSecondary} 
-                size={20} 
-                style={[styles.chevron, showFavorites && styles.chevronRotated]}
-              />
+              <ChevronRight color={Colors.textSecondary} size={20} />
             </TouchableOpacity>
-            
-            {showFavorites && (
-              <View style={styles.favoritesContainer}>
-                {!Array.isArray(favorites) || favorites.length === 0 ? (
-                  <View style={styles.emptyFavorites}>
-                    <Heart color={Colors.textSecondary} size={32} />
-                    <Text style={styles.emptyText}>No favorites yet</Text>
-                    <Text style={styles.emptySubtext}>
-                      Tap the heart icon on speeches you love
-                    </Text>
-                  </View>
-                ) : (
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.favoritesScrollContent}
-                  >
-                    {favorites
-                      .filter(speech => {
-                        try {
-                          return speech && typeof speech === 'object' && speech.id && speech.title;
-                        } catch {
-                          return false;
-                        }
-                      })
-                      .map((speech, index) => {
-                        try {
-                          return (
-                            <View key={`favorite-${speech?.id || index}`} style={styles.favoriteCardWrapper}>
-                              <SpeechCard
-                                speech={speech}
-                                onPress={() => {
-                                  try {
-                                    setCurrentSpeech(speech);
-                                    router.push('/player');
-                                  } catch (error) {
-                                    console.error('Error navigating to player:', error);
-                                  }
-                                }}
-                                onFavorite={() => {
-                                  try {
-                                    if (speech?.id) {
-                                      toggleFavorite(speech.id);
-                                    }
-                                  } catch (error) {
-                                    console.error('Error toggling favorite:', error);
-                                  }
-                                }}
-                              />
-                            </View>
-                          );
-                        } catch (error) {
-                          console.error('Error rendering speech card:', error);
-                          return null;
-                        }
-                      })
-                      .filter(Boolean)}
-                  </ScrollView>
-                )}
-              </View>
-            )}
             
             <TouchableOpacity 
               style={styles.menuItem}
