@@ -183,25 +183,45 @@ ${scripture.reference}
 Shared from Motivation Hub`;
       
       if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({
-            title: scripture.reference,
-            text: shareMessage,
-          });
-        } else {
-          await navigator.clipboard.writeText(shareMessage);
-          console.log('📋 Copied to clipboard');
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(shareMessage);
+            console.log('📋 Copied to clipboard');
+            Alert.alert('Copied!', 'Scripture copied to clipboard');
+          } else {
+            const textArea = document.createElement('textarea');
+            textArea.value = shareMessage;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+              document.execCommand('copy');
+              console.log('📋 Copied to clipboard (fallback)');
+              Alert.alert('Copied!', 'Scripture copied to clipboard');
+            } catch (e) {
+              console.error('❌ Fallback copy failed:', e);
+              Alert.alert('Error', 'Failed to copy to clipboard');
+            }
+            document.body.removeChild(textArea);
+          }
+        } catch (e) {
+          console.error('❌ Error copying to clipboard:', e);
+          Alert.alert('Error', 'Failed to copy to clipboard');
         }
       } else {
         await Share.share({
           message: shareMessage,
           title: scripture.reference,
         });
+        console.log('✅ Scripture shared successfully');
       }
-      console.log('✅ Scripture shared successfully');
     } catch (error: any) {
       if (error?.message !== 'Share canceled' && error?.name !== 'AbortError') {
         console.error('❌ Error sharing scripture:', error);
+        if (Platform.OS !== 'web') {
+          Alert.alert('Error', 'Failed to share scripture');
+        }
       }
     }
   };
