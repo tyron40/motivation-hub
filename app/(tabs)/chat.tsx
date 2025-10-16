@@ -14,10 +14,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff } from 'lucide-react-native';
+import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
+import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,10 +57,21 @@ const suggestedPrompts = [
 export default function ChatScreen() {
   const { profile, updateProfile } = useUserProfile();
   const insets = useSafeAreaInsets();
+  const { 
+    sessions, 
+    currentSessionId, 
+    createSession, 
+    deleteSession,
+    addMessageToSession,
+    getCurrentSession,
+    setCurrentSessionId 
+  } = useChatSessions();
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -169,9 +181,24 @@ export default function ChatScreen() {
     }
   }, [isTyping, typingAnim]);
 
-  // Initialize with personalized greeting
   useEffect(() => {
-    if (messages.length === 0) {
+    const loadCurrentSession = () => {
+      const currentSession = getCurrentSession();
+      if (currentSession && currentSession.messages.length > 0) {
+        const convertedMessages: Message[] = currentSession.messages.map((msg, idx) => ({
+          id: `${currentSession.id}-${idx}`,
+          text: msg.content,
+          isUser: msg.role === 'user',
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(convertedMessages);
+        return;
+      }
+    };
+
+    if (currentSessionId) {
+      loadCurrentSession();
+    } else if (messages.length === 0) {
       const greeting = profile.name 
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
         : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
@@ -185,16 +212,15 @@ export default function ChatScreen() {
       
       setMessages([greetingMessage]);
       
-      // Generate voice for greeting if enabled
       if (profile.voiceEnabled) {
         const timeoutId = setTimeout(() => {
           generateVoice(greetingMessage.id, greeting);
-        }, 1000); // Small delay to let the UI settle
+        }, 1000);
         
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice]);
+  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -204,7 +230,6 @@ export default function ChatScreen() {
     if (!text.trim() || isLoading) return;
 
     try {
-      // Check if user is setting their name
       const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
       if (nameMatch && !profile.name) {
         const name = nameMatch[1];
@@ -222,6 +247,21 @@ export default function ChatScreen() {
       setInputText('');
       setIsLoading(true);
       setIsTyping(true);
+
+      let sessionId = currentSessionId;
+      if (!sessionId) {
+        const newSession = await createSession(
+          text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
+          [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
+        );
+        sessionId = newSession.id;
+      } else {
+        await addMessageToSession(sessionId, {
+          role: 'user',
+          content: text.trim(),
+          timestamp: Date.now(),
+        });
+      }
 
       // Prepare chat messages
       const chatMessages = messages.map(msg => ({
@@ -279,7 +319,14 @@ export default function ChatScreen() {
 
         setMessages(prev => [...prev, aiMessage]);
 
-        // Generate voice if enabled
+        if (sessionId) {
+          await addMessageToSession(sessionId, {
+            role: 'assistant',
+            content: completion,
+            timestamp: Date.now(),
+          });
+        }
+
         if (profile.voiceEnabled && completion) {
           generateVoice(aiMessage.id, completion);
         }
@@ -651,12 +698,20 @@ export default function ChatScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => setShowSettings(true)}
-            >
-              <Settings color={Colors.textSecondary} size={20} />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setShowHistory(true)}
+              >
+                <History color={Colors.textSecondary} size={20} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setShowSettings(true)}
+              >
+                <Settings color={Colors.textSecondary} size={20} />
+              </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
 
@@ -744,6 +799,38 @@ export default function ChatScreen() {
             onClose={() => setShowSettings(false)}
             profile={profile}
             updateProfile={updateProfile}
+          />
+
+          <ChatHistoryModal
+            visible={showHistory}
+            onClose={() => setShowHistory(false)}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSelectSession={(sessionId) => {
+              setCurrentSessionId(sessionId);
+              const session = sessions.find(s => s.id === sessionId);
+              if (session) {
+                const convertedMessages: Message[] = session.messages.map((msg, idx) => ({
+                  id: `${session.id}-${idx}`,
+                  text: msg.content,
+                  isUser: msg.role === 'user',
+                  timestamp: new Date(msg.timestamp),
+                }));
+                setMessages(convertedMessages);
+              }
+              setShowHistory(false);
+            }}
+            onDeleteSession={async (sessionId) => {
+              await deleteSession(sessionId);
+              if (sessionId === currentSessionId) {
+                setMessages([]);
+              }
+            }}
+            onNewSession={async () => {
+              setCurrentSessionId(null);
+              setMessages([]);
+              setShowHistory(false);
+            }}
           />
 
 
@@ -849,7 +936,7 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile }: SettingsMod
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <LinearGradient colors={[Colors.background, '#1A1A2E']} style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Settings</Text>
+          <Text style={styles.modalTitle}>Chat Settings</Text>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.closeButton}>Done</Text>
           </TouchableOpacity>
@@ -909,6 +996,108 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile }: SettingsMod
           <TouchableOpacity style={styles.saveButton} onPress={saveSettings}>
             <Text style={styles.saveButtonText}>Save Settings</Text>
           </TouchableOpacity>
+        </ScrollView>
+      </LinearGradient>
+    </Modal>
+  );
+};
+
+interface ChatHistoryModalProps {
+  visible: boolean;
+  onClose: () => void;
+  sessions: any[];
+  currentSessionId: string | null;
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onNewSession: () => void;
+}
+
+const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSelectSession, onDeleteSession, onNewSession }: ChatHistoryModalProps) => {
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+
+    if (hours < 1) return 'Just now';
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <LinearGradient colors={[Colors.background, '#1A1A2E']} style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Chat History</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.closeButton}>Done</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.modalContent}>
+          <TouchableOpacity style={styles.newChatButton} onPress={onNewSession}>
+            <MessageSquarePlus color={Colors.background} size={20} />
+            <Text style={styles.newChatButtonText}>Start New Chat</Text>
+          </TouchableOpacity>
+
+          {sessions.length === 0 ? (
+            <View style={styles.emptyHistoryContainer}>
+              <History color={Colors.textSecondary} size={48} />
+              <Text style={styles.emptyHistoryText}>
+                No chat history yet.{"\n"}Start a conversation to save it here.
+              </Text>
+            </View>
+          ) : (
+            sessions
+              .sort((a, b) => b.updatedAt - a.updatedAt)
+              .map((session) => (
+                <TouchableOpacity
+                  key={session.id}
+                  style={[
+                    styles.historyItem,
+                    currentSessionId === session.id && styles.historyItemActive
+                  ]}
+                  onPress={() => onSelectSession(session.id)}
+                >
+                  <View style={styles.historyItemContent}>
+                    <Text style={styles.historyItemTitle} numberOfLines={1}>
+                      {session.title}
+                    </Text>
+                    <Text style={styles.historyItemDate}>
+                      {formatDate(session.updatedAt)} • {session.messages.length} messages
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.historyItemDelete}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      if (Platform.OS !== 'web') {
+                        Alert.alert(
+                          'Delete Chat',
+                          'Are you sure you want to delete this chat?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { 
+                              text: 'Delete', 
+                              style: 'destructive',
+                              onPress: () => onDeleteSession(session.id)
+                            }
+                          ]
+                        );
+                      } else {
+                        if (window.confirm('Are you sure you want to delete this chat?')) {
+                          onDeleteSession(session.id);
+                        }
+                      }
+                    }}
+                  >
+                    <Trash2 color="#EF4444" size={18} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))
+          )}
         </ScrollView>
       </LinearGradient>
     </Modal>
@@ -1297,5 +1486,76 @@ const styles = StyleSheet.create({
     color: Colors.background,
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerButtons: {
+    flexDirection: 'row' as const,
+    gap: 8,
+  },
+  iconButton: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  historyItem: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  historyItemActive: {
+    backgroundColor: Colors.primary + '20',
+    borderColor: Colors.primary,
+  },
+  historyItemContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  historyItemTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  historyItemDate: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  historyItemDelete: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  newChatButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center' as const,
+    marginVertical: 20,
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+  },
+  newChatButtonText: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  emptyHistoryContainer: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyHistoryText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
+    textAlign: 'center' as const,
+    marginTop: 16,
+    lineHeight: 22,
   },
 });

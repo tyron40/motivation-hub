@@ -9,6 +9,8 @@ import {
   Animated,
   Platform,
   ActivityIndicator,
+  Share,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Heart, Share2, BookOpen, Star, Filter, Bookmark, Sparkles, Quote, ChevronDown, Wand2 } from 'lucide-react-native';
@@ -16,6 +18,7 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { allScriptures, Scripture } from '@/mocks/allScriptures';
+import { useScriptureFavorites } from '@/hooks/scripture-favorites-context';
 
 
 const categories = ['All', 'Strength', 'Hope', 'Courage', 'Faith', 'Love', 'Peace', 'Wisdom'];
@@ -23,9 +26,9 @@ const ITEMS_PER_PAGE = 8;
 
 export default function ScriptureScreen() {
   const insets = useSafeAreaInsets();
+  const { favorites, addFavorite, removeFavorite, isFavorite } = useScriptureFavorites();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [favorites, setFavorites] = useState<string[]>([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [displayedCount, setDisplayedCount] = useState<{[key: string]: number}>({});
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -58,10 +61,10 @@ export default function ScriptureScreen() {
       const matchesSearch = scripture.verse.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            scripture.reference.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'All' || scripture.category === selectedCategory;
-      const matchesFavorites = !showFavoritesOnly || favorites.includes(scripture.id);
+      const matchesFavorites = !showFavoritesOnly || isFavorite(scripture.reference);
       return matchesSearch && matchesCategory && matchesFavorites;
     });
-  }, [searchQuery, selectedCategory, showFavoritesOnly, favorites, generatedScriptures]);
+  }, [searchQuery, selectedCategory, showFavoritesOnly, favorites, generatedScriptures, isFavorite]);
 
   const currentDisplayedCount = displayedCount[selectedCategory] || ITEMS_PER_PAGE;
   
@@ -151,12 +154,56 @@ export default function ScriptureScreen() {
     }));
   }, [searchQuery, showFavoritesOnly, selectedCategory]);
 
-  const toggleFavorite = (scriptureId: string) => {
-    setFavorites(prev => 
-      prev.includes(scriptureId) 
-        ? prev.filter(id => id !== scriptureId)
-        : [...prev, scriptureId]
-    );
+  const toggleFavorite = async (scripture: Scripture) => {
+    try {
+      if (isFavorite(scripture.reference)) {
+        const favoriteToRemove = favorites.find(f => f.reference === scripture.reference);
+        if (favoriteToRemove) {
+          await removeFavorite(favoriteToRemove.id);
+          console.log('✅ Removed from favorites:', scripture.reference);
+        }
+      } else {
+        await addFavorite(scripture.verse, scripture.reference, scripture.category);
+        console.log('✅ Added to favorites:', scripture.reference);
+      }
+    } catch (error) {
+      console.error('❌ Error toggling favorite:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Error', 'Failed to update favorites');
+      }
+    }
+  };
+
+  const handleShare = async (scripture: Scripture) => {
+    try {
+      const shareMessage = `"${scripture.verse}"
+
+${scripture.reference}
+
+Shared from Motivation Hub`;
+      
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({
+            title: scripture.reference,
+            text: shareMessage,
+          });
+        } else {
+          await navigator.clipboard.writeText(shareMessage);
+          console.log('📋 Copied to clipboard');
+        }
+      } else {
+        await Share.share({
+          message: shareMessage,
+          title: scripture.reference,
+        });
+      }
+      console.log('✅ Scripture shared successfully');
+    } catch (error: any) {
+      if (error?.message !== 'Share canceled' && error?.name !== 'AbortError') {
+        console.error('❌ Error sharing scripture:', error);
+      }
+    }
   };
 
   const getCategoryColor = (category: string) => {
@@ -190,7 +237,7 @@ export default function ScriptureScreen() {
   const ScriptureCard = ({ scripture, index }: { scripture: Scripture; index: number }) => {
     const cardAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.95)).current;
-    const isFavorite = favorites.includes(scripture.id);
+    const isScriptureFavorite = isFavorite(scripture.reference);
     const categoryColor = getCategoryColor(scripture.category);
 
     React.useEffect(() => {
@@ -225,7 +272,11 @@ export default function ScriptureScreen() {
           useNativeDriver: true,
         }),
       ]).start();
-      toggleFavorite(scripture.id);
+      toggleFavorite(scripture);
+    };
+
+    const handleSharePress = () => {
+      handleShare(scripture);
     };
 
     const handleInspire = async () => {
@@ -282,15 +333,15 @@ export default function ScriptureScreen() {
             <View style={styles.cardActions}>
               <TouchableOpacity 
                 onPress={handleFavoritePress}
-                style={[styles.actionButton, isFavorite && styles.favoriteButton]}
+                style={[styles.actionButton, isScriptureFavorite && styles.favoriteButton]}
               >
-                {isFavorite ? (
+                {isScriptureFavorite ? (
                   <Star color={Colors.accent} size={18} fill={Colors.accent} />
                 ) : (
                   <Heart color={Colors.textSecondary} size={18} />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleSharePress}>
                 <Share2 color={Colors.textSecondary} size={18} />
               </TouchableOpacity>
             </View>
