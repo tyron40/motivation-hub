@@ -1,3 +1,26 @@
+# Supabase Authentication Fix
+
+## Problem
+Authentication is failing with "Failed to fetch" and "AuthRetryableFetchError" errors.
+
+## Root Causes
+1. **Network Configuration**: The Supabase URL might not be properly allowed in iOS App Transport Security
+2. **Connection Issues**: Network connectivity problems or incorrect Supabase configuration
+3. **Missing Error Handling**: Errors not properly caught and displayed to users
+
+## Solutions Applied
+
+### 1. Enhanced Supabase Client (`lib/supabase.ts`)
+✅ Added comprehensive error handling with try-catch blocks
+✅ Added detailed logging for debugging
+✅ Added network error messages for better user feedback
+✅ Configured proper client options
+
+### 2. app.json Configuration Update Required
+
+**PASTE THIS INTO YOUR app.json** (build number incremented to 58):
+
+```json
 {
   "expo": {
     "name": "Motivation Hub",
@@ -16,7 +39,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "57",
+      "buildNumber": "58",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -50,6 +73,18 @@
               "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
               "NSTemporaryExceptionRequiresForwardSecrecy": true,
               "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            },
+            "vncaboqllcykibwdnmwp.supabase.co": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
+            },
+            "rork.com": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false,
+              "NSTemporaryExceptionRequiresForwardSecrecy": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.2"
             }
           }
         }
@@ -61,7 +96,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.motivational-speech-app",
-      "versionCode": 57,
+      "versionCode": 58,
       "permissions": [
         "RECORD_AUDIO",
         "INTERNET",
@@ -104,3 +139,100 @@
     }
   }
 }
+```
+
+## Key Changes in app.json:
+1. **Build number**: Incremented to 58
+2. **Added Supabase subdomain**: `vncaboqllcykibwdnmwp.supabase.co` to NSExceptionDomains
+3. **Added rork.com**: For toolkit API access
+4. **All domains use TLS 1.2**: Ensures secure connections
+
+## Testing Steps
+
+1. **Check Console Logs**: Look for these messages:
+   ```
+   🔧 Supabase Configuration: { url: ..., hasKey: true, ... }
+   🔐 [Supabase] Attempting sign in for: user@example.com
+   ```
+
+2. **If you see connection errors**:
+   - Check your network connection
+   - Verify Supabase project is active at https://app.supabase.com
+   - Check if your Supabase URL and anon key are correct in .env
+
+3. **Verify Environment Variables**:
+   ```bash
+   # In .env file
+   EXPO_PUBLIC_SUPABASE_URL=https://vncaboqllcykibwdnmwp.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
+   ```
+
+## Additional Debugging
+
+Run the test script to verify Supabase connectivity:
+```typescript
+import { testSupabaseConnection } from './scripts/test-supabase';
+
+// In your app or test file
+testSupabaseConnection();
+```
+
+## What to Check in Supabase Dashboard
+
+1. Go to https://app.supabase.com
+2. Select your project `vncaboqllcykibwdnmwp`
+3. Check:
+   - **Project Status**: Should be "Active"
+   - **API Settings**: Verify URL and anon key
+   - **Auth Settings**: Email auth should be enabled
+   - **Network**: No IP restrictions blocking your requests
+
+## Common Issues & Solutions
+
+### Issue 1: "Failed to fetch" on Web
+**Solution**: Check browser console for CORS errors. Supabase should allow web origins by default.
+
+### Issue 2: "Failed to fetch" on iOS
+**Solution**: 
+- Verify NSAppTransportSecurity settings in app.json (done above)
+- Rebuild the app after changing app.json
+- Check iOS device has internet connection
+
+### Issue 3: "AuthRetryableFetchError"
+**Solution**: 
+- Network timeout or connection issue
+- Check Supabase project is not paused
+- Verify your subscription/plan is active
+
+### Issue 4: Email confirmation required
+**Solution**: 
+- Check email for confirmation link
+- Or disable email confirmation in Supabase dashboard:
+  - Go to Authentication > Settings
+  - Disable "Enable email confirmations"
+
+## Next Steps After Fix
+
+1. **Update app.json** with the configuration above
+2. **Rebuild the app**:
+   ```bash
+   # For iOS
+   eas build -p ios --profile production
+   
+   # For development
+   npx expo prebuild
+   npx expo run:ios
+   ```
+3. **Test authentication flow**:
+   - Sign up with a new account
+   - Check console logs
+   - Verify email confirmation (if enabled)
+   - Sign in with created account
+4. **Monitor logs** for any remaining errors
+
+## User-Friendly Error Messages
+
+The updated code now shows helpful messages:
+- "Network error. Please check your connection and try again."
+- Error details logged to console for debugging
+- Users see actionable error messages instead of technical ones
