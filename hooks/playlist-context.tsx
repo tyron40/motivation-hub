@@ -12,7 +12,16 @@ export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
   useEffect(() => {
     const loadPlaylists = async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        const timeoutPromise = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            console.warn('⚠️ Playlists loading timeout');
+            resolve(null);
+          }, 2000);
+        });
+        
+        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
+        const stored = await Promise.race([loadPromise, timeoutPromise]);
+        
         if (stored) {
           setPlaylists(JSON.parse(stored));
         }

@@ -30,7 +30,16 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const stored = await AsyncStorage.getItem('userProfile');
+        const timeoutPromise = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            console.warn('⚠️ Profile loading timeout');
+            resolve(null);
+          }, 2000);
+        });
+        
+        const loadPromise = AsyncStorage.getItem('userProfile');
+        const stored = await Promise.race([loadPromise, timeoutPromise]);
+        
         if (stored) {
           const parsedProfile = JSON.parse(stored);
           setProfile({ ...defaultProfile, ...parsedProfile });

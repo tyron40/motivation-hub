@@ -247,34 +247,29 @@ export default function RootLayout() {
   const [initError, setInitError] = React.useState<string | null>(null);
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    
     const prepare = async () => {
       try {
         console.log('🚀 Starting app initialization...');
         
-        // Add any initialization logic here with timeout
-        const initPromise = new Promise(resolve => setTimeout(resolve, 100));
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Initialization timeout')), 5000)
-        );
-        
-        await Promise.race([initPromise, timeoutPromise]);
-        
-        console.log('✅ App initialization completed');
+        // Set ready immediately to prevent hydration timeout
         setIsReady(true);
         
-        // Hide splash screen after app is ready
-        if (Platform.OS !== 'web') {
-          try {
-            await SplashScreen.hideAsync();
-            console.log('✅ Splash screen hidden');
-          } catch (splashError) {
-            console.warn('⚠️ Failed to hide splash screen:', splashError);
+        // Hide splash screen after a short delay
+        timeoutId = setTimeout(() => {
+          if (Platform.OS !== 'web') {
+            SplashScreen.hideAsync().catch((splashError) => {
+              console.warn('⚠️ Failed to hide splash screen:', splashError);
+            });
           }
-        }
+        }, 500);
+        
+        console.log('✅ App initialization completed');
       } catch (error) {
         console.error('❌ Error during app initialization:', error);
         setInitError(error instanceof Error ? error.message : 'Unknown initialization error');
-        setIsReady(true); // Still show the app even if there's an error
+        setIsReady(true);
         
         if (Platform.OS !== 'web') {
           SplashScreen.hideAsync().catch((splashError) => {
@@ -285,10 +280,14 @@ export default function RootLayout() {
     };
 
     prepare();
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   if (!isReady) {
-    return <LoadingScreen message="Initializing your motivational coach..." />;
+    return null;
   }
 
   if (initError) {

@@ -38,7 +38,16 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
   const loadEntitlements = useCallback(async () => {
     try {
-      const stored = await AsyncStorage.getItem('entitlements');
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.warn('⚠️ Entitlements loading timeout');
+          resolve(null);
+        }, 2000);
+      });
+      
+      const loadPromise = AsyncStorage.getItem('entitlements');
+      const stored = await Promise.race([loadPromise, timeoutPromise]);
+      
       if (stored) {
         const parsed = JSON.parse(stored) as Entitlements;
         const today = new Date().toISOString().split('T')[0];
@@ -47,7 +56,9 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           parsed.dailyChatCount = 0;
           parsed.dailyTTSCount = 0;
           parsed.lastResetDate = today;
-          await AsyncStorage.setItem('entitlements', JSON.stringify(parsed));
+          AsyncStorage.setItem('entitlements', JSON.stringify(parsed)).catch(err => 
+            console.error('Error saving reset entitlements:', err)
+          );
         }
         
         setEntitlements(parsed);

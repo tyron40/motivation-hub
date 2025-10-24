@@ -13,7 +13,16 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
   useEffect(() => {
     const loadSessions = async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        const timeoutPromise = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            console.warn('⚠️ Chat sessions loading timeout');
+            resolve(null);
+          }, 2000);
+        });
+        
+        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
+        const stored = await Promise.race([loadPromise, timeoutPromise]);
+        
         if (stored) {
           setSessions(JSON.parse(stored));
         }

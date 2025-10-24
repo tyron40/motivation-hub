@@ -28,13 +28,26 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   // Initialize auth state
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const initializeAuth = async () => {
       try {
         console.log('🔐 Initializing authentication...');
         
-        // Get current session
-        const { data: { session }, error } = await auth.getSession();
+        // Race between getting session and timeout
+        const sessionPromise = auth.getSession();
+        const timeoutPromise = new Promise<null>((resolve) => {
+          timeoutId = setTimeout(() => {
+            console.warn('⚠️ Auth initialization timeout, proceeding without session');
+            resolve(null);
+          }, 3000);
+        });
+        
+        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        const { data: { session } = { session: null }, error } = result || { data: { session: null } };
         
         if (error) {
           console.error('❌ Error getting session:', error);
@@ -85,6 +98,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return () => {
       isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);

@@ -12,7 +12,16 @@ export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContext
   useEffect(() => {
     const loadFavorites = async () => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        const timeoutPromise = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            console.warn('⚠️ Scripture favorites loading timeout');
+            resolve(null);
+          }, 2000);
+        });
+        
+        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
+        const stored = await Promise.race([loadPromise, timeoutPromise]);
+        
         if (stored) {
           setFavorites(JSON.parse(stored));
         }
