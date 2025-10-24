@@ -32,7 +32,6 @@ const DEFAULT_ENTITLEMENTS: Entitlements = {
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS);
-  const [isLoading, setIsLoading] = useState(true);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -42,7 +41,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         setTimeout(() => {
           console.warn('⚠️ Entitlements loading timeout');
           resolve(null);
-        }, 2000);
+        }, 1000);
       });
       
       const loadPromise = AsyncStorage.getItem('entitlements');
@@ -65,8 +64,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       }
     } catch (error) {
       console.error('❌ Error loading entitlements:', error);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -226,7 +223,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   return useMemo(() => ({
     entitlements,
     usageStats,
-    isLoading,
     isPurchasing,
     isRestoring,
     purchase,
@@ -239,7 +235,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }), [
     entitlements,
     usageStats,
-    isLoading,
     isPurchasing,
     isRestoring,
     purchase,
