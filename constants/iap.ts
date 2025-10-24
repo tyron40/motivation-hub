@@ -44,8 +44,8 @@ export const IAP_PRODUCTS: IAPProduct[] = [
   },
   {
     productId: IAP_PRODUCT_IDS.PREMIUM_MONTHLY,
-    title: 'Premium Monthly',
-    description: 'Enjoy an ad-free experience across the entire app',
+    title: 'Ad-Free Monthly',
+    description: 'Remove all ads and enjoy uninterrupted motivation. AI features still require credits.',
     isPremium: true,
     popular: true,
     badge: 'AD-FREE',

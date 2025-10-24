@@ -19,6 +19,7 @@ interface UsageStats {
   canUseChat: boolean;
   canUseTTS: boolean;
   availableVoices: readonly string[];
+  isAdFree: boolean;
 }
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
@@ -90,10 +91,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, [entitlements, saveEntitlements]);
 
   const deductCredits = useCallback(async (amount: number): Promise<boolean> => {
-    if (entitlements.isPremium) {
-      return true;
-    }
-    
     if (entitlements.credits < amount) {
       return false;
     }
@@ -141,26 +138,13 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         throw new Error('In-app purchases are not available on web. Please use the iOS or Android app.');
       }
 
-      if (productId === IAP_PRODUCT_IDS.CREDITS_100) {
-        await addCredits(100);
-        Alert.alert('Success', '100 credits added to your account!');
-      } else if (productId === IAP_PRODUCT_IDS.CREDITS_500) {
-        await addCredits(500);
-        Alert.alert('Success', '500 credits added to your account!');
-      } else if (productId === IAP_PRODUCT_IDS.CREDITS_1000) {
-        await addCredits(1000);
-        Alert.alert('Success', '1000 credits added to your account!');
-      } else if (productId === IAP_PRODUCT_IDS.PREMIUM_MONTHLY) {
-        const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        await setPremium(expiresAt);
-        Alert.alert('Success', 'Premium subscription activated!');
-      } else if (productId === IAP_PRODUCT_IDS.PREMIUM_ANNUAL) {
-        const expiresAt = Date.now() + 365 * 24 * 60 * 60 * 1000;
-        await setPremium(expiresAt);
-        Alert.alert('Success', 'Annual premium subscription activated!');
-      }
+      Alert.alert(
+        'Purchase Not Available',
+        'In-app purchases will be available when the app is published on the App Store. This is a development version.',
+        [{ text: 'OK' }]
+      );
       
-      console.log('✅ Purchase completed:', productId);
+      console.log('✅ Purchase flow initiated for:', productId);
     } catch (error) {
       console.error('❌ Purchase error:', error);
       if (Platform.OS !== 'web') {
@@ -169,7 +153,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     } finally {
       setIsPurchasing(false);
     }
-  }, [isPurchasing, addCredits, setPremium]);
+  }, [isPurchasing]);
 
   const restorePurchases = useCallback(async () => {
     if (isRestoring) {
@@ -206,13 +190,12 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     return {
       todayChats: entitlements.dailyChatCount,
       todayTTS: entitlements.dailyTTSCount,
-      canUseChat: isPremiumActive || 
-                   entitlements.dailyChatCount < FREE_TIER_LIMITS.DAILY_CHAT_MESSAGES ||
+      canUseChat: entitlements.dailyChatCount < FREE_TIER_LIMITS.DAILY_CHAT_MESSAGES ||
                    entitlements.credits >= CREDIT_COSTS.CHAT_MESSAGE,
-      canUseTTS: isPremiumActive || 
-                  entitlements.dailyTTSCount < FREE_TIER_LIMITS.DAILY_TTS_GENERATIONS ||
+      canUseTTS: entitlements.dailyTTSCount < FREE_TIER_LIMITS.DAILY_TTS_GENERATIONS ||
                   entitlements.credits >= CREDIT_COSTS.TTS_STANDARD,
-      availableVoices: isPremiumActive ? [...FREE_VOICES, ...PREMIUM_VOICES] : FREE_VOICES,
+      availableVoices: FREE_VOICES,
+      isAdFree: isPremiumActive,
     };
   }, [entitlements]);
 

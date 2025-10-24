@@ -121,7 +121,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Go Ad-Free</Text>
             <Text style={styles.sectionSubtitle}>
-              Remove all ads and enjoy uninterrupted motivation
+              Remove all ads - AI features still require credits
             </Text>
 
             {premiumProducts.map((product) => (
@@ -164,6 +164,10 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                     <Check color={Colors.accent} size={18} />
                     <Text style={styles.featureText}>Support Development</Text>
                   </View>
+                  <View style={styles.featureItem}>
+                    <X color={Colors.textSecondary} size={18} />
+                    <Text style={[styles.featureText, { color: Colors.textSecondary }]}>Does NOT unlock unlimited AI credits</Text>
+                  </View>
                 </View>
                 <TouchableOpacity
                   style={styles.subscribeButton}
@@ -179,8 +183,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           <View style={styles.youtubeDisclaimer}>
             <Youtube color={Colors.textSecondary} size={20} />
             <Text style={styles.youtubeDisclaimerText}>
-              Purchases apply only to AI features (chat credits, premium voices, higher usage limits).
-              YouTube videos are provided by YouTube and remain free; purchases do not unlock or alter YouTube content.
+              YouTube videos are provided by YouTube and remain free. Purchases (credits and ad-free) do not unlock or alter YouTube content. Credits are used for AI features only.
             </Text>
           </View>
 
