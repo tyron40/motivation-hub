@@ -19,6 +19,8 @@ import { router } from 'expo-router';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
+import { useIAP } from '@/hooks/iap-context';
+import PaywallModal from '@/components/PaywallModal';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { SpeechCard } from '@/components/SpeechCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -27,8 +29,10 @@ import { Speech } from '@/types/speech';
 function ProfileContent() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const { user, signOut } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
+  const { entitlements } = useIAP();
   
   // Always call hooks at the top level
   const context = useSpeechContext();
@@ -178,6 +182,65 @@ function ProfileContent() {
             })}
           </View>
 
+          {!entitlements.isPremium && (
+            <TouchableOpacity 
+              style={styles.upgradeCard}
+              onPress={() => setShowPaywall(true)}
+            >
+              <LinearGradient
+                colors={['#FF6B35', '#F7931E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.upgradeGradient}
+              >
+                <View style={styles.upgradeContent}>
+                  <View style={styles.upgradeLeft}>
+                    <Sparkles color="#fff" size={28} />
+                    <View>
+                      <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
+                      <Text style={styles.upgradeSubtitle}>Unlimited AI features & premium voices</Text>
+                    </View>
+                  </View>
+                  <View style={styles.upgradeButton}>
+                    <Text style={styles.upgradeButtonText}>Unlock</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
+          {entitlements.isPremium && (
+            <View style={styles.premiumStatusCard}>
+              <View style={styles.premiumStatusContent}>
+                <Sparkles color={Colors.accent} size={24} />
+                <View style={styles.premiumStatusText}>
+                  <Text style={styles.premiumStatusTitle}>Premium Member</Text>
+                  <Text style={styles.premiumStatusSubtitle}>You have unlimited access to all features</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.creditsCard}>
+            <View style={styles.creditsContent}>
+              <View style={styles.creditsLeft}>
+                <View style={styles.creditsIcon}>
+                  <Sparkles color={Colors.primary} size={20} />
+                </View>
+                <View>
+                  <Text style={styles.creditsLabel}>Available Credits</Text>
+                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.buyCreditsButton}
+                onPress={() => setShowPaywall(true)}
+              >
+                <Text style={styles.buyCreditsButtonText}>Buy More</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Achievements</Text>
             <View style={styles.achievementsList}>
@@ -279,6 +342,7 @@ function ProfileContent() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
+    <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </>
   );
 }
@@ -509,5 +573,126 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     color: '#ff6b6b',
+  },
+  upgradeCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  upgradeGradient: {
+    padding: 20,
+  },
+  upgradeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  upgradeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  upgradeTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  upgradeSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  upgradeButton: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  upgradeButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  premiumStatusCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: 'rgba(255,107,53,0.15)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,53,0.3)',
+  },
+  premiumStatusContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+  },
+  premiumStatusText: {
+    flex: 1,
+  },
+  premiumStatusTitle: {
+    color: Colors.text,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  premiumStatusSubtitle: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  creditsCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  creditsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  creditsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  creditsLabel: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  creditsValue: {
+    color: Colors.text,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  buyCreditsButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  buyCreditsButtonText: {
+    color: Colors.background,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
