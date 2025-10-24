@@ -45,16 +45,10 @@ export const IAP_PRODUCTS: IAPProduct[] = [
   {
     productId: IAP_PRODUCT_IDS.PREMIUM_MONTHLY,
     title: 'Premium Monthly',
-    description: 'Unlimited AI chat, premium voices, and priority support',
+    description: 'Enjoy an ad-free experience across the entire app',
     isPremium: true,
-  },
-  {
-    productId: IAP_PRODUCT_IDS.PREMIUM_ANNUAL,
-    title: 'Premium Annual',
-    description: 'All premium features + 2 months free',
-    isPremium: true,
-    badge: 'BEST VALUE',
     popular: true,
+    badge: 'AD-FREE',
   },
 ];
 

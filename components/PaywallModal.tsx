@@ -25,8 +25,7 @@ const PRICE_MAP: Record<string, string> = {
   'com.tyrotech.motivationhub.credits.100': '$4.99',
   'com.tyrotech.motivationhub.credits.500': '$19.99',
   'com.tyrotech.motivationhub.credits.1000': '$34.99',
-  'com.tyrotech.motivationhub.premium.monthly': '$9.99/month',
-  'com.tyrotech.motivationhub.premium.annual': '$99.99/year',
+  'com.tyrotech.motivationhub.premium.monthly': '$4.99/month',
 };
 
 export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
@@ -120,9 +119,9 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Go Premium</Text>
+            <Text style={styles.sectionTitle}>Go Ad-Free</Text>
             <Text style={styles.sectionSubtitle}>
-              Unlimited AI chat, premium voices, and no daily limits
+              Remove all ads and enjoy uninterrupted motivation
             </Text>
 
             {premiumProducts.map((product) => (
@@ -136,36 +135,43 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 disabled={isPurchasing}
               >
                 {product.badge && (
-                  <View style={styles.popularBadge}>
+                  <View style={styles.adFreeBadge}>
                     <Text style={styles.popularBadgeText}>{product.badge}</Text>
                   </View>
                 )}
                 <View style={styles.premiumHeader}>
-                  <Sparkles color={Colors.accent} size={28} />
-                  <View style={styles.productInfo}>
+                  <Shield color={Colors.accent} size={32} />
+                  <View style={styles.premiumMainInfo}>
                     <Text style={styles.premiumTitle}>{product.title}</Text>
-                    <Text style={styles.productDescription}>{product.description}</Text>
+                    <Text style={styles.premiumPrice}>{PRICE_MAP[product.productId]}</Text>
                   </View>
-                  <Text style={styles.premiumPrice}>{PRICE_MAP[product.productId]}</Text>
                 </View>
+                <Text style={styles.adFreeDescription}>{product.description}</Text>
                 <View style={styles.featureList}>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={16} />
-                    <Text style={styles.featureText}>Unlimited AI Chat</Text>
+                    <Check color={Colors.accent} size={18} />
+                    <Text style={styles.featureText}>No Banner Ads</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={16} />
-                    <Text style={styles.featureText}>Premium Voice Options</Text>
+                    <Check color={Colors.accent} size={18} />
+                    <Text style={styles.featureText}>No Interstitial Ads</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={16} />
-                    <Text style={styles.featureText}>No Daily Limits</Text>
+                    <Check color={Colors.accent} size={18} />
+                    <Text style={styles.featureText}>Uninterrupted Experience</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={16} />
-                    <Text style={styles.featureText}>Priority Support</Text>
+                    <Check color={Colors.accent} size={18} />
+                    <Text style={styles.featureText}>Support Development</Text>
                   </View>
                 </View>
+                <TouchableOpacity
+                  style={styles.subscribeButton}
+                  onPress={() => handlePurchase(product.productId)}
+                  disabled={isPurchasing}
+                >
+                  <Text style={styles.subscribeButtonText}>Subscribe Now</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
@@ -352,41 +358,82 @@ const styles = StyleSheet.create({
   },
   premiumCard: {
     backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 24,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 2,
+    borderColor: Colors.accent,
     position: 'relative',
+  },
+  adFreeBadge: {
+    position: 'absolute',
+    top: -12,
+    right: 20,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   premiumHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: 16,
+    marginBottom: 12,
+  },
+  premiumMainInfo: {
+    flex: 1,
   },
   premiumTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   premiumPrice: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: Colors.accent,
   },
+  adFreeDescription: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    marginBottom: 20,
+    lineHeight: 22,
+  },
   featureList: {
-    gap: 10,
+    gap: 12,
+    marginBottom: 24,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   featureText: {
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.text,
+    fontWeight: '500',
+  },
+  subscribeButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  subscribeButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.background,
   },
   youtubeDisclaimer: {
     flexDirection: 'row',
