@@ -1,5 +1,6 @@
 {
   "buildCommand": "echo 'No build needed for serverless functions'",
+  "public": true,
   "rewrites": [
     {
       "source": "/api/health",
@@ -31,6 +32,13 @@
     }
   ],
   "headers": [
+    {
+      "source": "/app-ads.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
     {
       "source": "/api/(.*)",
       "headers": [
