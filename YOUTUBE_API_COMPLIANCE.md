@@ -11,154 +11,174 @@
 
 ## Compliance Confirmation
 
-This document confirms that **Motivation Hub** fully complies with the [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service).
+This application fully complies with the YouTube API Services Terms of Service and Developer Policies. Below are the specific compliance measures implemented:
 
-### 1. Official YouTube API Integration
+### 1. **Official YouTube Player Usage Only**
+- All YouTube videos are **embedded directly** from YouTube using the official YouTube iFrame Player API.
+- We use `react-native-webview` to render YouTube's official embed player at `https://www.youtube.com/embed/{videoId}`.
+- **NO custom video players** are used for YouTube content.
+- **NO third-party video player libraries** handle YouTube playback.
 
-- All YouTube videos are **embedded directly** from YouTube using official APIs and embed players
-- The app uses YouTube Data API v3 endpoints:
-  - `search.list` - For discovering motivational videos by category
-  - `videos.list` - For fetching video metadata (title, description, thumbnail, duration, view count)
-- All API requests are authenticated with our registered YouTube Data API v3 key
-- API key is stored securely on our Vercel backend (not exposed in client code)
+### 2. **No Downloads, Caching, or Redistribution**
+- The app **does not download** any YouTube video or audio content to local storage.
+- The app **does not cache** YouTube media files offline.
+- The app **does not redistribute** YouTube content outside of the official player.
+- All playback is **streamed directly** from YouTube's servers through the official player.
+- Users **cannot** save videos for offline viewing.
 
-### 2. No Unauthorized Content Access
+### 3. **YouTube Terms of Service Compliance**
+- Playback is handled entirely via YouTube's embedded player in full compliance with the [YouTube Terms of Service](https://www.youtube.com/t/terms) and [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service).
+- The app does **not** modify, overlay, or obscure YouTube branding, logos, or advertisements.
+- YouTube's standard controls (play, pause, volume, fullscreen) are fully available to users.
+- The app **does not** attempt to block or skip YouTube advertisements.
 
-- The app **does not download**, **store**, or **redistribute** YouTube video or audio content
-- The app **does not cache** videos for offline playback
-- The app **does not extract** audio streams from YouTube videos
-- The app **does not modify**, **overlay**, or **obscure** YouTube branding, player controls, or advertisements
-- All playback is handled entirely via YouTube's official embedded player (`https://www.youtube-nocookie.com/embed/`)
+### 4. **Official API Endpoints Only**
+- The app uses **only** the following official YouTube Data API v3 endpoints:
+  - `youtube.googleapis.com/youtube/v3/videos` (videos.list)
+  - `youtube.googleapis.com/youtube/v3/search` (search.list)
+  - `youtube.googleapis.com/youtube/v3/playlistItems` (playlistItems.list)
+- All API requests include a registered API key linked to TyroTech's Google Developer Console account.
+- **NO scraping, undocumented APIs, or reverse-engineered endpoints** are used.
 
-### 3. Playback Implementation
+### 5. **Metadata Usage Only**
+- The app fetches **only metadata** from the YouTube API, including:
+  - Video ID, title, description
+  - Channel name and ID
+  - Thumbnail URLs
+  - View count, like count, duration
+  - Published date and tags
+- The app **does not** access or attempt to extract direct video stream URLs.
 
-- Videos are played using **WebView** components that load YouTube's official embed URLs
-- The embed URLs use YouTube's privacy-enhanced domain (`youtube-nocookie.com`)
-- All embed parameters are compliant with YouTube's terms:
-  - `controls=1` - YouTube controls are visible and functional
-  - `modestbranding=1` - Minimal YouTube branding while maintaining attribution
-  - `rel=0` - Related videos are limited to same channel (when possible)
-  - `enablejsapi=1` - YouTube's JavaScript API is enabled
-  - `fs=1` - Fullscreen is available to users
+### 6. **No Monetization of YouTube Content**
+- **YouTube content is and will always remain FREE** in this app.
+- In-app purchases (credits and premium subscriptions) apply **ONLY to AI features**, including:
+  - AI chat messages with the motivational coach
+  - Text-to-speech (TTS) voice generation
+  - Premium AI voice options
+  - Higher usage limits for AI features
+- **Purchases do NOT:**
+  - Unlock access to YouTube videos
+  - Remove or skip YouTube ads
+  - Provide ad-free YouTube playback
+  - Grant premium YouTube features
+  - Gate, alter, or enhance YouTube content in any way
 
-### 4. User Experience
+### 7. **Clear User Communication**
+- The paywall UI prominently displays the disclaimer:
+  > "Purchases apply only to AI features (chat credits, premium voices, higher usage limits). YouTube videos are provided by YouTube and remain free; purchases do not unlock or alter YouTube content."
+- Every video card includes the attribution: **"Source: YouTube"**
+- First-launch modal links users to the YouTube API Services ToS and the app's Privacy Policy.
 
-- Users can view motivational videos organized by categories (Motivation, Success, Mindset, Inspiration, etc.)
-- When a user taps a video, it opens YouTube's embedded player
-- Users can control playback using YouTube's native player controls
-- Users can open videos in the YouTube app or website via standard YouTube sharing
-- No attempt is made to prevent users from accessing YouTube directly
+### 8. **No Background Audio for YouTube Content**
+- The app does **not** enable background audio playback for YouTube videos in a way that circumvents YouTube Premium.
+- Background audio is **only available** for non-YouTube content (motivational audio tracks uploaded to the app's own backend).
+- The `UIBackgroundModes: ["audio"]` permission in `Info.plist` is used **exclusively** for the app's native audio player, not for YouTube content.
 
-### 5. Content Attribution
+### 9. **No Picture-in-Picture (PiP) for YouTube**
+- The app does **not** enable Picture-in-Picture mode for YouTube videos unless the user has YouTube Premium (which is YouTube's own feature).
+- Standard YouTube embed player behavior is preserved.
 
-- All video titles, descriptions, channel names, and thumbnails are displayed as returned by the YouTube API
-- Channel attribution is clearly visible on all video cards and player screens
-- YouTube branding and logos are not removed or hidden
-- Users can identify content as coming from YouTube at all times
-
-### 6. API Usage Limits
-
-- Our API requests respect YouTube's quota limits
-- We implement request caching (30 minutes) to minimize redundant API calls
-- We handle API errors gracefully and provide fallback content when quota is exceeded
-- We do not attempt to circumvent rate limits or quotas
-
-### 7. Privacy & Security
-
-- API key is stored as an environment variable on our secure Vercel backend
-- Client-side code never exposes the YouTube API key
-- User viewing data is not collected or shared with third parties
-- Privacy-enhanced YouTube domain (`youtube-nocookie.com`) is used for embeds
-
----
-
-## Technical Implementation Details
-
-**Backend API Routes (Vercel/Hono):**
-- `/api/youtube/category` - Fetch videos by motivational category
-- `/api/youtube/search` - Search for videos by keyword
-- `/api/youtube/trending` - Fetch trending motivational content
-
-**Frontend Implementation:**
-- `YouTubeEmbed.tsx` - WebView-based YouTube embed player component
-- `VideoPlayer.tsx` - Video player wrapper
-- `youtubeService.ts` - API integration service (calls Vercel backend)
-- `youtubeDirectService.ts` - Direct YouTube Data API v3 integration
-
-**YouTube API Endpoints Used:**
-```
-GET https://www.googleapis.com/youtube/v3/search
-GET https://www.googleapis.com/youtube/v3/videos
-```
-
-**Embed URLs:**
-```
-https://www.youtube-nocookie.com/embed/{videoId}?controls=1&modestbranding=1&rel=0
-```
+### 10. **Compliance Guard Module**
+- The app includes a `YouTubeCompliance` module (`lib/youtube-compliance.ts`) that:
+  - Validates all player URLs to ensure they are official YouTube domains
+  - Blocks any download/caching operations at build-time and runtime
+  - Enforces metadata-only usage
+  - Prevents monetization of YouTube content
+  - Logs all compliance checks for audit purposes
 
 ---
 
-## Google Cloud Console Project
+## API Key and Project Information
 
-**Project Name:** TyroTech Motivation Hub  
-**Google Cloud Console Project ID:** [Your Project ID]  
-**API Key:** Securely stored on Vercel backend (not publicly exposed)  
-**API Enabled:** YouTube Data API v3  
+**Google Cloud Console Project:** TyroTech Motivation Hub  
+**Google Cloud Console Project ID:** [Insert your project ID here]  
+**YouTube Data API v3 Key:** Securely stored on Vercel backend environment variables (`YOUTUBE_API_KEY`)  
+**API Key Restrictions:**
+- HTTP referrers: `*.vercel.app`, `rork.com`, `*.rork.com`
+- API restrictions: YouTube Data API v3 only
+- Daily quota limit: 10,000 units (monitored and rate-limited on backend)
 
 ---
 
-## Developer Declaration
+## Rate Limiting and Quota Management
 
-I, **Tyron Montavis Torance Roberts**, founder of TyroTech, confirm that:
+- The backend (`/api/trpc/content.*`) proxies all YouTube API requests.
+- Rate limiting is enforced to prevent quota exhaustion.
+- Responses are cached (metadata only) to reduce API calls.
+- Users are never exposed to the API key (server-side only).
 
-1. This application fully complies with the YouTube API Services Terms of Service
-2. No copyrighted or third-party video content is accessed, downloaded, or distributed outside of YouTube's official framework
-3. All video playback occurs through YouTube's official embedded player
-4. YouTube branding and attribution remain visible and unmodified
-5. Users maintain full access to YouTube's native player controls and features
-6. The app does not enable offline video playback or content redistribution
+---
 
-I understand that violation of YouTube's Terms of Service may result in API access revocation and app removal from the App Store.
+## Privacy and Data Handling
+
+- The app does **not** store YouTube user credentials.
+- The app does **not** access YouTube user accounts or authentication.
+- The app fetches **only public video metadata** from the YouTube Data API.
+- User watch history is **not tracked** by our app (YouTube's own analytics apply).
+- See full privacy policy at: [https://rork.com/privacy](https://rork.com/privacy)
+
+---
+
+## Declaration
+
+I, **Tyron Montavis Torance Roberts**, founder of TyroTech, confirm that the Motivation Hub application:
+1. Fully complies with the YouTube API Services Terms of Service.
+2. Uses YouTube content exclusively through official, approved methods.
+3. Does not download, cache, modify, or redistribute YouTube videos or audio.
+4. Does not monetize, paywall, or gate YouTube content in any form.
+5. Implements technical safeguards to prevent ToS violations.
+6. Will maintain compliance in all future updates.
+
+Any violation of these terms will result in immediate corrective action, including removal of YouTube integration if required by Google/YouTube.
+
+---
 
 **Signature:**  
 Tyron Montavis Torance Roberts  
 Founder, TyroTech  
-
-**Date:** October 21, 2025
-
----
-
-## Supporting Evidence
-
-**Code Repository Structure:**
-```
-services/
-  ├── youtubeService.ts          # YouTube API integration (via Vercel)
-  ├── youtubeDirectService.ts    # Direct API v3 calls (for testing)
-components/
-  ├── YouTubeEmbed.tsx           # Official YouTube embed player
-  ├── VideoPlayer.tsx            # Video player wrapper
-backend/
-  └── hono.ts                    # Vercel API routes (YouTube endpoints)
-```
-
-**No Download/Cache Code:**
-- Verified: No use of `expo-media-library`, `expo-file-system`, `downloadAsync`, `saveToLibraryAsync`
-- Verified: No video caching for offline playback
-- Verified: All playback is streaming-only via YouTube's embed player
+**Date:** October 24, 2025
 
 ---
 
 ## Contact Information
 
 **Developer:** Tyron Montavis Torance Roberts  
-**Company:** TyroTech  
-**App:** Motivation Hub  
-**Bundle ID:** app.rork.motivational-speech-app  
-
-For any questions regarding our YouTube API implementation or compliance, please contact via App Store Connect.
+**Email:** [Your Contact Email]  
+**Support URL:** https://rork.com/support  
+**App Store Connect Team ID:** [Your Team ID]
 
 ---
 
-**Last Updated:** October 21, 2025  
-**Build Number:** 57
+## Appendix: Technical Implementation Details
+
+### YouTube Player Implementation
+```typescript
+// components/YouTubeEmbed.tsx
+<WebView
+  source={{
+    uri: `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`
+  }}
+  allowsFullscreenVideo={true}
+  mediaPlaybackRequiresUserAction={false}
+/>
+```
+
+### API Request Example
+```typescript
+// backend/trpc/routes/content/youtube-fetch.ts
+const response = await fetch(
+  `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet,statistics&key=${API_KEY}`
+);
+```
+
+### Compliance Guard Example
+```typescript
+// lib/youtube-compliance.ts
+YouTubeCompliance.validatePlayerUrl(url);
+YouTubeCompliance.assertNoDownload('playVideo');
+YouTubeCompliance.assertNoMonetization('videoPlayback');
+```
+
+---
+
+**End of Compliance Statement**

@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from "@/hooks/auth-context";
 import { PlaylistProvider } from "@/hooks/playlist-context";
 import { ScriptureFavoritesProvider } from "@/hooks/scripture-favorites-context";
 import { ChatSessionsProvider } from "@/hooks/chat-sessions-context";
+import { IAPProvider } from "@/hooks/iap-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -302,19 +303,21 @@ export default function RootLayout() {
             <ErrorBoundary>
               <AuthProvider>
                 <ErrorBoundary>
-                  <UserProfileProvider>
-                    <ErrorBoundary>
-                      <PlaylistProvider>
-                        <ScriptureFavoritesProvider>
-                          <ChatSessionsProvider>
-                            <SpeechProvider>
-                              <RootLayoutNav />
-                            </SpeechProvider>
-                          </ChatSessionsProvider>
-                        </ScriptureFavoritesProvider>
-                      </PlaylistProvider>
-                    </ErrorBoundary>
-                  </UserProfileProvider>
+                  <IAPProvider>
+                    <UserProfileProvider>
+                      <ErrorBoundary>
+                        <PlaylistProvider>
+                          <ScriptureFavoritesProvider>
+                            <ChatSessionsProvider>
+                              <SpeechProvider>
+                                <RootLayoutNav />
+                              </SpeechProvider>
+                            </ChatSessionsProvider>
+                          </ScriptureFavoritesProvider>
+                        </PlaylistProvider>
+                      </ErrorBoundary>
+                    </UserProfileProvider>
+                  </IAPProvider>
                 </ErrorBoundary>
               </AuthProvider>
             </ErrorBoundary>

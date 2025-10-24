@@ -110,6 +110,8 @@ export default function VideoCard({
           <Eye size={12} color="#666" />
           <Text style={styles.viewCount}>{String(viewCount || '0')} views</Text>
         </View>
+        
+        <Text style={styles.youtubeAttribution}>Source: YouTube</Text>
       </View>
     </TouchableOpacity>
   );
@@ -195,6 +197,12 @@ const styles = StyleSheet.create({
   viewCount: {
     fontSize: 11,
     color: '#666',
+  },
+  youtubeAttribution: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 6,
+    fontStyle: 'italic' as const,
   },
   imageLoadingOverlay: {
     position: 'absolute',
