@@ -7,6 +7,7 @@ import { IAP_PRODUCT_IDS, IAPProductId, ALL_VOICES } from '@/constants/iap';
 interface Entitlements {
   isPremium: boolean;
   premiumExpiresAt: number | null;
+  credits: number;
 }
 
 interface UsageStats {
@@ -17,6 +18,7 @@ interface UsageStats {
 const DEFAULT_ENTITLEMENTS: Entitlements = {
   isPremium: false,
   premiumExpiresAt: null,
+  credits: 0,
 };
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
@@ -37,11 +39,20 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       const stored = await Promise.race([loadPromise, timeoutPromise]);
       
       if (stored) {
-        const parsed = JSON.parse(stored) as Entitlements;
-        setEntitlements(parsed);
+        const parsed = JSON.parse(stored) as Partial<Entitlements>;
+        const merged: Entitlements = {
+          ...DEFAULT_ENTITLEMENTS,
+          ...parsed,
+        };
+        setEntitlements(merged);
+        console.log('✅ Entitlements loaded:', merged);
+      } else {
+        console.log('📝 No stored entitlements, using defaults:', DEFAULT_ENTITLEMENTS);
+        setEntitlements(DEFAULT_ENTITLEMENTS);
       }
     } catch (error) {
       console.error('❌ Error loading entitlements:', error);
+      setEntitlements(DEFAULT_ENTITLEMENTS);
     }
   }, []);
 
@@ -144,6 +155,16 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     return usageStats.availableVoices.includes(voice);
   }, [usageStats.availableVoices]);
 
+  const resetEntitlements = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem('entitlements');
+      setEntitlements(DEFAULT_ENTITLEMENTS);
+      console.log('✅ Entitlements reset to defaults');
+    } catch (error) {
+      console.error('❌ Error resetting entitlements:', error);
+    }
+  }, []);
+
   return useMemo(() => ({
     entitlements,
     usageStats,
@@ -154,6 +175,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     refreshEntitlements: loadEntitlements,
+    resetEntitlements,
   }), [
     entitlements,
     usageStats,
@@ -164,5 +186,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     loadEntitlements,
+    resetEntitlements,
   ]);
 });
