@@ -2,11 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Youtube, X } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { useCurrentSpeech } from '@/hooks/speech-context';
 import { router } from 'expo-router';
 
 export const MiniPlayer: React.FC = () => {
+  const { colors } = useTheme();
   const { currentSpeech, setCurrentSpeech } = useCurrentSpeech();
   const slideAnim = useRef(new Animated.Value(100)).current;
   const insets = useSafeAreaInsets();
@@ -39,6 +40,7 @@ export const MiniPlayer: React.FC = () => {
   };
 
   const bottomOffset = (insets?.bottom ?? 0) + 80 + 8;
+  const styles = getStyles(colors);
 
   return (
     <Animated.View 
@@ -60,10 +62,10 @@ export const MiniPlayer: React.FC = () => {
             <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
           </View>
           <View style={styles.youtubeIcon}>
-            <Youtube color={Colors.primary} size={24} />
+            <Youtube color={colors.primary} size={24} />
           </View>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton} testID="mini-player-close">
-            <X color={Colors.textSecondary} size={20} />
+            <X color={colors.textSecondary} size={20} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -71,12 +73,12 @@ export const MiniPlayer: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 12,
     right: 12,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
@@ -87,8 +89,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   content: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: 12,
   },
   image: {
@@ -101,12 +103,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   speaker: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },

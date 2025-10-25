@@ -11,7 +11,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play } from 'lucide-react-native';
-import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
@@ -19,19 +18,23 @@ import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeServi
 import { useSpeechContext } from '@/hooks/speech-context';
 import { ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { useTheme } from '@/hooks/theme-context';
 
 export default function HomeScreen() {
   const speechContext = useSpeechContext();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [loadingYoutube, setLoadingYoutube] = React.useState(false);
   
+  const styles = getStyles(colors);
+  
   if (!speechContext) {
     console.error('Speech context not available');
     return (
-      <LinearGradient colors={[Colors.background, '#1A1A2E']} style={styles.container}>
+      <LinearGradient colors={[colors.background, colors.card]} style={styles.container}>
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading Motivation Hub...</Text>
         </View>
       </LinearGradient>
@@ -106,7 +109,7 @@ export default function HomeScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <View style={styles.safeArea}>
@@ -128,7 +131,7 @@ export default function HomeScreen() {
                   }
                 }}
               >
-                <Play size={16} color={Colors.text} fill={Colors.text} />
+                <Play size={16} color={colors.text} fill={colors.text} />
                 <Text style={styles.playAllText}>Play All</Text>
               </TouchableOpacity>
             </View>
@@ -184,7 +187,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -199,26 +202,26 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   greeting: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 26,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     marginTop: 2,
     letterSpacing: -0.5,
   },
   headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
   },
   playAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 25,
@@ -230,17 +233,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   playAllText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   section: {
     marginTop: 20,
   },
   sectionTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 19,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: 12,
     paddingHorizontal: 20,
     letterSpacing: -0.3,
@@ -249,20 +252,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   errorText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginTop: 20,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: 16,
   },
   loadingText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
 });

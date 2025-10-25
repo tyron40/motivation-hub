@@ -1,18 +1,22 @@
 import { Tabs } from "expo-router";
 import { Home, User, BookOpen, MessageCircle } from "lucide-react-native";
 import React from "react";
-import Colors from "@/constants/colors";
 import { MiniPlayer } from "@/components/MiniPlayer";
-import { StyleSheet } from "react-native";
+import { useTheme } from "@/hooks/theme-context";
 
 export default function TabLayout() {
+  const { colors } = useTheme();
+  
   return (
     <>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: Colors.tabBar.active,
-          tabBarInactiveTintColor: Colors.tabBar.inactive,
-          tabBarStyle: styles.tabBarStyle,
+          tabBarActiveTintColor: colors.tabBar.active,
+          tabBarInactiveTintColor: colors.tabBar.inactive,
+          tabBarStyle: {
+            backgroundColor: colors.tabBar.background,
+            borderTopColor: 'rgba(255,255,255,0.1)',
+          },
           headerShown: false,
         }}
       >
@@ -49,10 +53,3 @@ export default function TabLayout() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBarStyle: {
-    backgroundColor: Colors.tabBar.background,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-});

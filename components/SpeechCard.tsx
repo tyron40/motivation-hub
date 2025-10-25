@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Animated, Share, Alert, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Heart, Clock, User, Share2, ListPlus } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { Speech } from '@/types/speech';
 
 interface SpeechCardProps {
@@ -20,6 +20,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
   onAddToPlaylist,
   variant = 'compact' 
 }) => {
+  const { colors } = useTheme();
   const [imageError, setImageError] = useState<boolean>(false);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -40,7 +41,6 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     ]).start();
   }, [scaleAnim, fadeAnim]);
   
-  // Ensure speech is a valid object
   if (!speech || typeof speech !== 'object' || !speech.title || !speech.speaker) {
     return null;
   }
@@ -50,8 +50,9 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     setImageError(true);
   };
   
+  const styles = getStyles(colors);
+  
   const renderImage = (style: any) => {
-    // Always show YouTube thumbnail if we have a youtubeId
     const thumbnailUrl = speech.youtubeId 
       ? `https://i.ytimg.com/vi/${speech.youtubeId}/hqdefault.jpg`
       : speech.imageUrl;
@@ -59,7 +60,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     if (imageError || !thumbnailUrl) {
       return (
         <View style={[style, styles.placeholderImage]}>
-          <User color={Colors.textSecondary} size={24} />
+          <User color={colors.textSecondary} size={24} />
         </View>
       );
     }
@@ -117,7 +118,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
       <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: fadeAnim }}>
         <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
           <LinearGradient
-            colors={[Colors.gradient.start, Colors.gradient.end]}
+            colors={[colors.gradient.start, colors.gradient.end]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.featuredCard}
@@ -131,30 +132,30 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
               <View style={styles.featuredMeta}>
                 <View style={styles.duration}>
                   <View style={styles.durationIcon}>
-                    <Clock color={Colors.text} size={14} />
+                    <Clock color={colors.text} size={14} />
                   </View>
                   <Text style={styles.durationText}>{formatDuration(speech.duration)}</Text>
                 </View>
                 <View style={styles.featuredActions}>
                   <TouchableOpacity onPress={handleShare} style={styles.actionBtn}>
-                    <Share2 color={Colors.text} size={18} />
+                    <Share2 color={colors.text} size={18} />
                   </TouchableOpacity>
                   {onAddToPlaylist && (
                     <TouchableOpacity onPress={onAddToPlaylist} style={styles.actionBtn}>
-                      <ListPlus color={Colors.text} size={18} />
+                      <ListPlus color={colors.text} size={18} />
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity onPress={onFavorite} style={styles.favoriteButton}>
                     <Heart 
-                      color={Colors.text} 
+                      color={colors.text} 
                       size={20} 
-                      fill={speech.isFavorite ? Colors.text : 'transparent'}
+                      fill={speech.isFavorite ? colors.text : 'transparent'}
                     />
                   </TouchableOpacity>
                 </View>
               </View>
               <TouchableOpacity style={styles.playButton} onPress={onPress}>
-                <Play color={Colors.background} size={24} fill={Colors.background} />
+                <Play color={colors.background} size={24} fill={colors.background} />
               </TouchableOpacity>
             </View>
           </View>
@@ -175,24 +176,24 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
           <View style={styles.compactMeta}>
             <View style={styles.duration}>
               <View style={styles.durationIcon}>
-                <Clock color={Colors.textSecondary} size={12} />
+                <Clock color={colors.textSecondary} size={12} />
               </View>
               <Text style={styles.compactDuration}>{formatDuration(speech.duration)}</Text>
             </View>
             <View style={styles.compactActions}>
               <TouchableOpacity onPress={handleShare} style={styles.compactActionBtn}>
-                <Share2 color={Colors.textSecondary} size={16} />
+                <Share2 color={colors.textSecondary} size={16} />
               </TouchableOpacity>
               {onAddToPlaylist && (
                 <TouchableOpacity onPress={onAddToPlaylist} style={styles.compactActionBtn}>
-                  <ListPlus color={Colors.textSecondary} size={16} />
+                  <ListPlus color={colors.textSecondary} size={16} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={onFavorite}>
                 <Heart 
-                  color={Colors.accent} 
+                  color={colors.accent} 
                   size={18} 
-                  fill={speech.isFavorite ? Colors.accent : 'transparent'}
+                  fill={speech.isFavorite ? colors.accent : 'transparent'}
                 />
               </TouchableOpacity>
             </View>
@@ -204,7 +205,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   featuredCard: {
     height: 220,
     borderRadius: 20,
@@ -213,7 +214,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   featuredImage: {
-    position: 'absolute',
+    position: 'absolute' as const,
     width: '100%',
     height: '100%',
     opacity: 0.3,
@@ -225,58 +226,58 @@ const styles = StyleSheet.create({
   featuredContent: {
     flex: 1,
     padding: 20,
-    justifyContent: 'space-between',
+    justifyContent: 'space-between' as const,
   },
   featuredCategory: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     opacity: 0.9,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     letterSpacing: 1,
   },
   featuredTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     marginTop: 8,
   },
   featuredSpeaker: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
     opacity: 0.9,
     marginTop: 4,
   },
   featuredMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginTop: 12,
   },
   duration: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   durationIcon: {
     marginRight: 4,
   },
   durationText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
   },
   favoriteButton: {
     padding: 4,
   },
   playButton: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 20,
     bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Colors.text,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.text,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -284,8 +285,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   compactCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.cardBackground,
+    flexDirection: 'row' as const,
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 12,
     marginHorizontal: 20,
@@ -299,47 +300,47 @@ const styles = StyleSheet.create({
   compactContent: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: 'space-between',
+    justifyContent: 'space-between' as const,
   },
   compactTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     lineHeight: 20,
   },
   compactSpeaker: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 13,
     marginTop: 2,
   },
   compactMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginTop: 4,
   },
   compactDuration: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 12,
   },
   placeholderImage: {
-    backgroundColor: Colors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.cardBackground,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: Colors.textSecondary + '30',
+    borderColor: colors.textSecondary + '30',
   },
   featuredActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   actionBtn: {
     padding: 4,
   },
   compactActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   compactActionBtn: {

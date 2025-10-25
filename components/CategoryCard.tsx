@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { Sun, Trophy, Zap, Brain, Target, Heart } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { Category } from '@/types/speech';
 
 interface CategoryCardProps {
@@ -19,21 +19,22 @@ const iconMap: { [key: string]: any } = {
 };
 
 export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress }) => {
-  // Ensure category is a valid object
+  const { colors } = useTheme();
+  
   if (!category || typeof category !== 'object' || !category.name) {
     return null;
   }
   
   const Icon = iconMap[category.icon] || Sun;
-  
-  // Handle both mock data structure and backend data structure
   const categoryColor = category.color || '#10B981';
+  
+  const styles = getStyles(colors);
   
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.card, { backgroundColor: categoryColor + '20' }]}>
         <View style={[styles.iconContainer, { backgroundColor: categoryColor }]}>
-          <Icon color={Colors.text} size={24} />
+          <Icon color={colors.text} size={24} />
         </View>
         <Text style={styles.name} numberOfLines={2}>{String(category.name)}</Text>
       </View>
@@ -41,28 +42,28 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress })
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   card: {
     width: 110,
     height: 110,
     borderRadius: 16,
     padding: 12,
     marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginBottom: 8,
   },
   name: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
   },
 });
