@@ -182,7 +182,7 @@ function ProfileContent() {
             })}
           </View>
 
-          {!entitlements.isPremium && user && (
+          {!entitlements.isPremium && (
             <TouchableOpacity 
               style={styles.upgradeCard}
               onPress={() => setShowPaywall(true)}
@@ -198,7 +198,7 @@ function ProfileContent() {
                     <Sparkles color="#fff" size={28} />
                     <View>
                       <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
-                      <Text style={styles.upgradeSubtitle}>Remove all ads for an uninterrupted experience</Text>
+                      <Text style={styles.upgradeSubtitle}>Unlimited AI features & premium voices</Text>
                     </View>
                   </View>
                   <View style={styles.upgradeButton}>
@@ -215,29 +215,31 @@ function ProfileContent() {
                 <Sparkles color={Colors.accent} size={24} />
                 <View style={styles.premiumStatusText}>
                   <Text style={styles.premiumStatusTitle}>Premium Member</Text>
-                  <Text style={styles.premiumStatusSubtitle}>Enjoy your ad-free experience</Text>
+                  <Text style={styles.premiumStatusSubtitle}>You have unlimited access to all features</Text>
                 </View>
               </View>
             </View>
           )}
 
-          {!user && (
-            <View style={styles.guestNoticeCard}>
-              <View style={styles.guestNoticeContent}>
-                <User color={Colors.textSecondary} size={32} />
-                <View style={styles.guestNoticeText}>
-                  <Text style={styles.guestNoticeTitle}>Guest Profile</Text>
-                  <Text style={styles.guestNoticeSubtitle}>Sign in to unlock premium features and track your progress</Text>
+          <View style={styles.creditsCard}>
+            <View style={styles.creditsContent}>
+              <View style={styles.creditsLeft}>
+                <View style={styles.creditsIcon}>
+                  <Sparkles color={Colors.primary} size={20} />
+                </View>
+                <View>
+                  <Text style={styles.creditsLabel}>Available Credits</Text>
+                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
                 </View>
               </View>
               <TouchableOpacity 
-                style={styles.signInUpButton}
-                onPress={() => router.push('/auth')}
+                style={styles.buyCreditsButton}
+                onPress={() => setShowPaywall(true)}
               >
-                <Text style={styles.signInUpButtonText}>Sign In / Sign Up</Text>
+                <Text style={styles.buyCreditsButtonText}>Buy More</Text>
               </TouchableOpacity>
             </View>
-          )}
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Achievements</Text>
@@ -691,46 +693,6 @@ const styles = StyleSheet.create({
   buyCreditsButtonText: {
     color: Colors.background,
     fontSize: 14,
-    fontWeight: 'bold',
-  },
-  guestNoticeCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    padding: 20,
-  },
-  guestNoticeContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 16,
-  },
-  guestNoticeText: {
-    flex: 1,
-  },
-  guestNoticeTitle: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  guestNoticeSubtitle: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  signInUpButton: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  signInUpButtonText: {
-    color: Colors.background,
-    fontSize: 16,
     fontWeight: 'bold',
   },
 });
