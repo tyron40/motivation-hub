@@ -13,6 +13,7 @@ import { PlaylistProvider } from "@/hooks/playlist-context";
 import { ScriptureFavoritesProvider } from "@/hooks/scripture-favorites-context";
 import { ChatSessionsProvider } from "@/hooks/chat-sessions-context";
 import { IAPProvider } from "@/hooks/iap-context";
+import { ThemeProvider } from "@/hooks/theme-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -302,25 +303,27 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
             <ErrorBoundary>
-              <AuthProvider>
-                <ErrorBoundary>
-                  <IAPProvider>
-                    <UserProfileProvider>
-                      <ErrorBoundary>
-                        <PlaylistProvider>
-                          <ScriptureFavoritesProvider>
-                            <ChatSessionsProvider>
-                              <SpeechProvider>
-                                <RootLayoutNav />
-                              </SpeechProvider>
-                            </ChatSessionsProvider>
-                          </ScriptureFavoritesProvider>
-                        </PlaylistProvider>
-                      </ErrorBoundary>
-                    </UserProfileProvider>
-                  </IAPProvider>
-                </ErrorBoundary>
-              </AuthProvider>
+              <ThemeProvider>
+                <AuthProvider>
+                  <ErrorBoundary>
+                    <IAPProvider>
+                      <UserProfileProvider>
+                        <ErrorBoundary>
+                          <PlaylistProvider>
+                            <ScriptureFavoritesProvider>
+                              <ChatSessionsProvider>
+                                <SpeechProvider>
+                                  <RootLayoutNav />
+                                </SpeechProvider>
+                              </ChatSessionsProvider>
+                            </ScriptureFavoritesProvider>
+                          </PlaylistProvider>
+                        </ErrorBoundary>
+                      </UserProfileProvider>
+                    </IAPProvider>
+                  </ErrorBoundary>
+                </AuthProvider>
+              </ThemeProvider>
             </ErrorBoundary>
           </QueryClientProvider>
         </SafeAreaProvider>

@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, Palette } from 'lucide-react-native';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
+import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
 import { supabase } from '@/lib/supabase';
 
 const voiceCharacters = [
@@ -30,8 +30,10 @@ const voiceCharacters = [
 export default function SettingsScreen() {
   const { profile, updateProfile } = useUserProfile();
   const { user, signOut } = useAuth();
+  const { colors, selectedTheme, changeTheme, themes } = useTheme();
   const [showNameModal, setShowNameModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [tempName, setTempName] = useState(profile.name || '');
   const [notifications, setNotifications] = useState(true);
@@ -48,13 +50,15 @@ export default function SettingsScreen() {
 
   const selectedVoice = voiceCharacters.find(v => v.id === profile.preferredVoice) || voiceCharacters[0];
 
+  const styles = getStyles(colors);
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{ 
           title: 'Settings',
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
         }} 
       />
       
@@ -62,7 +66,6 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Profile Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Profile</Text>
           
@@ -71,17 +74,16 @@ export default function SettingsScreen() {
             onPress={() => setShowNameModal(true)}
           >
             <View style={styles.settingLeft}>
-              <User size={20} color={Colors.primary} />
+              <User size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Name</Text>
                 <Text style={styles.settingValue}>{profile.name || 'Not set'}</Text>
               </View>
             </View>
-            <ChevronRight size={20} color={Colors.textSecondary} />
+            <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Voice Coach Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Voice Coach</Text>
           
@@ -90,18 +92,18 @@ export default function SettingsScreen() {
             onPress={() => setShowVoiceModal(true)}
           >
             <View style={styles.settingLeft}>
-              <Volume2 size={20} color={Colors.primary} />
+              <Volume2 size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Coach Voice</Text>
                 <Text style={styles.settingValue}>{selectedVoice.name}</Text>
               </View>
             </View>
-            <ChevronRight size={20} color={Colors.textSecondary} />
+            <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Volume2 size={20} color={Colors.primary} />
+              <Volume2 size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Voice Enabled</Text>
                 <Text style={styles.settingValue}>
@@ -112,19 +114,32 @@ export default function SettingsScreen() {
             <Switch
               value={profile.voiceEnabled}
               onValueChange={(value) => updateProfile({ voiceEnabled: value })}
-              trackColor={{ false: '#767577', true: Colors.primary }}
+              trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
             />
           </View>
         </View>
 
-        {/* App Settings Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Settings</Text>
           
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => setShowThemeModal(true)}
+          >
+            <View style={styles.settingLeft}>
+              <Palette size={20} color={colors.primary} />
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>App Theme</Text>
+                <Text style={styles.settingValue}>{themeNames[selectedTheme]}</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Bell size={20} color={Colors.primary} />
+              <Bell size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Notifications</Text>
                 <Text style={styles.settingValue}>
@@ -135,14 +150,14 @@ export default function SettingsScreen() {
             <Switch
               value={notifications}
               onValueChange={setNotifications}
-              trackColor={{ false: '#767577', true: Colors.primary }}
+              trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
             />
           </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Moon size={20} color={Colors.primary} />
+              <Moon size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Dark Mode</Text>
                 <Text style={styles.settingValue}>
@@ -153,20 +168,19 @@ export default function SettingsScreen() {
             <Switch
               value={darkMode}
               onValueChange={setDarkMode}
-              trackColor={{ false: '#767577', true: Colors.primary }}
+              trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
             />
           </View>
         </View>
 
-        {/* Account Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           
           {user?.email && (
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <User size={20} color={Colors.primary} />
+                <User size={20} color={colors.primary} />
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>Email</Text>
                   <Text style={styles.settingValue}>{user.email}</Text>
@@ -205,13 +219,12 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* About Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Info size={20} color={Colors.primary} />
+              <Info size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Version</Text>
                 <Text style={styles.settingValue}>1.0.0</Text>
@@ -224,18 +237,17 @@ export default function SettingsScreen() {
             onPress={() => router.push('/diagnostic')}
           >
             <View style={styles.settingLeft}>
-              <Activity size={20} color={Colors.primary} />
+              <Activity size={20} color={colors.primary} />
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Diagnostics</Text>
                 <Text style={styles.settingValue}>Test backend connectivity</Text>
               </View>
             </View>
-            <ChevronRight size={20} color={Colors.textSecondary} />
+            <ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Name Edit Modal */}
       <Modal
         visible={showNameModal}
         animationType="slide"
@@ -247,7 +259,7 @@ export default function SettingsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Name</Text>
               <TouchableOpacity onPress={() => setShowNameModal(false)}>
-                <X size={24} color={Colors.textSecondary} />
+                <X size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
@@ -256,7 +268,7 @@ export default function SettingsScreen() {
               value={tempName}
               onChangeText={setTempName}
               placeholder="Enter your name"
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               autoFocus
             />
             
@@ -282,7 +294,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Voice Selection Modal */}
       <Modal
         visible={showVoiceModal}
         animationType="slide"
@@ -294,7 +305,7 @@ export default function SettingsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose Voice</Text>
               <TouchableOpacity onPress={() => setShowVoiceModal(false)}>
-                <X size={24} color={Colors.textSecondary} />
+                <X size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
@@ -322,7 +333,7 @@ export default function SettingsScreen() {
                     <Text style={styles.voiceDescription}>{voice.description}</Text>
                   </View>
                   {profile.preferredVoice === voice.id && (
-                    <Check size={24} color={Colors.primary} />
+                    <Check size={24} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -331,7 +342,59 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={showThemeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowThemeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose Theme</Text>
+              <TouchableOpacity onPress={() => setShowThemeModal(false)}>
+                <X size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.voiceList}>
+              {(Object.keys(themeNames) as ThemeColor[]).map((themeKey) => {
+                const themeColors = themes[themeKey];
+                return (
+                  <TouchableOpacity
+                    key={themeKey}
+                    style={[
+                      styles.themeOption,
+                      selectedTheme === themeKey && styles.voiceOptionSelected,
+                    ]}
+                    onPress={async () => {
+                      await changeTheme(themeKey);
+                      setShowThemeModal(false);
+                      Alert.alert('Success', `Theme changed to ${themeNames[themeKey]}`);
+                    }}
+                  >
+                    <View style={styles.themePreview}>
+                      <View style={[styles.themeColorCircle, { backgroundColor: themeColors.primary }]} />
+                    </View>
+                    <View style={styles.voiceInfo}>
+                      <Text style={[
+                        styles.voiceName,
+                        selectedTheme === themeKey && styles.voiceNameSelected,
+                      ]}>
+                        {themeNames[themeKey]}
+                      </Text>
+                    </View>
+                    {selectedTheme === themeKey && (
+                      <Check size={24} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showDeleteModal}
         animationType="fade"
@@ -407,10 +470,10 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   scrollContent: {
     paddingBottom: 40,
@@ -421,24 +484,24 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: Colors.textSecondary,
+    fontWeight: '600' as const,
+    color: colors.textSecondary,
     marginBottom: 12,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
   settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.cardBackground,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
   },
   settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     flex: 1,
     gap: 12,
   },
@@ -447,109 +510,129 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 16,
-    fontWeight: '500',
-    color: Colors.text,
+    fontWeight: '500' as const,
+    color: colors.text,
     marginBottom: 4,
   },
   settingValue: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
     paddingHorizontal: 20,
   },
   modalContent: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 20,
     maxHeight: '80%',
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: 'bold' as const,
+    color: colors.text,
   },
   input: {
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    borderColor: colors.primary + '30',
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 12,
   },
   modalButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   cancelButton: {
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: Colors.textSecondary + '30',
+    borderColor: colors.textSecondary + '30',
   },
   cancelButtonText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   saveButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   saveButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   voiceList: {
     maxHeight: 400,
   },
   voiceOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   voiceOptionSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '1A',
   },
   voiceInfo: {
     flex: 1,
   },
   voiceName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
+    fontWeight: '600' as const,
+    color: colors.text,
     marginBottom: 4,
   },
   voiceNameSelected: {
-    color: Colors.primary,
+    color: colors.primary,
   },
   voiceDescription: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
+  },
+  themeOption: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  themePreview: {
+    marginRight: 12,
+  },
+  themeColorCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   signOutItem: {
     borderColor: 'rgba(255, 107, 107, 0.3)',
@@ -566,32 +649,32 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
   },
   deleteModalContent: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 24,
     marginHorizontal: 20,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   deleteIconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
     backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: 20,
   },
   deleteModalTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: 'bold' as const,
+    color: colors.text,
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   deleteModalMessage: {
     fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 24,
     marginBottom: 24,
   },
@@ -601,6 +684,6 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
 });
