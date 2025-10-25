@@ -198,7 +198,7 @@ function ProfileContent() {
                     <Sparkles color="#fff" size={28} />
                     <View>
                       <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
-                      <Text style={styles.upgradeSubtitle}>Unlimited AI features & premium voices</Text>
+                      <Text style={styles.upgradeSubtitle}>Enjoy ad-free experience</Text>
                     </View>
                   </View>
                   <View style={styles.upgradeButton}>
@@ -215,31 +215,13 @@ function ProfileContent() {
                 <Sparkles color={Colors.accent} size={24} />
                 <View style={styles.premiumStatusText}>
                   <Text style={styles.premiumStatusTitle}>Premium Member</Text>
-                  <Text style={styles.premiumStatusSubtitle}>You have unlimited access to all features</Text>
+                  <Text style={styles.premiumStatusSubtitle}>Enjoy your ad-free experience</Text>
                 </View>
               </View>
             </View>
           )}
 
-          <View style={styles.creditsCard}>
-            <View style={styles.creditsContent}>
-              <View style={styles.creditsLeft}>
-                <View style={styles.creditsIcon}>
-                  <Sparkles color={Colors.primary} size={20} />
-                </View>
-                <View>
-                  <Text style={styles.creditsLabel}>Available Credits</Text>
-                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.buyCreditsButton}
-                onPress={() => setShowPaywall(true)}
-              >
-                <Text style={styles.buyCreditsButtonText}>Buy More</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Achievements</Text>
@@ -647,52 +629,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  creditsCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  creditsContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  creditsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  creditsIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  creditsLabel: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  creditsValue: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  buyCreditsButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  buyCreditsButtonText: {
-    color: Colors.background,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+
 });

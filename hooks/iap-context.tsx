@@ -144,6 +144,16 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     return usageStats.availableVoices.includes(voice);
   }, [usageStats.availableVoices]);
 
+  const resetEntitlements = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem('entitlements');
+      setEntitlements(DEFAULT_ENTITLEMENTS);
+      console.log('✅ Entitlements reset');
+    } catch (error) {
+      console.error('❌ Error resetting entitlements:', error);
+    }
+  }, []);
+
   return useMemo(() => ({
     entitlements,
     usageStats,
@@ -154,6 +164,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     refreshEntitlements: loadEntitlements,
+    resetEntitlements,
   }), [
     entitlements,
     usageStats,
@@ -164,5 +175,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     loadEntitlements,
+    resetEntitlements,
   ]);
 });
