@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
 import { IAP_PRODUCT_IDS, IAPProductId, ALL_VOICES } from '@/constants/iap';
+import { useAuth } from './auth-context';
 
 interface Entitlements {
   credits: number;
@@ -17,19 +18,34 @@ interface UsageStats {
   canUseAI: boolean;
 }
 
-const DEFAULT_ENTITLEMENTS: Entitlements = {
+const DEFAULT_ENTITLEMENTS_AUTHENTICATED: Entitlements = {
   credits: 10,
   isPremium: false,
   premiumExpiresAt: null,
 };
 
+const DEFAULT_ENTITLEMENTS_GUEST: Entitlements = {
+  credits: 0,
+  isPremium: false,
+  premiumExpiresAt: null,
+};
+
 export const [IAPProvider, useIAP] = createContextHook(() => {
-  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS);
+  const { isGuest, isAuthenticated } = useAuth();
+  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
   const loadEntitlements = useCallback(async () => {
     try {
+      console.log('📦 Loading entitlements... isGuest:', isGuest, 'isAuthenticated:', isAuthenticated);
+      
+      if (isGuest) {
+        console.log('👤 Guest user: Setting credits to 0');
+        setEntitlements(DEFAULT_ENTITLEMENTS_GUEST);
+        return;
+      }
+      
       const timeoutPromise = new Promise<null>((resolve) => {
         setTimeout(() => {
           console.warn('⚠️ Entitlements loading timeout');
@@ -42,16 +58,25 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       
       if (stored) {
         const parsed = JSON.parse(stored) as Entitlements;
+        console.log('✅ Loaded entitlements from storage:', parsed);
         setEntitlements(parsed);
+      } else if (isAuthenticated && !isGuest) {
+        console.log('✅ New authenticated user: Setting default credits to 10');
+        setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
+      } else {
+        console.log('👤 No stored entitlements, using guest defaults');
+        setEntitlements(DEFAULT_ENTITLEMENTS_GUEST);
       }
     } catch (error) {
       console.error('❌ Error loading entitlements:', error);
+      const defaultEntitlements = isGuest ? DEFAULT_ENTITLEMENTS_GUEST : DEFAULT_ENTITLEMENTS_AUTHENTICATED;
+      setEntitlements(defaultEntitlements);
     }
-  }, []);
+  }, [isGuest, isAuthenticated]);
 
   useEffect(() => {
     loadEntitlements();
-  }, [loadEntitlements]);
+  }, [loadEntitlements, isGuest, isAuthenticated]);
 
   const saveEntitlements = useCallback(async (newEntitlements: Entitlements) => {
     try {
