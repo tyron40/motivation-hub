@@ -9,12 +9,15 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Sparkles, Zap, Check, RefreshCw, Shield, Youtube } from 'lucide-react-native';
+import { X, Check, RefreshCw, Shield, Youtube, LogIn } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { IAP_PRODUCTS, IAPProductId } from '@/constants/iap';
 import { useIAP } from '@/hooks/iap-context';
+import { useAuth } from '@/hooks/auth-context';
 
 interface PaywallModalProps {
   visible: boolean;
@@ -22,20 +25,55 @@ interface PaywallModalProps {
 }
 
 const PRICE_MAP: Record<string, string> = {
-  'com.tyrotech.motivationhub.credits.100': '$4.99',
-  'com.tyrotech.motivationhub.credits.500': '$19.99',
-  'com.tyrotech.motivationhub.credits.1000': '$34.99',
   'com.tyrotech.motivationhub.premium.monthly': '$4.99/month',
 };
 
 export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const { entitlements, isPurchasing, isRestoring, purchase, restorePurchases } = useIAP();
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
 
   const handlePurchase = async (productId: IAPProductId) => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Account Required',
+        'Please sign in or create an account to upgrade to Premium.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: () => {
+              onClose();
+              router.push('/auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     await purchase(productId);
   };
 
   const handleRestore = async () => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Account Required',
+        'Please sign in to restore your purchases.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: () => {
+              onClose();
+              router.push('/auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     await restorePurchases();
   };
 
@@ -47,8 +85,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
     Linking.openURL('https://rork.com/privacy');
   };
 
-  const creditProducts = IAP_PRODUCTS.filter(p => !p.isPremium);
-  const premiumProducts = IAP_PRODUCTS.filter(p => p.isPremium);
+  const premiumProduct = IAP_PRODUCTS[0];
 
   return (
     <Modal
@@ -62,7 +99,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
         style={styles.container}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Upgrade Your Experience</Text>
+          <Text style={styles.headerTitle}>Go Premium</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X color={Colors.text} size={24} />
           </TouchableOpacity>
@@ -73,131 +110,138 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.currentBalanceCard}>
-            <Sparkles color={Colors.primary} size={24} />
-            <Text style={styles.currentBalanceLabel}>Current Balance</Text>
-            <Text style={styles.currentBalanceValue}>{entitlements.credits} Credits</Text>
-            {entitlements.isPremium && (
-              <View style={styles.premiumBadge}>
-                <Shield color={Colors.accent} size={16} />
-                <Text style={styles.premiumBadgeText}>Premium Active</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Buy Credits</Text>
-            <Text style={styles.sectionSubtitle}>
-              Use credits for AI chat, text-to-speech, and more
-            </Text>
-
-            {creditProducts.map((product) => (
+          {!isAuthenticated && (
+            <View style={styles.authNoticeCard}>
+              <LogIn color={Colors.primary} size={24} />
+              <Text style={styles.authNoticeTitle}>Account Required</Text>
+              <Text style={styles.authNoticeText}>
+                Sign in or create an account to upgrade to Premium
+              </Text>
               <TouchableOpacity
-                key={product.productId}
-                style={[
-                  styles.productCard,
-                  product.popular && styles.productCardPopular,
-                ]}
-                onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing}
+                style={styles.signInButton}
+                onPress={() => {
+                  onClose();
+                  router.push('/auth');
+                }}
               >
-                {product.badge && (
-                  <View style={styles.popularBadge}>
-                    <Text style={styles.popularBadgeText}>{product.badge}</Text>
-                  </View>
-                )}
-                <View style={styles.productHeader}>
-                  <Zap color={Colors.primary} size={24} />
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productTitle}>{product.title}</Text>
-                    <Text style={styles.productDescription}>{product.description}</Text>
-                  </View>
-                  <Text style={styles.productPrice}>{PRICE_MAP[product.productId]}</Text>
-                </View>
+                <Text style={styles.signInButtonText}>Sign In / Sign Up</Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          )}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Go Ad-Free</Text>
-            <Text style={styles.sectionSubtitle}>
-              Remove all ads - AI features still require credits
-            </Text>
+          {entitlements.isPremium && (
+            <View style={styles.currentStatusCard}>
+              <Shield color={Colors.accent} size={32} />
+              <Text style={styles.currentStatusTitle}>Premium Active</Text>
+              <Text style={styles.currentStatusSubtitle}>
+                Enjoy your ad-free experience!
+              </Text>
+            </View>
+          )}
 
-            {premiumProducts.map((product) => (
+          {!entitlements.isPremium && (
+            <>
+              <View style={styles.heroSection}>
+                <Shield color={Colors.accent} size={64} />
+                <Text style={styles.heroTitle}>Remove All Ads</Text>
+                <Text style={styles.heroSubtitle}>
+                  Experience uninterrupted motivation
+                </Text>
+              </View>
+
               <TouchableOpacity
-                key={product.productId}
                 style={[
                   styles.premiumCard,
-                  product.popular && styles.productCardPopular,
+                  !isAuthenticated && styles.premiumCardDisabled,
                 ]}
-                onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing}
+                onPress={() => handlePurchase(premiumProduct.productId)}
+                disabled={isPurchasing || !isAuthenticated}
               >
-                {product.badge && (
-                  <View style={styles.adFreeBadge}>
-                    <Text style={styles.popularBadgeText}>{product.badge}</Text>
-                  </View>
-                )}
+                <View style={styles.adFreeBadge}>
+                  <Text style={styles.popularBadgeText}>{premiumProduct.badge}</Text>
+                </View>
+                
                 <View style={styles.premiumHeader}>
-                  <Shield color={Colors.accent} size={32} />
+                  <Shield color={Colors.accent} size={40} />
                   <View style={styles.premiumMainInfo}>
-                    <Text style={styles.premiumTitle}>{product.title}</Text>
-                    <Text style={styles.premiumPrice}>{PRICE_MAP[product.productId]}</Text>
+                    <Text style={styles.premiumTitle}>{premiumProduct.title}</Text>
+                    <Text style={styles.premiumPrice}>
+                      {PRICE_MAP[premiumProduct.productId]}
+                    </Text>
                   </View>
                 </View>
-                <Text style={styles.adFreeDescription}>{product.description}</Text>
+
+                <Text style={styles.adFreeDescription}>
+                  {premiumProduct.description}
+                </Text>
+
                 <View style={styles.featureList}>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={18} />
+                    <Check color={Colors.accent} size={20} />
                     <Text style={styles.featureText}>No Banner Ads</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={18} />
+                    <Check color={Colors.accent} size={20} />
                     <Text style={styles.featureText}>No Interstitial Ads</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={18} />
+                    <Check color={Colors.accent} size={20} />
                     <Text style={styles.featureText}>Uninterrupted Experience</Text>
                   </View>
                   <View style={styles.featureItem}>
-                    <Check color={Colors.accent} size={18} />
+                    <Check color={Colors.accent} size={20} />
                     <Text style={styles.featureText}>Support Development</Text>
                   </View>
-                  <View style={styles.featureItem}>
-                    <X color={Colors.textSecondary} size={18} />
-                    <Text style={[styles.featureText, { color: Colors.textSecondary }]}>Does NOT unlock unlimited AI credits</Text>
-                  </View>
                 </View>
+
                 <TouchableOpacity
-                  style={styles.subscribeButton}
-                  onPress={() => handlePurchase(product.productId)}
-                  disabled={isPurchasing}
+                  style={[
+                    styles.subscribeButton,
+                    !isAuthenticated && styles.subscribeButtonDisabled,
+                  ]}
+                  onPress={() => handlePurchase(premiumProduct.productId)}
+                  disabled={isPurchasing || !isAuthenticated}
                 >
-                  <Text style={styles.subscribeButtonText}>Subscribe Now</Text>
+                  <Text style={styles.subscribeButtonText}>
+                    {isAuthenticated ? 'Subscribe Now' : 'Sign In to Subscribe'}
+                  </Text>
                 </TouchableOpacity>
               </TouchableOpacity>
-            ))}
-          </View>
+
+              <View style={styles.disclaimerCard}>
+                <Text style={styles.disclaimerTitle}>What&apos;s Included</Text>
+                <Text style={styles.disclaimerText}>
+                  • Premium removes all ads from the app{'\n'}
+                  • All content remains freely accessible{'\n'}
+                  • YouTube videos remain unchanged
+                </Text>
+              </View>
+            </>
+          )}
 
           <View style={styles.youtubeDisclaimer}>
             <Youtube color={Colors.textSecondary} size={20} />
             <Text style={styles.youtubeDisclaimerText}>
-              YouTube videos are provided by YouTube and remain free. Purchases (credits and ad-free) do not unlock or alter YouTube content. Credits are used for AI features only.
+              YouTube videos are provided by YouTube and remain free. Premium subscription only removes ads from the app experience and does not unlock or alter YouTube content.
             </Text>
           </View>
 
           <TouchableOpacity
             style={styles.restoreButton}
             onPress={handleRestore}
-            disabled={isRestoring || isPurchasing}
+            disabled={isRestoring || isPurchasing || !isAuthenticated}
           >
             {isRestoring ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
               <>
-                <RefreshCw color={Colors.primary} size={18} />
-                <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+                <RefreshCw color={isAuthenticated ? Colors.primary : Colors.textSecondary} size={18} />
+                <Text style={[
+                  styles.restoreButtonText,
+                  !isAuthenticated && styles.restoreButtonTextDisabled,
+                ]}>
+                  Restore Purchases
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -260,113 +304,88 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  currentBalanceCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  authNoticeCard: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: Colors.primary,
   },
-  currentBalanceLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 8,
-  },
-  currentBalanceValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginTop: 4,
-  },
-  premiumBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Colors.accent + '20',
-    borderRadius: 12,
-  },
-  premiumBadgeText: {
-    color: Colors.accent,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
+  authNoticeTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: Colors.text,
-    marginBottom: 4,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  sectionSubtitle: {
+  authNoticeText: {
     fontSize: 14,
     color: Colors.textSecondary,
+    textAlign: 'center',
     marginBottom: 16,
   },
-  productCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    position: 'relative',
-  },
-  productCardPopular: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -10,
-    right: 16,
+  signInButton: {
     backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
     borderRadius: 12,
   },
-  popularBadgeText: {
-    color: Colors.background,
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  productHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productTitle: {
-    fontSize: 18,
+  signInButtonText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 2,
+    color: Colors.background,
   },
-  productDescription: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  currentStatusCard: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.accent,
   },
-  productPrice: {
-    fontSize: 18,
+  currentStatusTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: Colors.primary,
+    color: Colors.text,
+    marginTop: 12,
+  },
+  currentStatusSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  heroSection: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    marginBottom: 24,
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
   premiumCard: {
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 20,
     padding: 24,
-    marginBottom: 12,
+    marginBottom: 20,
     borderWidth: 2,
     borderColor: Colors.accent,
     position: 'relative',
+  },
+  premiumCardDisabled: {
+    opacity: 0.6,
   },
   adFreeBadge: {
     position: 'absolute',
@@ -382,11 +401,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  popularBadgeText: {
+    color: Colors.background,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
   premiumHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   premiumMainInfo: {
     flex: 1,
@@ -398,27 +422,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   premiumPrice: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: Colors.accent,
   },
   adFreeDescription: {
     fontSize: 15,
     color: Colors.textSecondary,
-    marginBottom: 20,
+    marginBottom: 24,
     lineHeight: 22,
   },
   featureList: {
-    gap: 12,
-    marginBottom: 24,
+    gap: 14,
+    marginBottom: 28,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   featureText: {
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.text,
     fontWeight: '500',
   },
@@ -433,10 +457,33 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  subscribeButtonDisabled: {
+    backgroundColor: Colors.textSecondary,
+    shadowOpacity: 0,
+  },
   subscribeButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.background,
+  },
+  disclaimerCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  disclaimerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  disclaimerText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 22,
   },
   youtubeDisclaimer: {
     flexDirection: 'row',
@@ -469,6 +516,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.primary,
     fontWeight: '600',
+  },
+  restoreButtonTextDisabled: {
+    color: Colors.textSecondary,
   },
   footer: {
     flexDirection: 'row',

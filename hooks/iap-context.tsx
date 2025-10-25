@@ -2,33 +2,21 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
-import { IAP_PRODUCT_IDS, IAPProductId, PREMIUM_VOICES, FREE_VOICES, FREE_TIER_LIMITS, CREDIT_COSTS } from '@/constants/iap';
+import { IAP_PRODUCT_IDS, IAPProductId, ALL_VOICES } from '@/constants/iap';
 
 interface Entitlements {
-  credits: number;
   isPremium: boolean;
   premiumExpiresAt: number | null;
-  dailyChatCount: number;
-  dailyTTSCount: number;
-  lastResetDate: string;
 }
 
 interface UsageStats {
-  todayChats: number;
-  todayTTS: number;
-  canUseChat: boolean;
-  canUseTTS: boolean;
-  availableVoices: readonly string[];
   isAdFree: boolean;
+  availableVoices: readonly string[];
 }
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
-  credits: 0,
   isPremium: false,
   premiumExpiresAt: null,
-  dailyChatCount: 0,
-  dailyTTSCount: 0,
-  lastResetDate: new Date().toISOString().split('T')[0],
 };
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
@@ -50,17 +38,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       
       if (stored) {
         const parsed = JSON.parse(stored) as Entitlements;
-        const today = new Date().toISOString().split('T')[0];
-        
-        if (parsed.lastResetDate !== today) {
-          parsed.dailyChatCount = 0;
-          parsed.dailyTTSCount = 0;
-          parsed.lastResetDate = today;
-          AsyncStorage.setItem('entitlements', JSON.stringify(parsed)).catch(err => 
-            console.error('Error saving reset entitlements:', err)
-          );
-        }
-        
         setEntitlements(parsed);
       }
     } catch (error) {
@@ -82,37 +59,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     }
   }, []);
 
-  const addCredits = useCallback(async (amount: number) => {
-    const newEntitlements = {
-      ...entitlements,
-      credits: entitlements.credits + amount,
-    };
-    await saveEntitlements(newEntitlements);
-  }, [entitlements, saveEntitlements]);
 
-  const deductCredits = useCallback(async (amount: number): Promise<boolean> => {
-    if (entitlements.credits < amount) {
-      return false;
-    }
-    
-    const newEntitlements = {
-      ...entitlements,
-      credits: entitlements.credits - amount,
-    };
-    await saveEntitlements(newEntitlements);
-    return true;
-  }, [entitlements, saveEntitlements]);
-
-  const incrementUsage = useCallback(async (type: 'chat' | 'tts') => {
-    const today = new Date().toISOString().split('T')[0];
-    const newEntitlements = {
-      ...entitlements,
-      dailyChatCount: type === 'chat' ? entitlements.dailyChatCount + 1 : entitlements.dailyChatCount,
-      dailyTTSCount: type === 'tts' ? entitlements.dailyTTSCount + 1 : entitlements.dailyTTSCount,
-      lastResetDate: today,
-    };
-    await saveEntitlements(newEntitlements);
-  }, [entitlements, saveEntitlements]);
 
   const setPremium = useCallback(async (expiresAt: number) => {
     const newEntitlements = {
@@ -188,14 +135,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       (entitlements.premiumExpiresAt === null || entitlements.premiumExpiresAt > Date.now());
     
     return {
-      todayChats: entitlements.dailyChatCount,
-      todayTTS: entitlements.dailyTTSCount,
-      canUseChat: entitlements.dailyChatCount < FREE_TIER_LIMITS.DAILY_CHAT_MESSAGES ||
-                   entitlements.credits >= CREDIT_COSTS.CHAT_MESSAGE,
-      canUseTTS: entitlements.dailyTTSCount < FREE_TIER_LIMITS.DAILY_TTS_GENERATIONS ||
-                  entitlements.credits >= CREDIT_COSTS.TTS_STANDARD,
-      availableVoices: FREE_VOICES,
       isAdFree: isPremiumActive,
+      availableVoices: ALL_VOICES,
     };
   }, [entitlements]);
 
@@ -210,9 +151,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     isRestoring,
     purchase,
     restorePurchases,
-    addCredits,
-    deductCredits,
-    incrementUsage,
+    setPremium,
     canUseVoice,
     refreshEntitlements: loadEntitlements,
   }), [
@@ -222,9 +161,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     isRestoring,
     purchase,
     restorePurchases,
-    addCredits,
-    deductCredits,
-    incrementUsage,
+    setPremium,
     canUseVoice,
     loadEntitlements,
   ]);
