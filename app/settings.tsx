@@ -12,11 +12,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, RefreshCw } from 'lucide-react-native';
+import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
-import { useIAP } from '@/hooks/iap-context';
 import { supabase } from '@/lib/supabase';
 
 const voiceCharacters = [
@@ -31,7 +30,6 @@ const voiceCharacters = [
 export default function SettingsScreen() {
   const { profile, updateProfile } = useUserProfile();
   const { user, signOut } = useAuth();
-  const { resetEntitlements } = useIAP();
   const [showNameModal, setShowNameModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -233,35 +231,6 @@ export default function SettingsScreen() {
               </View>
             </View>
             <ChevronRight size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={() => {
-              Alert.alert(
-                'Reset Entitlements',
-                'This will reset your premium status to regular. Are you sure?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Reset',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await resetEntitlements();
-                      Alert.alert('Success', 'Entitlements reset to regular');
-                    }
-                  }
-                ]
-              );
-            }}
-          >
-            <View style={styles.settingLeft}>
-              <RefreshCw size={20} color={Colors.categories.confidence} />
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Reset Entitlements</Text>
-                <Text style={styles.settingValue}>Reset premium to regular</Text>
-              </View>
-            </View>
           </TouchableOpacity>
         </View>
       </ScrollView>
