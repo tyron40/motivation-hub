@@ -8,12 +8,14 @@ interface AuthState {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isGuest: boolean;
 }
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<{ error?: any }>;
   signUp: (email: string, password: string, userData?: { name?: string }) => Promise<{ error?: any }>;
   signOut: () => Promise<{ error?: any }>;
+  continueAsGuest: () => Promise<void>;
   refreshSession: () => Promise<void>;
 }
 
@@ -23,6 +25,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     session: null,
     isLoading: true,
     isAuthenticated: false,
+    isGuest: false,
   });
 
   // Initialize auth state
@@ -59,6 +62,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             session: session || null,
             isLoading: false,
             isAuthenticated: !!session?.user,
+            isGuest: false,
           });
           
           if (session?.user) {
@@ -75,6 +79,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             session: null,
             isLoading: false,
             isAuthenticated: false,
+            isGuest: false,
           });
         }
       }
@@ -92,6 +97,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           session: session || null,
           isLoading: false,
           isAuthenticated: !!session?.user,
+          isGuest: false,
         });
       }
     });
@@ -184,6 +190,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         session: session || null,
         isLoading: false,
         isAuthenticated: !!session?.user,
+        isGuest: false,
       });
       
       console.log('✅ Session refreshed');
@@ -192,11 +199,28 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, []);
 
+  const continueAsGuest = useCallback(async () => {
+    try {
+      console.log('👤 Continuing as guest');
+      setAuthState({
+        user: null,
+        session: null,
+        isLoading: false,
+        isAuthenticated: true,
+        isGuest: true,
+      });
+      console.log('✅ Guest session started');
+    } catch (error) {
+      console.error('❌ Error starting guest session:', error);
+    }
+  }, []);
+
   return {
     ...authState,
     signIn,
     signUp,
     signOut,
+    continueAsGuest,
     refreshSession,
   } as AuthState & AuthActions;
 });

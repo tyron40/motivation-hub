@@ -5,16 +5,20 @@ import { Alert, Platform } from 'react-native';
 import { IAP_PRODUCT_IDS, IAPProductId, ALL_VOICES } from '@/constants/iap';
 
 interface Entitlements {
+  credits: number;
   isPremium: boolean;
   premiumExpiresAt: number | null;
 }
 
 interface UsageStats {
+  credits: number;
   isAdFree: boolean;
   availableVoices: readonly string[];
+  canUseAI: boolean;
 }
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
+  credits: 10,
   isPremium: false,
   premiumExpiresAt: null,
 };
@@ -60,6 +64,26 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, []);
 
 
+
+  const addCredits = useCallback(async (amount: number) => {
+    const newEntitlements = {
+      ...entitlements,
+      credits: entitlements.credits + amount,
+    };
+    await saveEntitlements(newEntitlements);
+  }, [entitlements, saveEntitlements]);
+
+  const useCredit = useCallback(async () => {
+    if (entitlements.credits <= 0) {
+      return false;
+    }
+    const newEntitlements = {
+      ...entitlements,
+      credits: entitlements.credits - 1,
+    };
+    await saveEntitlements(newEntitlements);
+    return true;
+  }, [entitlements, saveEntitlements]);
 
   const setPremium = useCallback(async (expiresAt: number) => {
     const newEntitlements = {
@@ -135,8 +159,10 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       (entitlements.premiumExpiresAt === null || entitlements.premiumExpiresAt > Date.now());
     
     return {
+      credits: entitlements.credits,
       isAdFree: isPremiumActive,
       availableVoices: ALL_VOICES,
+      canUseAI: entitlements.credits > 0,
     };
   }, [entitlements]);
 
@@ -151,6 +177,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     isRestoring,
     purchase,
     restorePurchases,
+    addCredits,
+    useCredit,
     setPremium,
     canUseVoice,
     refreshEntitlements: loadEntitlements,
@@ -161,6 +189,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     isRestoring,
     purchase,
     restorePurchases,
+    addCredits,
+    useCredit,
     setPremium,
     canUseVoice,
     loadEntitlements,

@@ -29,7 +29,7 @@ export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, continueAsGuest } = useAuth();
 
   React.useEffect(() => {
     fadeAnim.setValue(0);
@@ -187,6 +187,17 @@ export default function AuthScreen() {
                   >
                     <Text style={styles.secondaryButtonText}>Sign In</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.guestButton}
+                    onPress={async () => {
+                      await continueAsGuest();
+                      router.replace('/(tabs)');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.guestButtonText}>Continue as Guest</Text>
+                  </TouchableOpacity>
                 </View>
               </Animated.View>
             </ScrollView>
@@ -313,6 +324,17 @@ export default function AuthScreen() {
                         {currentScreen === 'signup' ? 'Sign In' : 'Sign Up'}
                       </Text>
                     </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.guestButton}
+                    onPress={async () => {
+                      await continueAsGuest();
+                      router.replace('/(tabs)');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.guestButtonText}>Continue as Guest</Text>
                   </TouchableOpacity>
                 </View>
               </Animated.View>
@@ -580,5 +602,20 @@ const styles = StyleSheet.create({
   toggleTextBold: {
     color: '#6C5CE7',
     fontWeight: '700' as const,
+  },
+  guestButton: {
+    backgroundColor: 'transparent',
+    borderRadius: 14,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  guestButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });

@@ -156,11 +156,13 @@ function AudioPlayerWrapper() {
 }
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isGuest } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen message="Loading your motivational coach..." />;
   }
+
+  const canAccessApp = isAuthenticated || isGuest;
 
   return (
     <>
@@ -171,7 +173,7 @@ function RootLayoutNav() {
         },
         headerTintColor: '#FFFFFF',
       }}>
-        {isAuthenticated ? (
+        {canAccessApp ? (
           <>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen 
@@ -237,7 +239,7 @@ function RootLayoutNav() {
           />
         )}
       </Stack>
-      {isAuthenticated && <AudioPlayerWrapper />}
+      {canAccessApp && <AudioPlayerWrapper />}
     </>
   );
 }
