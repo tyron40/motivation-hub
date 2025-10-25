@@ -22,8 +22,13 @@ export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
-        if (stored) {
-          setPlaylists(JSON.parse(stored));
+        if (stored && typeof stored === 'string') {
+          try {
+            setPlaylists(JSON.parse(stored));
+          } catch (parseError) {
+            console.error('❌ Error parsing playlists:', parseError);
+            setPlaylists([]);
+          }
         }
       } catch (error) {
         console.error('Error loading playlists:', error);

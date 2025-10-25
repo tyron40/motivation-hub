@@ -40,9 +40,14 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
         const loadPromise = AsyncStorage.getItem('userProfile');
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
-        if (stored) {
-          const parsedProfile = JSON.parse(stored);
-          setProfile({ ...defaultProfile, ...parsedProfile });
+        if (stored && typeof stored === 'string') {
+          try {
+            const parsedProfile = JSON.parse(stored);
+            setProfile({ ...defaultProfile, ...parsedProfile });
+          } catch (parseError) {
+            console.error('❌ Error parsing user profile:', parseError);
+            setProfile(defaultProfile);
+          }
         }
       } catch (error) {
         console.error('Error loading user profile:', error);

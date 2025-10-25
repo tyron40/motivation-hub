@@ -23,8 +23,13 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
-        if (stored) {
-          setSessions(JSON.parse(stored));
+        if (stored && typeof stored === 'string') {
+          try {
+            setSessions(JSON.parse(stored));
+          } catch (parseError) {
+            console.error('❌ Error parsing chat sessions:', parseError);
+            setSessions([]);
+          }
         }
       } catch (error) {
         console.error('Error loading chat sessions:', error);

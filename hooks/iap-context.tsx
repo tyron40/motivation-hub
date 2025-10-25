@@ -56,10 +56,16 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       const loadPromise = AsyncStorage.getItem('entitlements');
       const stored = await Promise.race([loadPromise, timeoutPromise]);
       
-      if (stored) {
-        const parsed = JSON.parse(stored) as Entitlements;
-        console.log('✅ Loaded entitlements from storage:', parsed);
-        setEntitlements(parsed);
+      if (stored && typeof stored === 'string') {
+        try {
+          const parsed = JSON.parse(stored) as Entitlements;
+          console.log('✅ Loaded entitlements from storage:', parsed);
+          setEntitlements(parsed);
+        } catch (parseError) {
+          console.error('❌ Error parsing entitlements:', parseError);
+          const defaultEntitlements = isGuest ? DEFAULT_ENTITLEMENTS_GUEST : DEFAULT_ENTITLEMENTS_AUTHENTICATED;
+          setEntitlements(defaultEntitlements);
+        }
       } else if (isAuthenticated && !isGuest) {
         console.log('✅ New authenticated user: Setting default credits to 10');
         setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);

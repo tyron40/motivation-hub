@@ -22,8 +22,13 @@ export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContext
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
-        if (stored) {
-          setFavorites(JSON.parse(stored));
+        if (stored && typeof stored === 'string') {
+          try {
+            setFavorites(JSON.parse(stored));
+          } catch (parseError) {
+            console.error('❌ Error parsing scripture favorites:', parseError);
+            setFavorites([]);
+          }
         }
       } catch (error) {
         console.error('Error loading favorite scriptures:', error);
