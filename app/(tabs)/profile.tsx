@@ -181,10 +181,21 @@ function ProfileContent() {
             })}
           </View>
 
-          {!isGuest && !entitlements.isPremium && (
+          {!entitlements.isPremium && (
             <TouchableOpacity 
               style={styles.upgradeCard}
               onPress={() => {
+                if (isGuest) {
+                  Alert.alert(
+                    'Account Required',
+                    'Create an account to upgrade to premium and enjoy unlimited AI features, premium voices, and no ads.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Create Account', onPress: () => router.push('/auth') }
+                    ]
+                  );
+                  return;
+                }
                 setShowPaywall(true);
               }}
             >
@@ -199,7 +210,7 @@ function ProfileContent() {
                     <Sparkles color="#fff" size={28} />
                     <View>
                       <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
-                      <Text style={styles.upgradeSubtitle}>Unlimited AI features & premium voices</Text>
+                      <Text style={styles.upgradeSubtitle}>No ads & unlimited AI features</Text>
                     </View>
                   </View>
                   <View style={styles.upgradeButton}>
