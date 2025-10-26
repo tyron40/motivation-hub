@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
 import { Audio } from 'expo-av';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
 
@@ -36,6 +36,7 @@ const voiceCharacters = [
 ] as const;
 
 export default function VoiceCoachScreen() {
+  const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const [, setMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -59,6 +60,7 @@ export default function VoiceCoachScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const avatarAnim = useRef(new Animated.Value(0)).current;
   
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
 
   const speakMessage = useCallback(async (text: string) => {
@@ -350,7 +352,6 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🎤 Starting recording...');
       
-      // Prevent multiple recordings
       if (isRecording || isProcessing || isStartingRef.current || isStoppingRef.current) {
         console.log('⚠️ Cannot start recording - already busy');
         return;
@@ -358,7 +359,6 @@ export default function VoiceCoachScreen() {
       
       isStartingRef.current = true;
       
-      // Stop any playing audio FIRST before starting to record
       if (sound || isPlaying) {
         console.log('🔇 Stopping any existing playback...');
         try {
@@ -374,7 +374,6 @@ export default function VoiceCoachScreen() {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // Ensure any existing recording is completely cleaned up first
       if (recordingRef.current) {
         try {
           console.log('🧹 Cleaning up existing recording...');
@@ -390,12 +389,10 @@ export default function VoiceCoachScreen() {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
-      // Web path using MediaRecorder
       if (Platform.OS === 'web') {
         try {
           console.log('🌐 Starting web recording via MediaRecorder');
           
-          // Check if mediaDevices is available
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error('Your browser does not support audio recording. Please use a modern browser like Chrome, Firefox, or Safari.');
           }
@@ -471,7 +468,6 @@ export default function VoiceCoachScreen() {
         }
       }
 
-      // Mobile: Request and check permissions
       console.log('🔐 Checking microphone permissions...');
       let permissionResponse = await Audio.getPermissionsAsync();
       console.log('🔐 Current permission status:', JSON.stringify(permissionResponse));
@@ -502,12 +498,10 @@ export default function VoiceCoachScreen() {
         setHasPermission(true);
       }
       
-      console.log('��� Microphone permission granted');
+      console.log('✅ Microphone permission granted');
       
-      // Wait a bit after permission grant to ensure system is ready
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Set audio mode for recording
       console.log('🔧 Setting up audio mode for recording...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -520,7 +514,6 @@ export default function VoiceCoachScreen() {
       console.log('✅ Audio mode configured for recording');
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      // Create new recording instance
       console.log('🆕 Creating new recording instance...');
       const recordingInstance = new Audio.Recording();
       
@@ -557,14 +550,12 @@ export default function VoiceCoachScreen() {
 
       console.log('▶️ Starting recording...');
       
-      // Set the start time BEFORE starting to ensure we capture the full duration
       recordingStartTimeRef.current = Date.now();
       console.log('⏱️ Recording start time set:', recordingStartTimeRef.current);
       
       await recordingInstance.startAsync();
       console.log('✅ Recording.startAsync() completed');
       
-      // Verify recording is actually running
       await new Promise(resolve => setTimeout(resolve, 150));
       const recordingStatus = await recordingInstance.getStatusAsync();
       console.log('📊 Recording status after start:', JSON.stringify(recordingStatus));
@@ -587,13 +578,11 @@ export default function VoiceCoachScreen() {
     } catch (error) {
       console.error('❌ Error starting recording:', error);
       
-      // Clean up on error
       recordingRef.current = null;
       setIsRecording(false);
       recordingStartTimeRef.current = null;
       isStartingRef.current = false;
       
-      // Reset audio mode on error
       try {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -618,7 +607,6 @@ export default function VoiceCoachScreen() {
     try {
       console.log('🛑 Stopping recording...');
       
-      // Prevent multiple stop calls
       if (isStoppingRef.current) {
         console.log('⚠️ Already stopping recording');
         return;
@@ -626,7 +614,6 @@ export default function VoiceCoachScreen() {
       
       isStoppingRef.current = true;
       
-      // Wait if start is still initializing
       if (isStartingRef.current) {
         console.log('⏳ Waiting for recording to initialize before stopping...');
         let waited = 0;
@@ -638,7 +625,6 @@ export default function VoiceCoachScreen() {
       }
       isStartingRef.current = false;
 
-      // Web stop path
       if (Platform.OS === 'web') {
         try {
           setIsRecording(false);
@@ -694,17 +680,14 @@ export default function VoiceCoachScreen() {
       let recordingToProcess = recordingRef.current;
       
       try {
-        // Wait a bit for the recording to finalize
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Get recording status first
         status = await recordingToProcess.getStatusAsync();
         console.log('📊 Recording status:', JSON.stringify(status, null, 2));
         console.log('📊 Duration:', status.durationMillis, 'ms');
         console.log('📊 Is recording:', status.isRecording);
         console.log('📊 Can record:', status.canRecord);
         
-        // Get URI before stopping (more reliable)
         if (status.canRecord || status.isRecording) {
           uri = recordingToProcess.getURI();
           console.log('📁 Recording URI:', uri);
@@ -722,7 +705,6 @@ export default function VoiceCoachScreen() {
         }
       } catch (error) {
         console.error('❌ Error stopping recording:', error);
-        // Try to get URI even if stop failed
         try {
           uri = recordingToProcess.getURI();
           console.log('📁 Got URI despite stop error:', uri);
@@ -733,7 +715,6 @@ export default function VoiceCoachScreen() {
         recordingRef.current = null;
       }
       
-      // Reset audio mode
       try {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -746,21 +727,17 @@ export default function VoiceCoachScreen() {
         console.error('❌ Error resetting audio mode:', error);
       }
       
-      // Check if we have a valid recording
       if (uri) {
         console.log('🎵 Processing recording with URI:', uri);
         
-        // Calculate elapsed time using our timestamp
         const elapsedMs = startedAt ? Date.now() - startedAt : null;
         const MIN_DURATION_MS = 300;
         
-        // Also check native duration
         const nativeDurationMs = status?.durationMillis ?? null;
         
         console.log(`⏱️ Elapsed time (our timer): ${elapsedMs}ms`);
         console.log(`⏱️ Native duration: ${nativeDurationMs}ms`);
         
-        // Use whichever duration is available and longer
         const actualDuration = Math.max(elapsedMs ?? 0, nativeDurationMs ?? 0);
         console.log(`⏱️ Actual duration used: ${actualDuration}ms (${(actualDuration / 1000).toFixed(2)}s)`);
         
@@ -776,7 +753,6 @@ export default function VoiceCoachScreen() {
           return;
         }
         
-        // Process the recording
         await processAudioTranscription(uri);
       } else {
         console.log('❌ No recording URI available');
@@ -800,12 +776,10 @@ export default function VoiceCoachScreen() {
       console.log('🔄 Processing audio transcription...');
       console.log('📁 Audio URI:', audioUri);
       
-      // Verify the audio file exists and has content
       if (!audioUri || audioUri.trim().length === 0) {
         throw new Error('Invalid audio URI - recording may have failed');
       }
       
-      // Create FormData for speech-to-text
       const formData = new FormData();
       const uriParts = audioUri.split('.');
       const fileType = uriParts[uriParts.length - 1];
@@ -813,7 +787,6 @@ export default function VoiceCoachScreen() {
       console.log('📄 File type detected:', fileType);
       console.log('📄 Full URI:', audioUri);
       
-      // Properly format the audio file for FormData
       const mimeType = fileType === 'wav' ? 'audio/wav' : 
                        fileType === 'm4a' ? 'audio/mp4' : 
                        fileType === 'webm' ? 'audio/webm' : 
@@ -838,7 +811,6 @@ export default function VoiceCoachScreen() {
         fileType: audioFile.type,
       });
       
-      // Transcribe audio with timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         console.log('⏱️ Request timeout after 30 seconds');
@@ -866,12 +838,10 @@ export default function VoiceCoachScreen() {
         console.error('❌ Transcription error response:', errorText.substring(0, 200));
         console.error('❌ Full error (first 500 chars):', errorText.substring(0, 500));
         
-        // Check if it's an HTML error page (503/504)
         if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
           throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
         }
         
-        // More specific error messages
         if (transcriptionResponse.status === 400) {
           throw new Error('Invalid audio format. Please try recording again.');
         } else if (transcriptionResponse.status === 413) {
@@ -883,7 +853,6 @@ export default function VoiceCoachScreen() {
         throw new Error(`Transcription failed (${transcriptionResponse.status}): ${errorText.substring(0, 100)}`);
       }
       
-      // Get response as text first to debug
       const responseText = await transcriptionResponse.text();
       console.log('📥 Raw response received');
       console.log('📥 Response length:', responseText.length);
@@ -903,15 +872,12 @@ export default function VoiceCoachScreen() {
         console.error('❌ Failed to parse JSON response:', parseError);
         console.error('❌ Response was (first 500 chars):', responseText.substring(0, 500));
         
-        // Check if response looks like an error message
         if (responseText.toLowerCase().includes('error') || 
             responseText.toLowerCase().includes('invalid') ||
             responseText.toLowerCase().includes('failed')) {
           throw new Error(`Transcription service error: ${responseText.substring(0, 200)}`);
         }
         
-        // If it's not JSON and not an obvious error, it might be the transcription itself
-        // Some APIs return plain text instead of JSON
         if (responseText.trim().length > 0 && !responseText.startsWith('{') && !responseText.startsWith('[')) {
           console.log('⚠️ Response appears to be plain text, treating as transcription');
           transcriptionData = { text: responseText.trim() };
@@ -922,7 +888,6 @@ export default function VoiceCoachScreen() {
       
       console.log('📥 Transcription response data:', JSON.stringify(transcriptionData));
       
-      // Handle different response formats
       const text = transcriptionData.text || transcriptionData.transcription || transcriptionData.result;
       console.log('🎯 Extracted text type:', typeof text);
       console.log('🎯 Extracted text value:', JSON.stringify(text));
@@ -934,8 +899,6 @@ export default function VoiceCoachScreen() {
         console.log('✅ Valid transcribed text:', cleanedText);
         console.log('📏 Cleaned text length:', cleanedText.length);
         
-        // Filter out common transcription errors and noise
-        // Very lenient noise filtering - only filter empty or single character responses
         const noisePatterns = ['.', '...', '', ' '];
         
         if (noisePatterns.includes(cleanedText) || cleanedText.length < 1) {
@@ -953,11 +916,9 @@ export default function VoiceCoachScreen() {
         
         console.log('💬 Adding user message:', userMessage);
         
-        // Update messages state and get the updated conversation
         setMessages(prev => {
           const updatedMessages = [...prev, userMessage];
           console.log('📝 Updated messages count:', updatedMessages.length);
-          // Call AI response with the updated messages
           getAIResponse(updatedMessages);
           return updatedMessages;
         });
@@ -1038,7 +999,6 @@ export default function VoiceCoachScreen() {
         const errorText = await transcriptionResponse.text();
         console.error('❌ Transcription error response:', errorText.substring(0, 200));
         
-        // Check if it's an HTML error page (503/504)
         if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
           throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
         }
@@ -1158,18 +1118,15 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
     if (isPlaying) {
       try {
         if (Platform.OS !== 'web') {
-          // Stop native speech
           const Speech = await import('expo-speech');
           await Speech.stop();
         } else {
-          // Stop Web Speech API if available
           if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
             console.log('🔇 Canceling Web Speech synthesis...');
             window.speechSynthesis.cancel();
           }
         }
         
-        // Stop Expo Audio if sound exists
         if (sound) {
           await sound.stopAsync();
           await sound.unloadAsync();
@@ -1198,21 +1155,20 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       <Stack.Screen 
         options={{ 
           title: 'Voice Coach',
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
           headerRight: () => (
             <TouchableOpacity
               onPress={() => setShowVoiceModal(true)}
               style={styles.headerButton}
             >
-              <Settings size={24} color={Colors.text} />
+              <Settings size={24} color={colors.text} />
             </TouchableOpacity>
           ),
         }} 
       />
       
       <View style={styles.content}>
-        {/* Avatar Section */}
         <View style={styles.avatarSection}>
           <Animated.View 
             style={[
@@ -1226,30 +1182,29 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
                 style={styles.avatarImage}
               />
             ) : (
-              <User size={80} color={Colors.primary} />
+              <User size={80} color={colors.primary} />
             )}
           </Animated.View>
           
           <View style={styles.coachInfo}>
-            <Text style={styles.coachName}>{profile.coachCharacter?.name || 'Coach Alex'}</Text>
+            <Text style={[styles.coachName, { color: colors.text }]}>{profile.coachCharacter?.name || 'Coach Alex'}</Text>
             <TouchableOpacity 
               style={styles.changeCoachButton}
               onPress={() => router.push('/coach-character')}
             >
-              <Sparkles size={14} color={Colors.primary} />
-              <Text style={styles.changeCoachText}>Change Coach</Text>
+              <Sparkles size={14} color={colors.primary} />
+              <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Coach</Text>
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.coachTitle}>{profile.coachCharacter?.description || 'Your Personal Motivation Coach'}</Text>
-          <Text style={styles.voiceIndicator}>
+          <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>{profile.coachCharacter?.description || 'Your Personal Motivation Coach'}</Text>
+          <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
             Speaking as: {voiceCharacters.find(v => v.id === profile.preferredVoice)?.name || 'Alloy'}
           </Text>
         </View>
 
-        {/* Status Display Only - No conversation text */}
         <View style={styles.messageSection}>
-          <Text style={styles.statusMainText}>
+          <Text style={[styles.statusMainText, { color: colors.primary }]}>
             {currentStatus}
           </Text>
           {isPlaying && (
@@ -1262,9 +1217,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
           )}
         </View>
 
-        {/* Controls */}
         <View style={styles.controlsSection}>
-          {/* Main Record Button */}
           <Animated.View style={[styles.recordButtonContainer, { transform: [{ scale: pulseAnim }] }]}>
             <TouchableOpacity
               testID="record-button"
@@ -1286,7 +1239,6 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Status Indicator */}
           <View style={styles.statusIndicator}>
             {isRecording && (
               <View style={styles.recordingIndicator}>
@@ -1295,17 +1247,16 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
               </View>
             )}
             {isProcessing && (
-              <Text style={styles.statusText}>Processing...</Text>
+              <Text style={[styles.statusText, { color: colors.primary }]}>Processing...</Text>
             )}
             {isPlaying && (
-              <Text style={styles.statusText}>Speaking...</Text>
+              <Text style={[styles.statusText, { color: colors.primary }]}>Speaking...</Text>
             )}
           </View>
         </View>
 
-        {/* Instructions */}
         <View style={styles.instructionsSection}>
-          <Text style={styles.instructionsText}>
+          <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
             {hasPermission 
               ? 'Hold the microphone button to speak with your coach'
               : 'Microphone permission required - tap the button to enable'}
@@ -1320,14 +1271,13 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
             style={styles.voiceSettingsButton}
             onPress={() => setShowVoiceModal(true)}
           >
-            <Text style={styles.voiceSettingsText}>
+            <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
               Voice: {voiceCharacters.find(v => v.id === profile.preferredVoice)?.name || 'Alloy'}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Voice Selection Modal */}
       <Modal
         visible={showVoiceModal}
         animationType="slide"
@@ -1335,15 +1285,16 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         onRequestClose={() => setShowVoiceModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose Voice Character</Text>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice Character</Text>
             <ScrollView style={styles.voiceList}>
               {voiceCharacters.map((voice) => (
                 <TouchableOpacity
                   key={voice.id}
                   style={[
                     styles.voiceOption,
-                    profile.preferredVoice === voice.id && styles.voiceOptionSelected,
+                    { backgroundColor: colors.background },
+                    profile.preferredVoice === voice.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                   ]}
                   onPress={async () => {
                     console.log('🎤 Selecting voice:', voice.id);
@@ -1356,20 +1307,20 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
                   <View style={styles.voiceInfo}>
                     <Text style={[
                       styles.voiceName,
-                      profile.preferredVoice === voice.id && styles.voiceNameSelected,
+                      { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
                     ]}>
                       {voice.name}
                     </Text>
-                    <Text style={styles.voiceDescription}>{voice.description}</Text>
+                    <Text style={[styles.voiceDescription, { color: colors.textSecondary }]}>{voice.description}</Text>
                   </View>
                   {profile.preferredVoice === voice.id && (
-                    <Check size={24} color={Colors.primary} />
+                    <Check size={24} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
             </ScrollView>
             <TouchableOpacity
-              style={styles.modalCloseButton}
+              style={[styles.modalCloseButton, { backgroundColor: colors.primary }]}
               onPress={() => setShowVoiceModal(false)}
             >
               <Text style={styles.modalCloseText}>Done</Text>
@@ -1381,10 +1332,10 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
@@ -1399,12 +1350,12 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+    backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 3,
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
     overflow: 'hidden',
   },
   avatarImage: {
@@ -1423,45 +1374,40 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+    backgroundColor: colors.primary + '10',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
+    borderColor: colors.primary + '40',
   },
   changeCoachText: {
     fontSize: 12,
-    color: Colors.primary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   coachName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: 'bold' as const,
     marginBottom: 4,
   },
   coachTitle: {
     fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   voiceIndicator: {
     fontSize: 12,
-    color: Colors.primary,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: 'italic' as const,
   },
   messageSection: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
     paddingHorizontal: 20,
   },
   statusMainText: {
     fontSize: 20,
-    color: Colors.primary,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 28,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: 16,
   },
   stopButton: {
@@ -1475,22 +1421,21 @@ const styles = StyleSheet.create({
   stopButtonText: {
     color: '#e74c3c',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   controlsSection: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingVertical: 40,
   },
-
   recordButton: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.primary,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     elevation: 8,
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1505,12 +1450,12 @@ const styles = StyleSheet.create({
   statusIndicator: {
     marginTop: 20,
     height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   recordingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   recordingDot: {
     width: 8,
@@ -1522,103 +1467,48 @@ const styles = StyleSheet.create({
   recordingText: {
     color: '#e74c3c',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   statusText: {
-    color: Colors.primary,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   instructionsSection: {
     paddingBottom: 20,
   },
   instructionsText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 20,
   },
   warningText: {
     fontSize: 12,
     color: '#F59E0B',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginTop: 4,
   },
   voiceSettingsButton: {
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
+    backgroundColor: colors.primary + '10',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
-    alignSelf: 'center',
+    borderColor: colors.primary + '40',
+    alignSelf: 'center' as const,
   },
   voiceSettingsText: {
     fontSize: 14,
-    color: Colors.primary,
-    fontWeight: '500',
-  },
-  lastMessageContainer: {
-    padding: 16,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  lastMessageText: {
-    fontSize: 16,
-    color: Colors.text,
-    lineHeight: 24,
-  },
-  lastMessageTime: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 8,
-  },
-  messagesScroll: {
-    flex: 1,
-    maxHeight: 300,
-  },
-  messageBubble: {
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 12,
-    maxWidth: '85%',
-  },
-  assistantBubble: {
-    backgroundColor: Colors.cardBackground,
-    alignSelf: 'flex-start',
-    marginRight: 40,
-  },
-  userBubble: {
-    backgroundColor: Colors.primary + '20',
-    alignSelf: 'flex-end',
-    marginLeft: 40,
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  assistantText: {
-    color: Colors.text,
-  },
-  userText: {
-    color: Colors.text,
-  },
-  messageTime: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 4,
+    fontWeight: '500' as const,
   },
   recordButtonContainer: {
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
   },
   modalContent: {
-    backgroundColor: Colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 24,
@@ -1627,9 +1517,8 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-    textAlign: 'center',
+    fontWeight: 'bold' as const,
+    textAlign: 'center' as const,
     marginBottom: 24,
     paddingHorizontal: 20,
   },
@@ -1637,49 +1526,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   voiceOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: Colors.background,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 2,
     borderColor: 'transparent',
-  },
-  voiceOptionSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(139, 69, 19, 0.1)',
   },
   voiceInfo: {
     flex: 1,
   },
   voiceName: {
     fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
+    fontWeight: '600' as const,
     marginBottom: 4,
-  },
-  voiceNameSelected: {
-    color: Colors.primary,
   },
   voiceDescription: {
     fontSize: 14,
-    color: Colors.textSecondary,
   },
   modalCloseButton: {
     marginTop: 24,
     marginHorizontal: 20,
-    backgroundColor: Colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   modalCloseText: {
     color: 'white',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   headerButton: {
     marginRight: 16,
