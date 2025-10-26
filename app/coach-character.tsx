@@ -15,9 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles, Check, Wand2 } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
-import Colors from '@/constants/colors';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
+import { useTheme } from '@/hooks/theme-context';
 
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
@@ -65,6 +65,7 @@ const PRESET_CHARACTERS: CoachCharacter[] = [
 ];
 
 export default function CoachCharacterScreen() {
+  const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const [selectedCharacter, setSelectedCharacter] = useState<CoachCharacter | null>(
     profile.coachCharacter || PRESET_CHARACTERS[0]
@@ -148,22 +149,22 @@ export default function CoachCharacterScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
               <LinearGradient
-                colors={[Colors.primary, Colors.secondary]}
+                colors={[colors.primary, colors.secondary]}
                 style={styles.headerIcon}
               >
                 <Sparkles color="white" size={20} />
               </LinearGradient>
-              <Text style={styles.title}>Choose Your Coach</Text>
+              <Text style={[styles.title, { color: colors.text }]}>Choose Your Coach</Text>
             </View>
             <TouchableOpacity
-              style={styles.doneButton}
+              style={[styles.doneButton, { backgroundColor: colors.primary }]}
               onPress={() => router.back()}
             >
               <Text style={styles.doneButtonText}>Done</Text>
@@ -175,14 +176,15 @@ export default function CoachCharacterScreen() {
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.sectionTitle}>Preset Characters</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Preset Characters</Text>
             <View style={styles.charactersGrid}>
               {PRESET_CHARACTERS.map((character) => (
                 <TouchableOpacity
                   key={character.id}
                   style={[
                     styles.characterCard,
-                    selectedCharacter?.id === character.id && styles.characterCardSelected,
+                    { backgroundColor: colors.cardBackground },
+                    selectedCharacter?.id === character.id && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
                   ]}
                   onPress={() => handleSelectCharacter(character)}
                 >
@@ -191,12 +193,12 @@ export default function CoachCharacterScreen() {
                     style={styles.characterImage}
                   />
                   {selectedCharacter?.id === character.id && (
-                    <View style={styles.selectedBadge}>
+                    <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
                       <Check color="white" size={16} />
                     </View>
                   )}
-                  <Text style={styles.characterName}>{character.name}</Text>
-                  <Text style={styles.characterDescription} numberOfLines={2}>
+                  <Text style={[styles.characterName, { color: colors.text }]}>{character.name}</Text>
+                  <Text style={[styles.characterDescription, { color: colors.textSecondary }]} numberOfLines={2}>
                     {character.description}
                   </Text>
                 </TouchableOpacity>
@@ -205,26 +207,26 @@ export default function CoachCharacterScreen() {
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionTitle}>Create Custom Character</Text>
-            <Text style={styles.sectionSubtitle}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Create Custom Character</Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
               Describe your ideal coach and we will generate a unique character using AI
             </Text>
 
             <View style={styles.customSection}>
-              <Text style={styles.inputLabel}>Coach Name</Text>
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Coach Name</Text>
               <TextInput
-                style={styles.customNameInput}
+                style={[styles.customNameInput, { color: colors.text }]}
                 placeholder="E.g., Coach Sarah, Mentor John, etc."
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 value={customName}
                 onChangeText={setCustomName}
               />
 
-              <Text style={styles.inputLabel}>Character Description</Text>
+              <Text style={[styles.inputLabel, { color: colors.text }]}>Character Description</Text>
               <TextInput
-                style={styles.customInput}
+                style={[styles.customInput, { color: colors.text }]}
                 placeholder="E.g., A wise elderly mentor with gray hair and glasses, wearing professional attire..."
-                placeholderTextColor={Colors.textSecondary}
+                placeholderTextColor={colors.textSecondary}
                 value={customDescription}
                 onChangeText={setCustomDescription}
                 multiline
@@ -232,7 +234,7 @@ export default function CoachCharacterScreen() {
               />
 
               <TouchableOpacity
-                style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
+                style={[styles.generateButton, { backgroundColor: colors.primary }, isGenerating && styles.generateButtonDisabled]}
                 onPress={handleGenerateCustomCharacter}
                 disabled={isGenerating}
               >
@@ -248,11 +250,12 @@ export default function CoachCharacterScreen() {
 
               {generatedCharacter && (
                 <View style={styles.generatedPreview}>
-                  <Text style={styles.previewTitle}>Generated Character</Text>
+                  <Text style={[styles.previewTitle, { color: colors.text }]}>Generated Character</Text>
                   <TouchableOpacity
                     style={[
                       styles.characterCard,
-                      selectedCharacter?.id === generatedCharacter.id && styles.characterCardSelected,
+                      { backgroundColor: colors.cardBackground },
+                      selectedCharacter?.id === generatedCharacter.id && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
                     ]}
                     onPress={() => handleSelectCharacter(generatedCharacter)}
                   >
@@ -261,12 +264,12 @@ export default function CoachCharacterScreen() {
                       style={styles.characterImage}
                     />
                     {selectedCharacter?.id === generatedCharacter.id && (
-                      <View style={styles.selectedBadge}>
+                      <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
                         <Check color="white" size={16} />
                       </View>
                     )}
-                    <Text style={styles.characterName}>{generatedCharacter.name}</Text>
-                    <Text style={styles.characterDescription} numberOfLines={2}>
+                    <Text style={[styles.characterName, { color: colors.text }]}>{generatedCharacter.name}</Text>
+                    <Text style={[styles.characterDescription, { color: colors.textSecondary }]} numberOfLines={2}>
                       {generatedCharacter.description}
                     </Text>
                   </TouchableOpacity>
@@ -307,15 +310,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    color: Colors.text,
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
   },
   doneButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Colors.primary,
   },
   doneButtonText: {
     color: 'white',
@@ -330,14 +331,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sectionTitle: {
-    color: Colors.text,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     marginTop: 24,
     marginBottom: 8,
   },
   sectionSubtitle: {
-    color: Colors.textSecondary,
     fontSize: 14,
     marginBottom: 16,
     lineHeight: 20,
@@ -350,16 +349,11 @@ const styles = StyleSheet.create({
   },
   characterCard: {
     width: '47%',
-    backgroundColor: Colors.cardBackground,
     borderRadius: 16,
     padding: 16,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 2,
     borderColor: 'transparent',
-  },
-  characterCardSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '20',
   },
   characterImage: {
     width: 80,
@@ -368,27 +362,24 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   selectedBadge: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 12,
     right: 12,
-    backgroundColor: Colors.primary,
     width: 28,
     height: 28,
     borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   characterName: {
-    color: Colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: 4,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   characterDescription: {
-    color: Colors.textSecondary,
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 16,
   },
   divider: {
@@ -400,9 +391,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   inputLabel: {
-    color: Colors.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: 8,
     marginTop: 8,
   },
@@ -410,7 +400,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     padding: 16,
-    color: Colors.text,
     fontSize: 16,
     marginBottom: 16,
   },
@@ -418,19 +407,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     padding: 16,
-    color: Colors.text,
     fontSize: 16,
     minHeight: 100,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
     marginBottom: 16,
   },
   generateButton: {
-    backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   generateButtonDisabled: {
@@ -445,9 +432,8 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   previewTitle: {
-    color: Colors.text,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginBottom: 16,
   },
 });
