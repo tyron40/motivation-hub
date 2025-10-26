@@ -34,15 +34,32 @@ export default function AudioOnlyVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const webViewRef = useRef<WebView>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const progressRef = progressIntervalRef.current;
+    const loadingRef = loadingTimeoutRef.current;
+    
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.warn('⚠️ Loading timeout - player may not be ready');
+      setIsLoading(false);
+      setError('Player took too long to load. Please try again.');
+      onError?.('Loading timeout');
+    }, 10000);
+
     return () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
+      if (progressRef) {
+        clearInterval(progressRef);
+      }
+      if (loadingRef) {
+        clearTimeout(loadingRef);
+      }
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, []);
+  }, [onError]);
 
   if (!videoId || typeof videoId !== 'string' || videoId.trim().length === 0) {
     console.warn('⚠️ AudioOnlyVideoPlayer: Invalid videoId provided:', videoId);
@@ -263,19 +280,28 @@ export default function AudioOnlyVideoPlayer({
     try {
       const data = JSON.parse(event.nativeEvent.data);
       
-      console.log('📨 WebView message:', data.type, data.stateName || '');
+      console.log('📨 WebView message:', data.type, data.stateName || '', data);
       
       switch(data.type) {
         case 'ready':
           console.log('✅ Player ready, duration:', data.duration);
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
           setIsLoading(false);
+          setError(null);
           if (data.duration) {
             setDuration(data.duration);
           }
           break;
         case 'playbackStarted':
           console.log('▶️ Playback started successfully');
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
+          setIsLoading(false);
           setIsPlaying(true);
+          setError(null);
           break;
         case 'stateChange':
           console.log('🔄 State change:', data.stateName, '(', data.state, ')');
@@ -306,15 +332,25 @@ export default function AudioOnlyVideoPlayer({
           onEnd?.();
           break;
         case 'error':
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
           const errorMsg = data.errorMessage || `Failed to play audio: Error code ${data.error}`;
           console.error('❌ Player error:', errorMsg);
           setError(errorMsg);
           setIsLoading(false);
+          setIsPlaying(false);
           onError?.(errorMsg);
           break;
       }
     } catch (e) {
-      console.error('Error parsing WebView message:', e);
+      console.error('❌ Error parsing WebView message:', e, event.nativeEvent.data);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      setError('Communication error with player');
+      setIsLoading(false);
+      onError?.('WebView communication error');
     }
   };
 
@@ -364,12 +400,23 @@ export default function AudioOnlyVideoPlayer({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (error) {
+  if (error && !isLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Unable to play audio</Text>
-          <Text style={styles.errorSubtext}>{title}</Text>
+          <Text style={styles.errorSubtext}>{error}</Text>
+          <TouchableOpacity 
+            onPress={() => {
+              setError(null);
+              setIsLoading(true);
+              setCurrentTime(0);
+              setDuration(0);
+            }}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -617,5 +664,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
