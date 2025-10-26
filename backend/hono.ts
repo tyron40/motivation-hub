@@ -272,8 +272,10 @@ function parseDuration(duration: string): number {
 
 async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
   if (!YOUTUBE_API_KEY) {
-    console.warn('[YouTube] API key not configured');
-    return [];
+    console.error('[YouTube] ❌ API key not configured!');
+    console.error('[YouTube] Please set YOUTUBE_API_KEY in Vercel environment variables');
+    console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
+    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY in Vercel environment variables.');
   }
 
   try {
@@ -287,11 +289,43 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     console.log('[YouTube] Fetching search results...');
+    console.log('[YouTube] API Key present:', YOUTUBE_API_KEY ? `Yes (${YOUTUBE_API_KEY.substring(0, 10)}...)` : 'No');
     const searchResponse = await fetch(searchUrl.toString());
     if (!searchResponse.ok) {
       const errorText = await searchResponse.text();
       console.error('[YouTube] Search API error:', searchResponse.status, errorText);
-      throw new Error(`YouTube API error: ${searchResponse.status}`);
+      
+      let errorDetails = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error) {
+          errorDetails = errorJson.error.message || errorJson.error;
+          console.error('[YouTube] Error details:', errorJson.error);
+          
+          if (searchResponse.status === 403) {
+            if (errorDetails.includes('quotaExceeded') || errorDetails.includes('quota')) {
+              errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
+            } else if (errorDetails.includes('API key')) {
+              errorDetails = `YouTube API key is invalid or restricted. Please check:
+1. API key is correct in Vercel environment variables
+2. YouTube Data API v3 is enabled in Google Cloud Console
+3. API key restrictions (if any) allow requests from your server`;
+            } else {
+              errorDetails = `YouTube API forbidden (403). Possible reasons:
+1. Invalid API key
+2. YouTube Data API v3 not enabled
+3. API key has restrictions
+4. Daily quota exceeded
+
+Details: ${errorDetails}`;
+            }
+          }
+        }
+      } catch (e) {
+        // Not JSON, use raw error
+      }
+      
+      throw new Error(`YouTube API error: ${searchResponse.status} - ${errorDetails}`);
     }
 
     const searchData = await searchResponse.json();
