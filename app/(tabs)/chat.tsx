@@ -18,6 +18,7 @@ import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, Mes
 import { Stack } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
+import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,6 +59,7 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const insets = useSafeAreaInsets();
+  const styles = getStyles(colors);
   const { 
     sessions, 
     currentSessionId, 
@@ -800,6 +802,7 @@ export default function ChatScreen() {
             onClose={() => setShowSettings(false)}
             profile={profile}
             updateProfile={updateProfile}
+            styles={styles}
           />
 
           <ChatHistoryModal
@@ -832,6 +835,7 @@ export default function ChatScreen() {
               setMessages([]);
               setShowHistory(false);
             }}
+            styles={styles}
           />
 
 
@@ -908,9 +912,10 @@ interface SettingsModalProps {
   onClose: () => void;
   profile: any;
   updateProfile: (updates: any) => void;
+  styles: any;
 }
 
-const SettingsModal = ({ visible, onClose, profile, updateProfile }: SettingsModalProps) => {
+const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: SettingsModalProps) => {
   const [tempName, setTempName] = useState(profile.name);
   const [tempVoice, setTempVoice] = useState(profile.preferredVoice);
   const [tempVoiceEnabled, setTempVoiceEnabled] = useState(profile.voiceEnabled);
@@ -1011,9 +1016,10 @@ interface ChatHistoryModalProps {
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onNewSession: () => void;
+  styles: any;
 }
 
-const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSelectSession, onDeleteSession, onNewSession }: ChatHistoryModalProps) => {
+const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSelectSession, onDeleteSession, onNewSession, styles }: ChatHistoryModalProps) => {
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     const now = new Date();
