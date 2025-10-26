@@ -184,7 +184,7 @@ async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[
   }
 }
 
-const CACHE_DURATION = 1000 * 60 * 60 * 24;
+const CACHE_DURATION = 1000 * 60 * 60 * 24 * 7;
 const CACHE_PREFIX = 'content_cache_';
 
 interface CachedContent {

@@ -200,6 +200,9 @@ app.post("/chat", handleChat);
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
 
+const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 1000 * 60 * 60 * 12;
+
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
     'motivational speech 2024',
@@ -271,10 +274,24 @@ function parseDuration(duration: string): number {
 }
 
 async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
+  const cacheKey = `${query}-${maxResults}`;
+  const cached = REQUEST_CACHE.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`[YouTube] ✅ Using cached data for: "${query}"`);
+    return cached.data;
+  }
+
   if (!YOUTUBE_API_KEY) {
     console.error('[YouTube] ❌ API key not configured!');
     console.error('[YouTube] Please set YOUTUBE_API_KEY in Vercel environment variables');
     console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
+    
+    if (cached) {
+      console.warn('[YouTube] ⚠️ Using expired cache as fallback');
+      return cached.data;
+    }
+    
     throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY in Vercel environment variables.');
   }
 
@@ -321,7 +338,7 @@ Details: ${errorDetails}`;
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Not JSON, use raw error
       }
       
@@ -350,7 +367,7 @@ Details: ${errorDetails}`;
 
     const detailsData = await detailsResponse.json();
 
-    return detailsData.items.map((item: any) => ({
+    const videos = detailsData.items.map((item: any) => ({
       id: item.id,
       title: item.snippet.title,
       description: item.snippet.description,
@@ -362,8 +379,24 @@ Details: ${errorDetails}`;
       viewCount: parseInt(item.statistics.viewCount || '0'),
       category: query,
     }));
+
+    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
+    
+    if (REQUEST_CACHE.size > 100) {
+      const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
+      REQUEST_CACHE.delete(oldestKey);
+    }
+
+    console.log(`[YouTube] ✅ Successfully fetched and cached ${videos.length} videos`);
+    return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);
+    
+    if (cached) {
+      console.warn('[YouTube] ⚠️ Using expired cache as fallback due to API error');
+      return cached.data;
+    }
+    
     throw error;
   }
 }
