@@ -2,17 +2,20 @@ import React from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
-import Colors from '@/constants/colors';
 import { DiagnosticInfo } from '@/components/DiagnosticInfo';
+import { useTheme } from '@/hooks/theme-context';
 
 export default function DiagnosticScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
+  
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{ 
           title: 'Diagnostics',
-          headerStyle: { backgroundColor: Colors.background },
-          headerTintColor: Colors.text,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
         }} 
       />
       
@@ -26,10 +29,10 @@ export default function DiagnosticScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: colors.background,
   },
   scrollContent: {
     paddingBottom: 40,

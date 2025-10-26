@@ -18,15 +18,16 @@ import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import * as ImagePicker from 'expo-image-picker';
-import Colors from '@/constants/colors';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { SpeechCard } from '@/components/SpeechCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Speech } from '@/types/speech';
+import { useTheme } from '@/hooks/theme-context';
 
 function ProfileContent() {
+  const { colors } = useTheme();
   const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -34,16 +35,13 @@ function ProfileContent() {
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
   
-  // Always call hooks at the top level
   const context = useSpeechContext();
   
-  // Extract values from context with defaults
   const userProfile = context?.userProfile || { name: 'User', totalListeningTime: 0, favoriteCount: 0, streak: 0 };
   const favorites = context?.favorites || [];
   const toggleFavorite = context?.toggleFavorite || ((id: string) => {});
   const setCurrentSpeech = context?.setCurrentSpeech || ((speech: Speech | null) => {});
   
-  // Check initialization after component mounts
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsInitialized(true);
@@ -72,32 +70,33 @@ function ProfileContent() {
       icon: Clock,
       label: 'Total Listening',
       value: formatListeningTime(userProfile?.totalListeningTime || 0),
-      color: Colors.categories.daily,
+      color: colors.categories.daily,
     },
     {
       icon: Heart,
       label: 'Favorites',
       value: String(userProfile?.favoriteCount || 0),
-      color: Colors.categories.relationships,
+      color: colors.categories.relationships,
     },
     {
       icon: Flame,
       label: 'Day Streak',
       value: String(userProfile?.streak || 0),
-      color: Colors.categories.confidence,
+      color: colors.categories.confidence,
     },
   ];
   
-  // Show loading state if context is not initialized
+  const styles = getStyles(colors);
+  
   if (!isInitialized) {
     return (
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
         </SafeAreaView>
@@ -109,7 +108,7 @@ function ProfileContent() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
@@ -148,10 +147,10 @@ function ProfileContent() {
                 {userProfileData?.profileImageUri ? (
                   <Image source={{ uri: userProfileData.profileImageUri }} style={styles.avatarImage} />
                 ) : (
-                  <User color={Colors.text} size={40} />
+                  <User color={colors.text} size={40} />
                 )}
                 <View style={styles.cameraIcon}>
-                  <Camera color={Colors.background} size={16} />
+                  <Camera color={colors.background} size={16} />
                 </View>
               </TouchableOpacity>
               <View>
@@ -163,7 +162,7 @@ function ProfileContent() {
               style={styles.settingsButton}
               onPress={() => router.push('/settings')}
             >
-              <Settings color={Colors.textSecondary} size={24} />
+              <Settings color={colors.textSecondary} size={24} />
             </TouchableOpacity>
           </View>
 
@@ -212,7 +211,7 @@ function ProfileContent() {
           {entitlements.isPremium && (
             <View style={styles.premiumStatusCard}>
               <View style={styles.premiumStatusContent}>
-                <Sparkles color={Colors.accent} size={24} />
+                <Sparkles color={colors.accent} size={24} />
                 <View style={styles.premiumStatusText}>
                   <Text style={styles.premiumStatusTitle}>Premium Member</Text>
                   <Text style={styles.premiumStatusSubtitle}>You have unlimited access to all features</Text>
@@ -225,7 +224,7 @@ function ProfileContent() {
             <View style={styles.creditsContent}>
               <View style={styles.creditsLeft}>
                 <View style={styles.creditsIcon}>
-                  <Sparkles color={Colors.primary} size={20} />
+                  <Sparkles color={colors.primary} size={20} />
                 </View>
                 <View>
                   <Text style={styles.creditsLabel}>Available Credits</Text>
@@ -245,12 +244,12 @@ function ProfileContent() {
             <Text style={styles.sectionTitle}>Achievements</Text>
             <View style={styles.achievementsList}>
               <View style={styles.achievement}>
-                <Award color={Colors.categories.success} size={32} />
+                <Award color={colors.categories.success} size={32} />
                 <Text style={styles.achievementName}>Early Bird</Text>
                 <Text style={styles.achievementDesc}>Listen 7 days in a row</Text>
               </View>
               <View style={styles.achievement}>
-                <Award color={Colors.categories.productivity} size={32} />
+                <Award color={colors.categories.productivity} size={32} />
                 <Text style={styles.achievementName}>Explorer</Text>
                 <Text style={styles.achievementDesc}>Try all categories</Text>
               </View>
@@ -263,10 +262,10 @@ function ProfileContent() {
               onPress={() => router.push('/favorites')}
             >
               <View style={styles.menuItemLeft}>
-                <Heart color={Colors.categories.relationships} size={20} />
+                <Heart color={colors.categories.relationships} size={20} />
                 <Text style={styles.menuItemText}>Favorites ({String(favorites.length)})</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -274,10 +273,10 @@ function ProfileContent() {
               onPress={() => router.push('/playlists')}
             >
               <View style={styles.menuItemLeft}>
-                <ListMusic color={Colors.categories.productivity} size={20} />
+                <ListMusic color={colors.categories.productivity} size={20} />
                 <Text style={styles.menuItemText}>My Playlists</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -285,10 +284,10 @@ function ProfileContent() {
               onPress={() => router.push('/coach-character')}
             >
               <View style={styles.menuItemLeft}>
-                <Sparkles color={Colors.categories.confidence} size={20} />
+                <Sparkles color={colors.categories.confidence} size={20} />
                 <Text style={styles.menuItemText}>Choose Coach Character</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -296,10 +295,10 @@ function ProfileContent() {
               onPress={() => router.push('/voice-coach')}
             >
               <View style={styles.menuItemLeft}>
-                <MessageCircle color={Colors.primary} size={20} />
+                <MessageCircle color={colors.primary} size={20} />
                 <Text style={styles.menuItemText}>Talk to Voice Coach</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -307,10 +306,10 @@ function ProfileContent() {
               onPress={() => router.push('/settings')}
             >
               <View style={styles.menuItemLeft}>
-                <Settings color={Colors.textSecondary} size={20} />
+                <Settings color={colors.textSecondary} size={20} />
                 <Text style={styles.menuItemText}>Settings</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -318,10 +317,10 @@ function ProfileContent() {
               onPress={() => router.push('/diagnostic')}
             >
               <View style={styles.menuItemLeft}>
-                <Activity color={Colors.categories.productivity} size={20} />
+                <Activity color={colors.categories.productivity} size={20} />
                 <Text style={styles.menuItemText}>Diagnostics</Text>
               </View>
-              <ChevronRight color={Colors.textSecondary} size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -334,7 +333,7 @@ function ProfileContent() {
               }}
             >
               <View style={styles.menuItemLeft}>
-                <LogOut color="#ff6b6b" size={20} />
+                <LogOut size={20} color="#ff6b6b" />
                 <Text style={[styles.menuItemText, styles.signOutText]}>Sign Out</Text>
               </View>
             </TouchableOpacity>
@@ -355,7 +354,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -381,12 +380,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
     borderWidth: 2,
-    borderColor: Colors.primary + '30',
+    borderColor: colors.primary + '30',
     position: 'relative',
   },
   avatarImage: {
@@ -398,23 +397,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     width: 24,
     height: 24,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: Colors.background,
+    borderColor: colors.background,
   },
   name: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 22,
     fontWeight: 'bold',
     letterSpacing: -0.3,
   },
   subtitle: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 14,
     marginTop: 4,
   },
@@ -440,12 +439,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 18,
     fontWeight: 'bold',
   },
   statLabel: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 12,
     marginTop: 4,
   },
@@ -454,7 +453,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 16,
@@ -465,19 +464,19 @@ const styles = StyleSheet.create({
   },
   achievement: {
     flex: 1,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
   },
   achievementName: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 8,
   },
   achievementDesc: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 11,
     marginTop: 4,
     textAlign: 'center',
@@ -486,7 +485,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -498,41 +497,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   menuItemText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
     fontWeight: '500',
-  },
-  chevron: {
-    transform: [{ rotate: '0deg' }],
-  },
-  chevronRotated: {
-    transform: [{ rotate: '90deg' }],
-  },
-  favoritesContainer: {
-    marginBottom: 12,
-  },
-  favoritesScrollContent: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  favoriteCardWrapper: {
-    width: 280,
-  },
-  emptyFavorites: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 8,
-  },
-  emptyText: {
-    color: Colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptySubtext: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -541,31 +508,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 40,
-  },
-  errorText: {
-    color: Colors.text,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  retryButtonText: {
-    color: Colors.background,
-    fontSize: 16,
-    fontWeight: '600',
   },
   signOutItem: {
     borderColor: 'rgba(255, 107, 107, 0.3)',
@@ -638,19 +582,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   premiumStatusTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
     fontWeight: 'bold',
   },
   premiumStatusSubtitle: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 13,
     marginTop: 2,
   },
   creditsCard: {
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -670,28 +614,28 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.primary + '20',
+    backgroundColor: colors.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
   creditsLabel: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 13,
   },
   creditsValue: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 20,
     fontWeight: 'bold',
     marginTop: 2,
   },
   buyCreditsButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
   },
   buyCreditsButtonText: {
-    color: Colors.background,
+    color: colors.background,
     fontSize: 14,
     fontWeight: 'bold',
   },

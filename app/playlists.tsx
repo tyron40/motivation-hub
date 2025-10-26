@@ -13,9 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, ListMusic, Trash2, Edit3, Music, ArrowLeft } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
-import Colors from '@/constants/colors';
 import { usePlaylists } from '@/hooks/playlist-context';
 import { useSpeechContext } from '@/hooks/speech-context';
+import { useTheme } from '@/hooks/theme-context';
 
 const PRESET_COLORS = [
   '#8B4513', '#10B981', '#3B82F6', '#F59E0B', 
@@ -23,6 +23,7 @@ const PRESET_COLORS = [
 ];
 
 export default function PlaylistsScreen() {
+  const { colors } = useTheme();
   const { playlists, createPlaylist, deletePlaylist, updatePlaylist } = usePlaylists();
   const { speeches } = useSpeechContext();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -30,6 +31,7 @@ export default function PlaylistsScreen() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDescription, setNewPlaylistDescription] = useState('');
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+  const styles = getStyles(colors);
 
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) {
@@ -93,7 +95,7 @@ export default function PlaylistsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
@@ -102,11 +104,11 @@ export default function PlaylistsScreen() {
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <ArrowLeft color={Colors.text} size={24} />
+              <ArrowLeft color={colors.text} size={24} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <LinearGradient
-                colors={[Colors.primary, Colors.secondary]}
+                colors={[colors.primary, colors.secondary]}
                 style={styles.headerIcon}
               >
                 <ListMusic color="white" size={20} />
@@ -123,7 +125,7 @@ export default function PlaylistsScreen() {
                 setShowCreateModal(true);
               }}
             >
-              <Plus color={Colors.background} size={20} />
+              <Plus color={colors.background} size={20} />
             </TouchableOpacity>
           </View>
 
@@ -138,7 +140,7 @@ export default function PlaylistsScreen() {
                   colors={['rgba(139, 69, 19, 0.2)', 'rgba(139, 69, 19, 0.1)']}
                   style={styles.emptyIcon}
                 >
-                  <Music color={Colors.primary} size={48} />
+                  <Music color={colors.primary} size={48} />
                 </LinearGradient>
                 <Text style={styles.emptyTitle}>No Playlists Yet</Text>
                 <Text style={styles.emptySubtitle}>
@@ -157,12 +159,11 @@ export default function PlaylistsScreen() {
                   key={playlist.id}
                   style={styles.playlistCard}
                   onPress={() => {
-                    // Navigate to playlist detail screen (to be created)
                     console.log('Open playlist:', playlist.id);
                   }}
                 >
                   <LinearGradient
-                    colors={[playlist.color || Colors.primary, Colors.cardBackground]}
+                    colors={[playlist.color || colors.primary, colors.cardBackground]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.playlistGradient}
@@ -184,7 +185,7 @@ export default function PlaylistsScreen() {
                           style={styles.actionButton}
                           onPress={() => handleEditPlaylist(playlist.id)}
                         >
-                          <Edit3 color={Colors.text} size={18} />
+                          <Edit3 color={colors.text} size={18} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.actionButton}
@@ -201,7 +202,6 @@ export default function PlaylistsScreen() {
           </ScrollView>
         </SafeAreaView>
 
-        {/* Create/Edit Playlist Modal */}
         <Modal
           visible={showCreateModal}
           animationType="slide"
@@ -219,7 +219,7 @@ export default function PlaylistsScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="Enter playlist name"
-                  placeholderTextColor={Colors.textSecondary}
+                  placeholderTextColor={colors.textSecondary}
                   value={newPlaylistName}
                   onChangeText={setNewPlaylistName}
                 />
@@ -230,7 +230,7 @@ export default function PlaylistsScreen() {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Enter description"
-                  placeholderTextColor={Colors.textSecondary}
+                  placeholderTextColor={colors.textSecondary}
                   value={newPlaylistDescription}
                   onChangeText={setNewPlaylistDescription}
                   multiline
@@ -284,7 +284,7 @@ export default function PlaylistsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 24,
     fontWeight: 'bold',
   },
   createButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -359,18 +359,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   playlistName: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   playlistDescription: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 14,
     marginBottom: 8,
   },
   playlistCount: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 12,
   },
   playlistActions: {
@@ -397,25 +397,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 22,
     fontWeight: 'bold',
   },
   emptySubtitle: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
   emptyButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,
     marginTop: 8,
   },
   emptyButtonText: {
-    color: Colors.background,
+    color: colors.background,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -425,14 +425,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     maxHeight: '80%',
   },
   modalTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 24,
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     padding: 16,
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
   },
   textArea: {
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   colorOptionSelected: {
-    borderColor: Colors.text,
+    borderColor: colors.text,
     borderWidth: 3,
   },
   modalActions: {
@@ -488,15 +488,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   cancelButtonText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
   saveButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
   },
   saveButtonText: {
-    color: Colors.background,
+    color: colors.background,
     fontSize: 16,
     fontWeight: '600',
   },

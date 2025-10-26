@@ -10,17 +10,19 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Heart, Share2, Youtube, MoreVertical } from 'lucide-react-native';
-import Colors from '@/constants/colors';
 import { useCurrentSpeech, useSpeechContext } from '@/hooks/speech-context';
 import { Speech } from '@/types/speech';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
+import { useTheme } from '@/hooks/theme-context';
 
 export default function PlayerScreen() {
+  const { colors } = useTheme();
   const { currentSpeech } = useCurrentSpeech();
   const { toggleFavorite, speeches, setCurrentSpeech } = useSpeechContext();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const styles = getStyles(colors);
 
   const handleNext = () => {
     if (!currentSpeech || !speeches || speeches.length === 0) return;
@@ -168,7 +170,7 @@ export default function PlayerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
@@ -294,66 +296,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     opacity: 0.9,
   },
-  progressContainer: {
-    width: '100%',
-    marginBottom: 40,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.text,
-    borderRadius: 2,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  time: {
-    color: Colors.text,
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 32,
-    marginBottom: 32,
-  },
-  controlButton: {
-    padding: 8,
-  },
-  playButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.text,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  videoContainer: {
-    width: '100%',
-    height: 280,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 40,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
   noVideoOverlay: {
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -369,16 +311,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 8,
     opacity: 0.9,
-  },
-  videoInfo: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  videoInfoText: {
-    color: Colors.text,
-    fontSize: 14,
-    opacity: 0.7,
-    fontStyle: 'italic',
   },
   bottomActions: {
     flexDirection: 'row',
@@ -397,5 +329,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
-
 });

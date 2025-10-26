@@ -10,19 +10,21 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { RefreshCw } from 'lucide-react-native';
-import Colors from '@/constants/colors';
 import { SpeechCard } from '@/components/SpeechCard';
 import { categories } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
+import { useTheme } from '@/hooks/theme-context';
 
 export default function CategoryScreen() {
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams();
   const { toggleFavorite, setCurrentSpeech, getSpeechesByCategory, loadSpeechesByCategory, isLoading } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
   const [loadingYoutube, setLoadingYoutube] = useState(false);
+  const styles = getStyles(colors);
   
   const category = categories.find(c => c.id === id);
   const contextSpeeches = category ? getSpeechesByCategory(category.name) : [];
@@ -49,7 +51,6 @@ export default function CategoryScreen() {
     }
   };
 
-  // Auto-load online speeches when category loads
   useEffect(() => {
     if (category && !hasLoadedOnline) {
       console.log(`📂 Category page loaded: ${category.name}`);
@@ -66,7 +67,7 @@ export default function CategoryScreen() {
 
   if (!category) {
     return (
-      <LinearGradient colors={[Colors.background, '#1A1A2E']} style={styles.container}>
+      <LinearGradient colors={[colors.background, colors.card]} style={styles.container}>
         <View style={styles.safeArea}>
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>Category not found</Text>
@@ -82,13 +83,13 @@ export default function CategoryScreen() {
         options={{ 
           title: category.name,
           headerStyle: {
-            backgroundColor: '#1A1A2E',
+            backgroundColor: colors.card,
           },
-          headerTintColor: '#FFFFFF',
+          headerTintColor: colors.text,
         }} 
       />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <View style={styles.safeArea}>
@@ -109,10 +110,10 @@ export default function CategoryScreen() {
               disabled={loadingYoutube}
             >
               {loadingYoutube ? (
-                <ActivityIndicator size="small" color={Colors.primary} />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
                 <>
-                  <RefreshCw size={16} color={Colors.primary} />
+                  <RefreshCw size={16} color={colors.primary} />
                   <Text style={styles.loadButtonText}>{hasLoadedOnline ? 'Refresh from YouTube API' : 'Load from YouTube API'}</Text>
                 </>
               )}
@@ -139,7 +140,7 @@ export default function CategoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -166,13 +167,13 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 8,
   },
   speechCount: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 16,
   },
   speechList: {
@@ -184,23 +185,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 18,
   },
   loadButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
     marginTop: 16,
     gap: 8,
   },
   loadButtonText: {
-    color: Colors.primary,
+    color: colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },

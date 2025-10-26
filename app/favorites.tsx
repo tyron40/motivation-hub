@@ -8,21 +8,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, ArrowLeft, Music } from 'lucide-react-native';
+import { Heart, ArrowLeft } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
-import Colors from '@/constants/colors';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { SpeechCard } from '@/components/SpeechCard';
 import { Speech } from '@/types/speech';
+import { useTheme } from '@/hooks/theme-context';
 
 export default function FavoritesScreen() {
+  const { colors } = useTheme();
   const { favorites, toggleFavorite, setCurrentSpeech } = useSpeechContext();
+  const styles = getStyles(colors);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E']}
+        colors={[colors.background, colors.card]}
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea}>
@@ -31,11 +33,11 @@ export default function FavoritesScreen() {
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <ArrowLeft color={Colors.text} size={24} />
+              <ArrowLeft color={colors.text} size={24} />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
               <LinearGradient
-                colors={[Colors.categories.relationships, Colors.secondary]}
+                colors={[colors.categories.relationships, colors.secondary]}
                 style={styles.headerIcon}
               >
                 <Heart color="white" size={20} />
@@ -56,7 +58,7 @@ export default function FavoritesScreen() {
                   colors={['rgba(236, 72, 153, 0.2)', 'rgba(236, 72, 153, 0.1)']}
                   style={styles.emptyIcon}
                 >
-                  <Heart color={Colors.categories.relationships} size={48} />
+                  <Heart color={colors.categories.relationships} size={48} />
                 </LinearGradient>
                 <Text style={styles.emptyTitle}>No Favorites Yet</Text>
                 <Text style={styles.emptySubtitle}>
@@ -95,7 +97,7 @@ export default function FavoritesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: colors.cardBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -135,7 +137,7 @@ const styles = StyleSheet.create({
     width: 40,
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 24,
     fontWeight: 'bold',
   },
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   countText: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 14,
     marginBottom: 16,
     fontWeight: '500',
@@ -170,25 +172,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 22,
     fontWeight: 'bold',
   },
   emptySubtitle: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
     paddingHorizontal: 40,
   },
   emptyButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,
     marginTop: 8,
   },
   emptyButtonText: {
-    color: Colors.background,
+    color: colors.background,
     fontSize: 16,
     fontWeight: '600',
   },
