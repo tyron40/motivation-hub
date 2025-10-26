@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Heart, Share2, BookOpen, Star, Filter, Bookmark, Sparkles, Quote, ChevronDown, Wand2 } from 'lucide-react-native';
 import { Stack } from 'expo-router';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { allScriptures, Scripture } from '@/mocks/allScriptures';
 import { useScriptureFavorites } from '@/hooks/scripture-favorites-context';
@@ -25,6 +25,8 @@ const categories = ['All', 'Strength', 'Hope', 'Courage', 'Faith', 'Love', 'Peac
 const ITEMS_PER_PAGE = 8;
 
 export default function ScriptureScreen() {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { favorites, addFavorite, removeFavorite, isFavorite } = useScriptureFavorites();
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,7 +66,7 @@ export default function ScriptureScreen() {
       const matchesFavorites = !showFavoritesOnly || isFavorite(scripture.reference);
       return matchesSearch && matchesCategory && matchesFavorites;
     });
-  }, [searchQuery, selectedCategory, showFavoritesOnly, favorites, generatedScriptures, isFavorite]);
+  }, [searchQuery, selectedCategory, showFavoritesOnly, generatedScriptures, isFavorite]);
 
   const currentDisplayedCount = displayedCount[selectedCategory] || ITEMS_PER_PAGE;
   
@@ -136,7 +138,6 @@ export default function ScriptureScreen() {
     }
   };
 
-  // Initialize displayed count for new categories
   React.useEffect(() => {
     if (!displayedCount[selectedCategory]) {
       setDisplayedCount(prev => ({
@@ -146,7 +147,6 @@ export default function ScriptureScreen() {
     }
   }, [selectedCategory, displayedCount]);
   
-  // Reset displayed count when search or favorites filter changes
   React.useEffect(() => {
     setDisplayedCount(prev => ({
       ...prev,
@@ -227,9 +227,9 @@ Shared from Motivation Hub`;
   };
 
   const getCategoryColor = (category: string) => {
-    if (!category?.trim()) return Colors.primary;
+    if (!category?.trim()) return colors.primary;
     
-    const colors: { [key: string]: string } = {
+    const categoryColors: { [key: string]: string } = {
       'Strength': '#10B981',
       'Hope': '#3B82F6', 
       'Courage': '#F59E0B',
@@ -237,11 +237,11 @@ Shared from Motivation Hub`;
       'Love': '#EC4899',
       'Peace': '#06B6D4',
     };
-    return colors[category] || Colors.primary;
+    return categoryColors[category] || colors.primary;
   };
 
   const getCategoryGradient = (category: string): [string, string] => {
-    if (!category?.trim()) return [Colors.primary, Colors.primary];
+    if (!category?.trim()) return [colors.primary, colors.primary];
     
     const gradients: { [key: string]: [string, string] } = {
       'Strength': ['#10B981', '#059669'],
@@ -251,7 +251,7 @@ Shared from Motivation Hub`;
       'Love': ['#EC4899', '#DB2777'],
       'Peace': ['#06B6D4', '#0891B2'],
     };
-    return gradients[category] || [Colors.primary, Colors.primary];
+    return gradients[category] || [colors.primary, colors.primary];
   };
 
   const ScriptureCard = ({ scripture, index }: { scripture: Scripture; index: number }) => {
@@ -356,20 +356,20 @@ Shared from Motivation Hub`;
                 style={[styles.actionButton, isScriptureFavorite && styles.favoriteButton]}
               >
                 {isScriptureFavorite ? (
-                  <Star color={Colors.accent} size={18} fill={Colors.accent} />
+                  <Star color={colors.accent} size={18} fill={colors.accent} />
                 ) : (
-                  <Heart color={Colors.textSecondary} size={18} />
+                  <Heart color={colors.textSecondary} size={18} />
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleSharePress}>
-                <Share2 color={Colors.textSecondary} size={18} />
+                <Share2 color={colors.textSecondary} size={18} />
               </TouchableOpacity>
             </View>
           </View>
           
           <View style={styles.verseContainer}>
             <Sparkles color={categoryColor} size={14} style={styles.sparkleIcon} />
-            <Text style={styles.verse}>“{scripture.verse}”</Text>
+            <Text style={styles.verse}>"{scripture.verse}"</Text>
           </View>
           
           <View style={styles.cardFooter}>
@@ -387,16 +387,16 @@ Shared from Motivation Hub`;
                 disabled={Boolean(insights[scripture.id]?.loading)}
               >
                 {insights[scripture.id]?.loading ? (
-                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Wand2 size={16} color={Colors.primary} />
+                    <Wand2 size={16} color={colors.primary} />
                     <Text style={styles.inspireText}>Inspire</Text>
                   </>
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.bookmarkBtn}>
-                <Bookmark color={Colors.textSecondary} size={16} />
+                <Bookmark color={colors.textSecondary} size={16} />
               </TouchableOpacity>
             </View>
           </View>
@@ -420,7 +420,7 @@ Shared from Motivation Hub`;
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
+        colors={[colors.background, colors.card, colors.background]}
         style={styles.container}
       >
         <Animated.View 
@@ -449,7 +449,7 @@ Shared from Motivation Hub`;
               style={[styles.filterButton, showFavoritesOnly && styles.filterButtonActive]}
               onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
             >
-              <Filter color={showFavoritesOnly ? Colors.background : Colors.textSecondary} size={16} />
+              <Filter color={showFavoritesOnly ? colors.background : colors.textSecondary} size={16} />
             </TouchableOpacity>
           </View>
         </View>
@@ -460,12 +460,12 @@ Shared from Motivation Hub`;
             style={styles.searchBar}
           >
             <View style={styles.searchIconContainer}>
-              <Search color={Colors.primary} size={20} />
+              <Search color={colors.primary} size={20} />
             </View>
             <TextInput
               style={styles.searchInput}
               placeholder="Search verses, references..."
-              placeholderTextColor={Colors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -535,11 +535,11 @@ Shared from Motivation Hub`;
                   disabled={isLoadingMore}
                 >
                   {isLoadingMore ? (
-                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <>
                       <LinearGradient
-                        colors={[Colors.primary, Colors.accent]}
+                        colors={[colors.primary, colors.accent]}
                         style={styles.loadMoreGradient}
                       >
                         <ChevronDown color="white" size={20} />
@@ -559,7 +559,7 @@ Shared from Motivation Hub`;
                 colors={['rgba(139, 92, 246, 0.2)', 'rgba(236, 72, 153, 0.2)']}
                 style={styles.emptyIconContainer}
               >
-                <BookOpen color={Colors.primary} size={48} />
+                <BookOpen color={colors.primary} size={48} />
               </LinearGradient>
               <Text style={styles.emptyTitle}>No verses found</Text>
               <Text style={styles.emptySubtitle}>
@@ -577,7 +577,7 @@ Shared from Motivation Hub`;
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -589,30 +589,30 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 8,
   },
   titleContainer: {
     flex: 1,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
   },
   titleIcon: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   title: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     letterSpacing: -0.5,
   },
 
@@ -624,8 +624,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   filterButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
 
   searchContainer: {
@@ -634,8 +634,8 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -661,18 +661,18 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginLeft: 8,
   },
   clearButtonText: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
   },
   searchInput: {
     flex: 1,
-    color: Colors.text,
+    color: colors.text,
     fontSize: 15,
   },
   categoriesContainer: {
@@ -706,13 +706,13 @@ const styles = StyleSheet.create({
     }),
   },
   categoryButtonText: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   categoryButtonTextActive: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
   },
   scripturesContainer: {
     flex: 1,
@@ -744,14 +744,14 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: 16,
   },
   cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     flex: 1,
     gap: 16,
   },
@@ -759,12 +759,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   referenceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     flex: 1,
     gap: 8,
   },
@@ -774,13 +774,13 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   reference: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     flex: 1,
   },
   cardActions: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 8,
   },
   actionButton: {
@@ -789,11 +789,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   favoriteButton: {
-    backgroundColor: Colors.accent + '20',
+    backgroundColor: colors.accent + '20',
   },
   verseContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 20,
     gap: 8,
   },
@@ -802,21 +802,21 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   verse: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 18,
     lineHeight: 28,
-    fontStyle: 'italic',
+    fontStyle: 'italic' as const,
     letterSpacing: 0.3,
     flex: 1,
   },
   cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
   },
   footerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   categoryPill: {
@@ -826,7 +826,7 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     color: 'white',
   },
   bookmarkBtn: {
@@ -835,20 +835,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   inspireButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: Colors.primary + '40',
+    borderColor: colors.primary + '40',
   },
   inspireText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   insightContainer: {
     marginTop: 16,
@@ -859,13 +859,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   insightTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     marginBottom: 6,
   },
   insightText: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -875,8 +875,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingVertical: 80,
     gap: 20,
   },
@@ -884,18 +884,18 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   emptyTitle: {
-    color: Colors.text,
+    color: colors.text,
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
   },
   emptySubtitle: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 22,
     paddingHorizontal: 40,
   },
@@ -908,13 +908,13 @@ const styles = StyleSheet.create({
   loadMoreGradient: {
     paddingVertical: 16,
     paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   loadMoreText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginTop: 8,
   },
   loadMoreSubtext: {

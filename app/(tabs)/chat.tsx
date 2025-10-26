@@ -16,7 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
 import { Stack } from 'expo-router';
-import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { Audio } from 'expo-av';
@@ -55,6 +55,7 @@ const suggestedPrompts = [
 ];
 
 export default function ChatScreen() {
+  const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const insets = useSafeAreaInsets();
   const { 
@@ -668,7 +669,7 @@ export default function ChatScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={[Colors.background, '#1A1A2E', '#0F0F1E']}
+        colors={[colors.background, colors.card, colors.background]}
         style={styles.container}
       >
         <View style={styles.content}>
@@ -1104,7 +1105,7 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -1162,9 +1163,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   statusText: {
-    color: Colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   subtitle: {
     color: Colors.textSecondary,
