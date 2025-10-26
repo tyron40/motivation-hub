@@ -181,21 +181,10 @@ function ProfileContent() {
             })}
           </View>
 
-          {!entitlements.isPremium && (
+          {!isGuest && !entitlements.isPremium && (
             <TouchableOpacity 
               style={styles.upgradeCard}
               onPress={() => {
-                if (isGuest) {
-                  Alert.alert(
-                    'Account Required',
-                    'Please create an account to upgrade to Premium. Guest users cannot purchase subscriptions.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Create Account', onPress: () => router.push('/auth') }
-                    ]
-                  );
-                  return;
-                }
                 setShowPaywall(true);
               }}
             >
@@ -221,7 +210,7 @@ function ProfileContent() {
             </TouchableOpacity>
           )}
 
-          {entitlements.isPremium && (
+          {!isGuest && entitlements.isPremium && (
             <View style={styles.premiumStatusCard}>
               <View style={styles.premiumStatusContent}>
                 <Sparkles color={colors.accent} size={24} />
@@ -241,7 +230,7 @@ function ProfileContent() {
                 </View>
                 <View>
                   <Text style={styles.creditsLabel}>Available Credits</Text>
-                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
+                  <Text style={styles.creditsValue}>{isGuest ? 0 : entitlements.credits}</Text>
                 </View>
               </View>
               <TouchableOpacity 
