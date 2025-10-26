@@ -32,7 +32,7 @@ const DEFAULT_ENTITLEMENTS_GUEST: Entitlements = {
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
   const { isGuest, isAuthenticated } = useAuth();
-  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
+  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_GUEST);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -41,7 +41,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       console.log('📦 Loading entitlements... isGuest:', isGuest, 'isAuthenticated:', isAuthenticated);
       
       if (isGuest) {
-        console.log('👤 Guest user: Setting credits to 0');
+        console.log('👤 Guest user: Setting credits to 0 and clearing storage');
+        await AsyncStorage.removeItem('entitlements');
         setEntitlements(DEFAULT_ENTITLEMENTS_GUEST);
         return;
       }

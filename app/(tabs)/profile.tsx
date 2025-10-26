@@ -601,10 +601,10 @@ const getStyles = (colors: any) => StyleSheet.create({
   premiumStatusCard: {
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: 'rgba(255,107,53,0.15)',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,107,53,0.3)',
+    borderColor: colors.accent + '30',
   },
   premiumStatusContent: {
     flexDirection: 'row',
