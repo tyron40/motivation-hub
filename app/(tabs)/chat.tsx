@@ -128,11 +128,38 @@ export default function ChatScreen() {
     try {
       console.log('🎤 Generating voice for message:', messageId);
       
-      const { generateTextToSpeech } = await import('@/lib/openai');
-      const audioUrl = await generateTextToSpeech({
-        text: text.substring(0, 500),
-        voice: profile.preferredVoice || 'alloy',
+      const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
+      const apiUrl = `${API_BASE}/api/tts`;
+      
+      console.log('🎤 Calling TTS API:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text.substring(0, 500),
+          voice: profile.preferredVoice || 'alloy',
+        }),
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ TTS API error:', response.status, errorText);
+        throw new Error(`TTS API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ TTS response received');
+      
+      if (!data.audio || !data.audio.base64Data) {
+        throw new Error('Invalid TTS response format');
+      }
+      
+      const audioUrl = `data:${data.audio.mimeType};base64,${data.audio.base64Data}`;
+      console.log('✅ Audio URL created');
       
       setMessages(prev => prev.map(msg => 
         msg.id === messageId ? { ...msg, audioUrl } : msg
@@ -284,11 +311,16 @@ export default function ChatScreen() {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
       try {
-        // Use the external API with timeout
-        const response = await fetch('https://toolkit.rork.com/text/llm/', {
+        const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
+        const apiUrl = `${API_BASE}/api/chat`;
+        
+        console.log('🤖 Sending chat message to:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           body: JSON.stringify({
             messages: [
@@ -309,7 +341,8 @@ export default function ChatScreen() {
         }
 
         const data = await response.json();
-        const completion = data.completion;
+        console.log('📥 Chat API response:', data);
+        const completion = data.message || data.completion;
         
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format');
@@ -704,6 +737,18 @@ export default function ChatScreen() {
               </View>
             </View>
             <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={[styles.iconButton, profile.voiceEnabled && styles.iconButtonActive]}
+                onPress={async () => {
+                  await updateProfile({ voiceEnabled: !profile.voiceEnabled });
+                }}
+              >
+                {profile.voiceEnabled ? (
+                  <Volume2 color={Colors.primary} size={20} />
+                ) : (
+                  <VolumeX color={Colors.textSecondary} size={20} />
+                )}
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setShowHistory(true)}
@@ -1504,6 +1549,11 @@ const getStyles = (colors: any) => StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  iconButtonActive: {
+    backgroundColor: Colors.primary + '20',
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
   historyItem: {
     backgroundColor: 'rgba(255,255,255,0.05)',
