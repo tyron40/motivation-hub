@@ -178,15 +178,26 @@ export async function generateTextToSpeech(params: {
 
     let result: any;
     try {
+      if (!responseText || responseText.trim().length === 0) {
+        throw new Error('Empty response from server');
+      }
       result = JSON.parse(responseText);
-    } catch (parseError) {
+    } catch (parseError: any) {
       console.error('❌ Failed to parse TTS response as JSON:', parseError);
+      console.error('❌ Parse error message:', parseError?.message);
       console.error('❌ Response was:', responseText.substring(0, 500));
-      throw new Error(`Invalid JSON response from TTS API: ${responseText.substring(0, 100)}`);
+      
+      // Check if it's a common error response format
+      if (responseText.includes('error') || responseText.includes('Error')) {
+        throw new Error(`Server error: ${responseText.substring(0, 200)}`);
+      }
+      
+      throw new Error(`Failed to parse server response. The server may have returned invalid data. Error: ${parseError?.message || 'Unknown parse error'}`);
     }
     console.log('✅ TTS result received');
 
     if (!result.audio || !result.audio.base64Data) {
+      console.error('❌ Invalid TTS result structure:', JSON.stringify(result).substring(0, 200));
       throw new Error('Invalid TTS response: missing audio data');
     }
 

@@ -59,7 +59,7 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const insets = useSafeAreaInsets();
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
     currentSessionId, 
@@ -143,8 +143,10 @@ export default function ChatScreen() {
       setTimeout(() => {
         playAudio(messageId, audioUrl);
       }, 500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Voice generation error:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error('❌ Error details:', errorMsg);
     }
   }, [profile.preferredVoice, playAudio]);
 
