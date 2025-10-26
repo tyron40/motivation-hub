@@ -31,7 +31,7 @@ function ProfileContent() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, signOut, isGuest } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
   
@@ -154,8 +154,8 @@ function ProfileContent() {
                 </View>
               </TouchableOpacity>
               <View>
-                <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
-                <Text style={styles.subtitle}>{user?.email || 'Motivation Hub Member'}</Text>
+                <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Guest'}</Text>
+                <Text style={styles.subtitle}>{user?.email || 'Guest User'}</Text>
               </View>
             </View>
             <TouchableOpacity 
@@ -184,7 +184,20 @@ function ProfileContent() {
           {!entitlements.isPremium && (
             <TouchableOpacity 
               style={styles.upgradeCard}
-              onPress={() => setShowPaywall(true)}
+              onPress={() => {
+                if (isGuest) {
+                  Alert.alert(
+                    'Account Required',
+                    'Please create an account to upgrade to Premium. Guest users cannot purchase subscriptions.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Create Account', onPress: () => router.push('/auth') }
+                    ]
+                  );
+                  return;
+                }
+                setShowPaywall(true);
+              }}
             >
               <LinearGradient
                 colors={['#FF6B35', '#F7931E']}
@@ -233,7 +246,20 @@ function ProfileContent() {
               </View>
               <TouchableOpacity 
                 style={styles.buyCreditsButton}
-                onPress={() => setShowPaywall(true)}
+                onPress={() => {
+                  if (isGuest) {
+                    Alert.alert(
+                      'Account Required',
+                      'Please create an account to purchase credits. Guest users cannot buy tokens.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Create Account', onPress: () => router.push('/auth') }
+                      ]
+                    );
+                    return;
+                  }
+                  setShowPaywall(true);
+                }}
               >
                 <Text style={styles.buyCreditsButtonText}>Buy More</Text>
               </TouchableOpacity>
@@ -323,20 +349,32 @@ function ProfileContent() {
               <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              style={[styles.menuItem, styles.signOutItem]}
-              onPress={async () => {
-                const { error } = await signOut();
-                if (error) {
-                  console.error('Sign out error:', error);
-                }
-              }}
-            >
-              <View style={styles.menuItemLeft}>
-                <LogOut size={20} color="#ff6b6b" />
-                <Text style={[styles.menuItemText, styles.signOutText]}>Sign Out</Text>
-              </View>
-            </TouchableOpacity>
+            {!isGuest ? (
+              <TouchableOpacity 
+                style={[styles.menuItem, styles.signOutItem]}
+                onPress={async () => {
+                  const { error } = await signOut();
+                  if (error) {
+                    console.error('Sign out error:', error);
+                  }
+                }}
+              >
+                <View style={styles.menuItemLeft}>
+                  <LogOut size={20} color="#ff6b6b" />
+                  <Text style={[styles.menuItemText, styles.signOutText]}>Sign Out</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.menuItem, styles.createAccountItem]}
+                onPress={() => router.push('/auth')}
+              >
+                <View style={styles.menuItemLeft}>
+                  <User size={20} color="#6C5CE7" />
+                  <Text style={[styles.menuItemText, styles.createAccountText]}>Create Account</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -517,6 +555,13 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   signOutText: {
     color: '#ff6b6b',
+  },
+  createAccountItem: {
+    borderColor: 'rgba(108, 92, 231, 0.3)',
+    borderWidth: 1,
+  },
+  createAccountText: {
+    color: '#6C5CE7',
   },
   upgradeCard: {
     marginHorizontal: 20,
