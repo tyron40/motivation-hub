@@ -12,11 +12,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, Palette } from 'lucide-react-native';
+import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, Palette, DollarSign } from 'lucide-react-native';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
 import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
 import { supabase } from '@/lib/supabase';
+import { useIAP } from '@/hooks/iap-context';
+import { CreditsInfoModal } from '@/components/CreditsInfoModal';
 
 const voiceCharacters = [
   { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced voice' },
@@ -31,10 +33,12 @@ export default function SettingsScreen() {
   const { profile, updateProfile } = useUserProfile();
   const { user, signOut } = useAuth();
   const { colors, selectedTheme, changeTheme, themes } = useTheme();
+  const { usageStats } = useIAP();
   const [showNameModal, setShowNameModal] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [tempName, setTempName] = useState(profile.name || '');
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
@@ -78,6 +82,38 @@ export default function SettingsScreen() {
               <View style={styles.settingInfo}>
                 <Text style={styles.settingLabel}>Name</Text>
                 <Text style={styles.settingValue}>{profile.name || 'Not set'}</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AI Credits</Text>
+          
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => setShowCreditsModal(true)}
+          >
+            <View style={styles.settingLeft}>
+              <DollarSign size={20} color={colors.primary} />
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>Credits Balance</Text>
+                <Text style={styles.settingValue}>{usageStats.credits} credits available</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={() => setShowCreditsModal(true)}
+          >
+            <View style={styles.settingLeft}>
+              <Info size={20} color={colors.primary} />
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>How Credits Work</Text>
+                <Text style={styles.settingValue}>View pricing & usage guide</Text>
               </View>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
@@ -466,6 +502,11 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <CreditsInfoModal 
+        visible={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+      />
     </SafeAreaView>
   );
 }
