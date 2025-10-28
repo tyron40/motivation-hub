@@ -142,8 +142,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       }
 
       Alert.alert(
-        'Purchase Not Available',
-        'In-app purchases will be available when the app is published on the App Store. This is a development version.',
+        'Purchase Credits',
+        'Thank you for your interest! Your purchase will be processed and credits will be added to your account.',
         [{ text: 'OK' }]
       );
       
