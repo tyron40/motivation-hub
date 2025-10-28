@@ -18,6 +18,7 @@ import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-nativ
 import { Audio } from 'expo-av';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
+import { useIAP } from '@/hooks/iap-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
 
 interface Message {
@@ -38,6 +39,7 @@ const voiceCharacters = [
 export default function VoiceCoachScreen() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
+  const { usageStats, useCredit } = useIAP();
   const [, setMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -66,6 +68,18 @@ export default function VoiceCoachScreen() {
   const speakMessage = useCallback(async (text: string) => {
     try {
       console.log('🔊 Speaking message:', text.substring(0, 50) + '...');
+      
+      // Check credits before TTS
+      if (usageStats.credits <= 0) {
+        Alert.alert(
+          'No Credits',
+          'You need credits to use voice features. The coach response is shown as text only.',
+          [{ text: 'OK' }]
+        );
+        setCurrentStatus('Ready to listen (text mode)');
+        return;
+      }
+      
       setIsPlaying(true);
       setCurrentStatus('Coach is speaking...');
       
@@ -93,6 +107,14 @@ export default function VoiceCoachScreen() {
         
         const ttsElapsed = Date.now() - ttsStartTime;
         console.log(`✅ TTS audio received in ${ttsElapsed}ms`);
+        
+        // Deduct 1 credit for TTS
+        const creditUsed = await useCredit();
+        if (creditUsed) {
+          console.log('💳 1 credit used for TTS (Voice Generation). Remaining:', usageStats.credits - 1);
+        } else {
+          console.warn('⚠️ Failed to deduct credit for TTS');
+        }
         
         const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
         
@@ -155,7 +177,7 @@ export default function VoiceCoachScreen() {
       setCurrentStatus('Ready to listen (text mode)');
       console.log('Speech synthesis failed, continuing in text mode');
     }
-  }, [profile.preferredVoice, sound]);
+  }, [profile.preferredVoice, sound, usageStats.credits, useCredit]);
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreetedRef.current) {
@@ -1036,6 +1058,23 @@ export default function VoiceCoachScreen() {
       console.log('🤖 Getting AI response...');
       console.log('📝 Conversation messages:', conversationMessages.length);
       
+      // Check credits before making AI request
+      if (usageStats.credits <= 0) {
+        Alert.alert(
+          'No Credits',
+          'You need credits to chat with the AI coach. You can purchase more credits in Settings.',
+          [{ text: 'OK' }]
+        );
+        const noCreditsMessage: Message = {
+          role: 'assistant',
+          content: 'I\'m sorry, but you\'ve run out of credits. Please purchase more credits to continue our conversation.',
+          timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, noCreditsMessage]);
+        setCurrentStatus('Ready to listen');
+        return;
+      }
+      
       setCurrentStatus('Coach is thinking...');
       
       const userName = profile.name || 'friend';
@@ -1069,6 +1108,14 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
 
       if (!completion || typeof completion !== 'string') {
         throw new Error('Invalid response format from chat API');
+      }
+      
+      // Deduct 1 credit for chat message
+      const creditUsed = await useCredit();
+      if (creditUsed) {
+        console.log('💳 1 credit used for AI Chat Message. Remaining:', usageStats.credits - 1);
+      } else {
+        console.warn('⚠️ Failed to deduct credit for chat');
       }
       
       const assistantMessage: Message = {
