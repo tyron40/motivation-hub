@@ -20,6 +20,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
+import { useIAP } from '@/hooks/iap-context';
 import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -58,6 +59,7 @@ const suggestedPrompts = [
 export default function ChatScreen() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
+  const { useCredit: deductCredit, usageStats } = useIAP();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
@@ -258,8 +260,23 @@ export default function ChatScreen() {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    // Check if user has credits
+    if (!usageStats.canUseAI) {
+      console.log('❌ No credits available');
+      if (Platform.OS !== 'web') {
+        Alert.alert(
+          'No Credits',
+          'You need credits to use the AI chat feature. Please purchase credits to continue.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.error('You need credits to use the AI chat feature.');
+      }
+      return;
+    }
 
     try {
       const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
@@ -274,6 +291,24 @@ export default function ChatScreen() {
         isUser: true,
         timestamp: new Date(),
       };
+
+      // Deduct 1 credit for chat message
+      const creditUsed = await deductCredit();
+      if (!creditUsed) {
+        console.log('❌ Failed to deduct credit');
+        if (Platform.OS !== 'web') {
+          Alert.alert(
+            'No Credits',
+            'You need credits to use the AI chat feature. Please purchase credits to continue.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          console.error('You need credits to use the AI chat feature.');
+        }
+        return;
+      }
+
+      console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
 
       setMessages(prev => [...prev, userMessage]);
       setInputText('');
@@ -366,7 +401,18 @@ export default function ChatScreen() {
         }
 
         if (profile.voiceEnabled && completion) {
-          generateVoice(aiMessage.id, completion);
+          // Voice generation also uses credits, so check again
+          if (usageStats.credits > 0) {
+            const voiceCreditUsed = await deductCredit();
+            if (voiceCreditUsed) {
+              console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
+              generateVoice(aiMessage.id, completion);
+            } else {
+              console.log('⚠️ Not enough credits for voice generation');
+            }
+          } else {
+            console.log('⚠️ Not enough credits for voice generation');
+          }
         }
       } catch (fetchError) {
         clearTimeout(timeoutId);
@@ -399,7 +445,7 @@ export default function ChatScreen() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  };
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice]);
 
 
 
