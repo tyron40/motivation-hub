@@ -31,14 +31,29 @@ const DEFAULT_ENTITLEMENTS_GUEST: Entitlements = {
 };
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
-  const { isGuest, isAuthenticated } = useAuth();
+  const { isGuest, isAuthenticated, user } = useAuth();
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_GUEST);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  
+  // Check if current user is demo account
+  const isDemoAccount = user?.email === 'demo@motivationhub.app';
 
   const loadEntitlements = useCallback(async () => {
     try {
-      console.log('📦 Loading entitlements... isGuest:', isGuest, 'isAuthenticated:', isAuthenticated);
+      console.log('📦 Loading entitlements... isGuest:', isGuest, 'isAuthenticated:', isAuthenticated, 'isDemoAccount:', isDemoAccount);
+      
+      // Grant full premium access to demo account
+      if (isDemoAccount) {
+        console.log('🎭 Demo account: Granting unlimited premium access');
+        const premiumEntitlements: Entitlements = {
+          credits: 1000, // Large number of credits
+          isPremium: true,
+          premiumExpiresAt: null, // Never expires
+        };
+        setEntitlements(premiumEntitlements);
+        return;
+      }
       
       if (isGuest) {
         console.log('👤 Guest user: Setting credits to 0 and clearing storage');
@@ -79,7 +94,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       const defaultEntitlements = isGuest ? DEFAULT_ENTITLEMENTS_GUEST : DEFAULT_ENTITLEMENTS_AUTHENTICATED;
       setEntitlements(defaultEntitlements);
     }
-  }, [isGuest, isAuthenticated]);
+  }, [isGuest, isAuthenticated, isDemoAccount]);
 
   useEffect(() => {
     loadEntitlements();

@@ -114,6 +114,39 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('🔐 Signing in user:', email);
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
+      // Check for demo account
+      if (email.toLowerCase() === 'demo@motivationhub.app' && password === 'Demo2025!') {
+        console.log('🎭 Demo account detected - granting full access');
+        
+        // Create a mock demo user
+        const demoUser = {
+          id: 'demo-user-id',
+          email: 'demo@motivationhub.app',
+          user_metadata: { name: 'Demo User' },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as any;
+        
+        const demoSession = {
+          access_token: 'demo-token',
+          refresh_token: 'demo-refresh',
+          user: demoUser,
+          expires_at: Date.now() + 86400000, // 24 hours
+        } as any;
+        
+        setAuthState({
+          user: demoUser,
+          session: demoSession,
+          isLoading: false,
+          isAuthenticated: true,
+          isGuest: false,
+        });
+        
+        console.log('✅ Demo user signed in successfully');
+        return { error: null, isDemo: true };
+      }
+      
       const { data, error } = await auth.signIn(email, password);
       
       if (error) {
@@ -158,6 +191,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('🔐 Signing out user');
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
+      // Check if it's a demo user - just clear local state
+      if (authState.user?.email === 'demo@motivationhub.app') {
+        console.log('🎭 Signing out demo user');
+        setAuthState({
+          user: null,
+          session: null,
+          isLoading: false,
+          isAuthenticated: false,
+          isGuest: false,
+        });
+        console.log('✅ Demo user signed out successfully');
+        return { error: null };
+      }
+      
       const { error } = await auth.signOut();
       
       if (error) {
@@ -173,7 +220,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { error };
     }
-  }, []);
+  }, [authState.user]);
 
   const refreshSession = useCallback(async () => {
     try {
