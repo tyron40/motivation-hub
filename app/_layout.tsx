@@ -168,6 +168,7 @@ function RootLayoutNav() {
   return (
     <>
       <Stack screenOptions={{ 
+        headerShown: false,
         headerBackTitle: "Back",
         headerStyle: {
           backgroundColor: '#1A1A2E',
@@ -176,7 +177,7 @@ function RootLayoutNav() {
       }}>
         {canAccessApp ? (
           <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false, title: '' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen 
               name="player" 
               options={{ 
@@ -188,6 +189,7 @@ function RootLayoutNav() {
               name="category/[id]" 
               options={{ 
                 title: 'Category',
+                headerShown: true,
               }} 
             />
             <Stack.Screen 
@@ -201,12 +203,14 @@ function RootLayoutNav() {
               name="settings" 
               options={{ 
                 title: 'Settings',
+                headerShown: true,
               }} 
             />
             <Stack.Screen 
               name="videos" 
               options={{ 
                 title: 'Videos',
+                headerShown: true,
               }} 
             />
             <Stack.Screen 
@@ -220,6 +224,7 @@ function RootLayoutNav() {
               name="playlists" 
               options={{ 
                 title: 'My Playlists',
+                headerShown: true,
               }} 
             />
             <Stack.Screen 
@@ -227,6 +232,7 @@ function RootLayoutNav() {
               options={{ 
                 title: 'Choose Your Coach',
                 presentation: 'modal',
+                headerShown: true,
               }} 
             />
           </>
