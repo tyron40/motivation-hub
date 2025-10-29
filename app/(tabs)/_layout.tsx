@@ -25,6 +25,7 @@ export default function TabLayout() {
           options={{
             title: "Home",
             tabBarIcon: ({ color }) => <Home color={color} size={24} />,
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -32,6 +33,7 @@ export default function TabLayout() {
           options={{
             title: "Scripture",
             tabBarIcon: ({ color }) => <BookOpen color={color} size={24} />,
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -39,6 +41,7 @@ export default function TabLayout() {
           options={{
             title: "AI Chat",
             tabBarIcon: ({ color }) => <MessageCircle color={color} size={24} />,
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -46,6 +49,7 @@ export default function TabLayout() {
           options={{
             title: "Profile",
             tabBarIcon: ({ color }) => <User color={color} size={24} />,
+            headerShown: false,
           }}
         />
       </Tabs>

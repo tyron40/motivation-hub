@@ -176,7 +176,7 @@ function RootLayoutNav() {
       }}>
         {canAccessApp ? (
           <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false, title: '' }} />
             <Stack.Screen 
               name="player" 
               options={{ 
