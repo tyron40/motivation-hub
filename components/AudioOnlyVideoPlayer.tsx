@@ -36,6 +36,8 @@ export default function AudioOnlyVideoPlayer({
   const webViewRef = useRef<WebView>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef(0);
+  const maxRetries = 2;
 
   useEffect(() => {
     const progressRef = progressIntervalRef.current;
@@ -43,10 +45,19 @@ export default function AudioOnlyVideoPlayer({
     
     loadingTimeoutRef.current = setTimeout(() => {
       console.warn('⚠️ Loading timeout - player may not be ready');
+      
+      if (retryCountRef.current < maxRetries) {
+        retryCountRef.current += 1;
+        console.log(`🔄 Retrying... (${retryCountRef.current}/${maxRetries})`);
+        setIsLoading(true);
+        setError(null);
+        return;
+      }
+      
       setIsLoading(false);
-      setError('Player took too long to load. Please try again.');
+      setError('Unable to load audio. The video may not be available for playback.');
       onError?.('Loading timeout');
-    }, 30000);
+    }, 20000);
 
     return () => {
       if (progressRef) {
@@ -120,7 +131,7 @@ export default function AudioOnlyVideoPlayer({
         width: '1',
         videoId: '${safeVideoId}',
         playerVars: {
-          'autoplay': 1,
+          'autoplay': 0,
           'controls': 0,
           'modestbranding': 1,
           'rel': 0,
@@ -154,20 +165,19 @@ export default function AudioOnlyVideoPlayer({
           try {
             player.unMute();
             player.setVolume(100);
-            player.playVideo();
-            console.log('Starting playback after ready');
+            console.log('Player ready, waiting for manual play');
             window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'playbackStarted'
+              type: 'playbackReady'
             }));
           } catch(e) {
-            console.error('Error starting playback:', e);
+            console.error('Error in ready handler:', e);
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'error',
-              error: 'PLAYBACK_START_FAILED'
+              error: 'READY_HANDLER_FAILED'
             }));
           }
         }
-      }, 1000);
+      }, 500);
       
       setInterval(function() {
         if (player && player.getCurrentTime) {
@@ -290,8 +300,30 @@ export default function AudioOnlyVideoPlayer({
           }
           setIsLoading(false);
           setError(null);
+          retryCountRef.current = 0;
           if (data.duration) {
             setDuration(data.duration);
+          }
+          if (autoplay) {
+            setTimeout(() => {
+              console.log('🎵 Auto-starting playback');
+              sendCommand('play');
+            }, 500);
+          }
+          break;
+        case 'playbackReady':
+          console.log('▶️ Playback system ready');
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
+          setIsLoading(false);
+          setError(null);
+          retryCountRef.current = 0;
+          if (autoplay) {
+            setTimeout(() => {
+              console.log('🎵 Auto-starting playback');
+              sendCommand('play');
+            }, 500);
           }
           break;
         case 'playbackStarted':
@@ -302,6 +334,7 @@ export default function AudioOnlyVideoPlayer({
           setIsLoading(false);
           setIsPlaying(true);
           setError(null);
+          retryCountRef.current = 0;
           break;
         case 'stateChange':
           console.log('🔄 State change:', data.stateName, '(', data.state, ')');
@@ -346,8 +379,21 @@ export default function AudioOnlyVideoPlayer({
           if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
           }
-          const errorMsg = data.errorMessage || `Failed to play audio: Error code ${data.error}`;
-          console.error('❌ Player error:', errorMsg);
+          
+          const errorCode = data.error;
+          const errorMsg = data.errorMessage || `Failed to play audio: Error code ${errorCode}`;
+          console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
+          
+          if (retryCountRef.current < maxRetries && (errorCode === 5 || errorCode === 'PLAYBACK_START_FAILED')) {
+            retryCountRef.current += 1;
+            console.log(`🔄 Retrying after error... (${retryCountRef.current}/${maxRetries})`);
+            setTimeout(() => {
+              setIsLoading(true);
+              setError(null);
+            }, 1000);
+            return;
+          }
+          
           setError(errorMsg);
           setIsLoading(false);
           setIsPlaying(false);
@@ -383,8 +429,17 @@ export default function AudioOnlyVideoPlayer({
       sendCommand('pause');
       setIsPlaying(false);
     } else {
-      sendCommand('play');
-      setIsPlaying(true);
+      if (error) {
+        setError(null);
+        setIsLoading(true);
+        retryCountRef.current = 0;
+        setTimeout(() => {
+          sendCommand('play');
+        }, 1000);
+      } else {
+        sendCommand('play');
+        setIsPlaying(true);
+      }
     }
   };
 
