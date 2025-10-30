@@ -121,13 +121,35 @@ async function searchYouTubeContent(query: string, limit: number): Promise<YouTu
     
     clearTimeout(timeoutId);
 
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Response content-type:', contentType);
+    console.log('📡 Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ YouTube search error:', response.status, errorText);
+      console.error('❌ YouTube search error:', response.status, errorText.substring(0, 500));
       throw new Error(`YouTube search error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('📥 Response length:', responseText.length);
+    console.log('📥 Response preview:', responseText.substring(0, 200));
+
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Response is not JSON, content-type:', contentType);
+      console.error('❌ Response body:', responseText.substring(0, 500));
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Failed to parse response as JSON:', parseError);
+      console.error('❌ Response was:', responseText.substring(0, 500));
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+    }
+
     console.log(`✅ Found ${data.videos?.length || 0} videos from backend`);
     return data.videos || [];
   } catch (error: any) {
@@ -163,13 +185,35 @@ async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[
     
     clearTimeout(timeoutId);
 
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Response content-type:', contentType);
+    console.log('📡 Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ YouTube trending error:', response.status, errorText);
+      console.error('❌ YouTube trending error:', response.status, errorText.substring(0, 500));
       throw new Error(`YouTube trending error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    console.log('📥 Response length:', responseText.length);
+    console.log('📥 Response preview:', responseText.substring(0, 200));
+
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Response is not JSON, content-type:', contentType);
+      console.error('❌ Response body:', responseText.substring(0, 500));
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Failed to parse response as JSON:', parseError);
+      console.error('❌ Response was:', responseText.substring(0, 500));
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+    }
+
     console.log(`✅ Fetched ${data.videos?.length || 0} trending videos from backend`);
     return data.videos || [];
   } catch (error: any) {
