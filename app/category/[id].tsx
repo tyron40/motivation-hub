@@ -75,21 +75,7 @@ export default function CategoryScreen() {
     <>
       <Stack.Screen 
         options={{ 
-          title: category.name,
-          headerStyle: {
-            backgroundColor: colors.card,
-          },
-          headerTintColor: colors.text,
-          headerBackVisible: true,
-          headerBackTitle: 'Back',
-          headerLeft: () => (
-            <TouchableOpacity 
-              onPress={() => router.back()} 
-              style={{ marginLeft: 0, padding: 8 }}
-            >
-              <ArrowLeft size={24} color={colors.text} />
-            </TouchableOpacity>
-          ),
+          headerShown: false,
         }} 
       />
       <LinearGradient
@@ -97,6 +83,13 @@ export default function CategoryScreen() {
         style={styles.container}
       >
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+          <View style={styles.headerBar}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{category.name}</Text>
+            <View style={styles.backButton} />
+          </View>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -177,5 +170,23 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     fontSize: 18,
   },
-
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.card,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+  },
 });
