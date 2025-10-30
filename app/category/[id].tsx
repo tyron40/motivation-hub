@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { RefreshCw } from 'lucide-react-native';
+import { RefreshCw, ArrowLeft } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { categories } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
@@ -86,6 +86,14 @@ export default function CategoryScreen() {
             backgroundColor: colors.card,
           },
           headerTintColor: colors.text,
+          headerLeft: () => (
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              style={{ marginLeft: 16, padding: 8 }}
+            >
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
         }} 
       />
       <LinearGradient
