@@ -4,7 +4,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
 # RevenueCat Configuration (for in-app purchases)
 # Get these from https://app.revenuecat.com/ → Project Settings → API Keys
-EXPO_PUBLIC_REVENUECAT_IOS_KEY=
+EXPO_PUBLIC_REVENUECAT_IOS_KEY=appl_QKJQVBGeYJCnkqLYRVAiGUgHsdY
 EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=
 
 # Toolkit Configuration (for AI features)
