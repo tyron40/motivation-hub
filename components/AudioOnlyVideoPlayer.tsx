@@ -46,7 +46,7 @@ export default function AudioOnlyVideoPlayer({
       setIsLoading(false);
       setError('Player took too long to load. Please try again.');
       onError?.('Loading timeout');
-    }, 10000);
+    }, 30000);
 
     return () => {
       if (progressRef) {
@@ -306,8 +306,12 @@ export default function AudioOnlyVideoPlayer({
         case 'stateChange':
           console.log('🔄 State change:', data.stateName, '(', data.state, ')');
           if (data.state === 1) {
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+            }
             setIsPlaying(true);
             setIsLoading(false);
+            setError(null);
           } else if (data.state === 2 || data.state === 0) {
             setIsPlaying(false);
           } else if (data.state === 3) {
@@ -321,8 +325,15 @@ export default function AudioOnlyVideoPlayer({
           if (data.duration !== undefined && data.duration > 0) {
             setDuration(data.duration);
           }
-          if (data.state === 1 && !isPlaying) {
-            setIsPlaying(true);
+          if (data.state === 1) {
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+            }
+            setIsLoading(false);
+            setError(null);
+            if (!isPlaying) {
+              setIsPlaying(true);
+            }
           }
           break;
         case 'ended':
