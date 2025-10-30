@@ -38,6 +38,7 @@ export default function AudioOnlyVideoPlayer({
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const maxRetries = 2;
+  const autoSkipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const progressRef = progressIntervalRef.current;
@@ -55,8 +56,14 @@ export default function AudioOnlyVideoPlayer({
       }
       
       setIsLoading(false);
-      setError('Unable to load audio. The video may not be available for playback.');
+      setError('Unable to load audio. Tap Next to skip.');
       onError?.('Loading timeout');
+      
+      // Auto-skip after 3 seconds if still can't load
+      autoSkipTimeoutRef.current = setTimeout(() => {
+        console.log('⏭️ Auto-skipping unplayable video');
+        onNext?.();
+      }, 3000);
     }, 20000);
 
     return () => {
@@ -69,8 +76,21 @@ export default function AudioOnlyVideoPlayer({
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
+      if (autoSkipTimeoutRef.current) {
+        clearTimeout(autoSkipTimeoutRef.current);
+      }
     };
-  }, [onError]);
+  }, [onError, onNext]);
+
+  // Clean up auto-skip timeout when video changes
+  useEffect(() => {
+    return () => {
+      if (autoSkipTimeoutRef.current) {
+        clearTimeout(autoSkipTimeoutRef.current);
+        autoSkipTimeoutRef.current = null;
+      }
+    };
+  }, [videoId]);
 
   if (!videoId || typeof videoId !== 'string' || videoId.trim().length === 0) {
     console.warn('⚠️ AudioOnlyVideoPlayer: Invalid videoId provided:', videoId);
@@ -398,6 +418,12 @@ export default function AudioOnlyVideoPlayer({
           setIsLoading(false);
           setIsPlaying(false);
           onError?.(errorMsg);
+          
+          // Auto-skip after 3 seconds if video can't be played
+          autoSkipTimeoutRef.current = setTimeout(() => {
+            console.log('⏭️ Auto-skipping unplayable video after error');
+            onNext?.();
+          }, 3000);
           break;
       }
     } catch (e) {
@@ -472,17 +498,34 @@ export default function AudioOnlyVideoPlayer({
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Unable to play audio</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
-          <TouchableOpacity 
-            onPress={() => {
-              setError(null);
-              setIsLoading(true);
-              setCurrentTime(0);
-              setDuration(0);
-            }}
-            style={styles.retryButton}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
+          <View style={styles.errorActions}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (autoSkipTimeoutRef.current) {
+                  clearTimeout(autoSkipTimeoutRef.current);
+                }
+                setError(null);
+                setIsLoading(true);
+                setCurrentTime(0);
+                setDuration(0);
+                retryCountRef.current = 0;
+              }}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => {
+                if (autoSkipTimeoutRef.current) {
+                  clearTimeout(autoSkipTimeoutRef.current);
+                }
+                onNext?.();
+              }}
+              style={[styles.retryButton, styles.skipButton]}
+            >
+              <Text style={styles.retryText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -732,12 +775,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   retryButton: {
     backgroundColor: '#ff6b6b',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 8,
+    flex: 1,
+  },
+  skipButton: {
+    backgroundColor: '#666',
   },
   retryText: {
     color: 'white',
