@@ -241,6 +241,7 @@ export default function VideosScreen() {
           headerStyle: { backgroundColor: '#667eea' },
           headerTintColor: 'white',
           headerTitleStyle: { fontWeight: 'bold' },
+          headerBackVisible: true,
         }}
       />
 
