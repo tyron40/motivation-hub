@@ -6,6 +6,8 @@ import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchase
 import { IAPProductId, ALL_VOICES } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
+const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && !('ReactNativeWebView' in window));
+
 interface Entitlements {
   credits: number;
   isPremium: boolean;
@@ -45,7 +47,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   // Configure RevenueCat
   useEffect(() => {
     const configure = async () => {
-      if (Platform.OS === 'web') {
+      if (isWeb) {
         console.log('⚠️ RevenueCat not available on web');
         return;
       }
@@ -228,6 +230,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       return;
     }
 
+    if (isWeb) {
+      console.warn('⚠️ In-app purchases are not available on web');
+      return;
+    }
+
     if (!isAuthenticated) {
       Alert.alert('Account Required', 'Please sign in to make purchases.');
       return;
@@ -237,10 +244,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     
     try {
       console.log('🛒 Starting purchase for:', productId);
-      
-      if (Platform.OS === 'web') {
-        throw new Error('In-app purchases are not available on web. Please use the iOS or Android app.');
-      }
 
       if (!isConfigured) {
         throw new Error('Payment system not ready. Please try again in a moment.');
@@ -274,13 +277,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         return;
       }
       
-      if (Platform.OS !== 'web') {
-        Alert.alert(
-          'Purchase Failed', 
-          error?.message || 'Unable to complete purchase. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
+      Alert.alert(
+        'Purchase Failed', 
+        error?.message || 'Unable to complete purchase. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsPurchasing(false);
     }
@@ -289,6 +290,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const restorePurchases = useCallback(async () => {
     if (isRestoring) {
       console.warn('⚠️ Restore already in progress');
+      return;
+    }
+
+    if (isWeb) {
+      console.warn('⚠️ Purchase restoration is not available on web');
       return;
     }
 
@@ -301,10 +307,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     
     try {
       console.log('🔄 Restoring purchases...');
-      
-      if (Platform.OS === 'web') {
-        throw new Error('Purchase restoration is not available on web.');
-      }
 
       if (!isConfigured) {
         throw new Error('Payment system not ready. Please try again in a moment.');
@@ -323,13 +325,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     } catch (error: any) {
       console.error('❌ Restore error:', error);
       
-      if (Platform.OS !== 'web') {
-        Alert.alert(
-          'Restore Failed', 
-          error?.message || 'Unable to restore purchases. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
+      Alert.alert(
+        'Restore Failed', 
+        error?.message || 'Unable to restore purchases. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsRestoring(false);
     }

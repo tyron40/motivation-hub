@@ -12,12 +12,14 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Check, RefreshCw, Shield, Youtube, LogIn, Zap, Sparkles } from 'lucide-react-native';
+import { X, Check, RefreshCw, Shield, Youtube, LogIn, Zap, Sparkles, Smartphone } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { IAP_PRODUCTS, IAPProductId } from '@/constants/iap';
 import { useIAP } from '@/hooks/iap-context';
 import { useAuth } from '@/hooks/auth-context';
+
+const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && !('ReactNativeWebView' in window));
 
 interface PaywallModalProps {
   visible: boolean;
@@ -115,6 +117,16 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
+          {isWeb && (
+            <View style={styles.webNoticeCard}>
+              <Smartphone color={Colors.primary} size={24} />
+              <Text style={styles.webNoticeTitle}>Mobile App Required</Text>
+              <Text style={styles.webNoticeText}>
+                In-app purchases are only available on iOS and Android devices. Please download the mobile app to upgrade to Premium.
+              </Text>
+            </View>
+          )}
+
           {!isAuthenticated && (
             <View style={styles.authNoticeCard}>
               <LogIn color={Colors.primary} size={24} />
@@ -166,10 +178,10 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 style={[
                   styles.productCard,
                   product.popular && styles.productCardPopular,
-                  !isAuthenticated && styles.productCardDisabled,
+                  (!isAuthenticated || isWeb) && styles.productCardDisabled,
                 ]}
                 onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing || !isAuthenticated}
+                disabled={isPurchasing || !isAuthenticated || isWeb}
               >
                 {product.badge && (
                   <View style={styles.productBadge}>
@@ -206,11 +218,11 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 style={[
                   styles.productCard,
                   styles.premiumCard,
-                  !isAuthenticated && styles.productCardDisabled,
+                  (!isAuthenticated || isWeb) && styles.productCardDisabled,
                   entitlements.isPremium && styles.productCardActive,
                 ]}
                 onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing || !isAuthenticated || entitlements.isPremium}
+                disabled={isPurchasing || !isAuthenticated || entitlements.isPremium || isWeb}
               >
                 {product.badge && (
                   <View style={styles.premiumBadge}>
@@ -259,16 +271,16 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           <TouchableOpacity
             style={styles.restoreButton}
             onPress={handleRestore}
-            disabled={isRestoring || isPurchasing || !isAuthenticated}
+            disabled={isRestoring || isPurchasing || !isAuthenticated || isWeb}
           >
             {isRestoring ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
               <>
-                <RefreshCw color={isAuthenticated ? Colors.primary : Colors.textSecondary} size={18} />
+                <RefreshCw color={(isAuthenticated && !isWeb) ? Colors.primary : Colors.textSecondary} size={18} />
                 <Text style={[
                   styles.restoreButtonText,
-                  !isAuthenticated && styles.restoreButtonTextDisabled,
+                  (!isAuthenticated || isWeb) && styles.restoreButtonTextDisabled,
                 ]}>
                   Restore Purchases
                 </Text>
@@ -333,6 +345,27 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
+  },
+  webNoticeCard: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  webNoticeTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  webNoticeText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   authNoticeCard: {
     backgroundColor: 'rgba(59, 130, 246, 0.1)',
