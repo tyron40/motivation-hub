@@ -512,21 +512,11 @@ export const getBrowserSafeAudioUrl = async (originalUrl: string): Promise<strin
       return trimmedUrl;
     }
 
-    // If it's HTTPS and MP3/M4A, quickly validate reachability before returning
+    // If it's HTTPS and MP3/M4A, use it directly without validation
+    // (validation can cause issues on some platforms/URLs)
     if (trimmedUrl.startsWith('https://') && (trimmedUrl.includes('.mp3') || trimmedUrl.includes('.m4a'))) {
-      try {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), 4000);
-        const head = await fetch(trimmedUrl, { method: 'HEAD', signal: controller.signal });
-        clearTimeout(id);
-        if (head.ok) {
-          console.log('✅ Direct URL validated:', trimmedUrl);
-          return trimmedUrl;
-        }
-        console.warn('HEAD check not OK, falling back to sample');
-      } catch (e) {
-        console.warn('HEAD check failed, using sample:', e);
-      }
+      console.log('✅ Using HTTPS audio URL:', trimmedUrl);
+      return trimmedUrl;
     }
 
     // For reliability, always use sample audio for unknown URLs

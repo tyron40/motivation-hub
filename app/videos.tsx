@@ -244,13 +244,6 @@ export default function VideosScreen() {
         }}
       />
 
-      {/* RSS Feed Notice */}
-      <View style={styles.rssNotice}>
-        <Text style={styles.rssNoticeText}>
-          ✅ Using RSS feeds - No API quota limits!
-        </Text>
-      </View>
-
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
@@ -533,18 +526,5 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
-  },
-  rssNotice: {
-    backgroundColor: '#e8f5e8',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d4edda',
-  },
-  rssNoticeText: {
-    fontSize: 14,
-    color: '#155724',
-    textAlign: 'center',
-    fontWeight: '500',
   },
 });
