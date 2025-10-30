@@ -98,7 +98,7 @@ export default function PlaylistsScreen() {
         colors={[colors.background, colors.card]}
         style={styles.container}
       >
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.backButton}

@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -95,7 +96,7 @@ export default function CategoryScreen() {
         colors={[colors.background, colors.card]}
         style={styles.container}
       >
-        <View style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -122,7 +123,7 @@ export default function CategoryScreen() {
             }
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </LinearGradient>
     </>
   );

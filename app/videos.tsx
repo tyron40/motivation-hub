@@ -234,7 +234,7 @@ export default function VideosScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Stack.Screen
         options={{
           title: 'Motivational Videos',
