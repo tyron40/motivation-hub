@@ -1,3 +1,4 @@
+// Product IDs must match exactly with App Store Connect
 export const IAP_PRODUCT_IDS = {
   CREDITS_100: 'mh_credits_100',
   CREDITS_500: 'mh_credits_500',

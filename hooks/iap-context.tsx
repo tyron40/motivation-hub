@@ -2,7 +2,8 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
-import { IAP_PRODUCT_IDS, IAPProductId, ALL_VOICES } from '@/constants/iap';
+import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
+import { IAPProductId, ALL_VOICES } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
 interface Entitlements {
@@ -35,9 +36,58 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_GUEST);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [availablePackages, setAvailablePackages] = useState<PurchasesPackage[]>([]);
   
   // Check if current user is demo account
   const isDemoAccount = user?.email === 'demo@motivationhub.app';
+
+  // Configure RevenueCat
+  useEffect(() => {
+    const configure = async () => {
+      if (Platform.OS === 'web') {
+        console.log('⚠️ RevenueCat not available on web');
+        return;
+      }
+
+      try {
+        console.log('🔧 Configuring RevenueCat...');
+        
+        // Replace with your actual RevenueCat API keys from https://app.revenuecat.com
+        const apiKey = Platform.select({
+          ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '',
+          android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '',
+          default: '',
+        });
+
+        if (!apiKey) {
+          console.warn('⚠️ RevenueCat API key not configured');
+          return;
+        }
+
+        await Purchases.configure({ apiKey });
+        
+        // Set user ID if authenticated
+        if (isAuthenticated && user?.id) {
+          await Purchases.logIn(user.id);
+          console.log('✅ RevenueCat user logged in:', user.id);
+        }
+
+        // Get available offerings
+        const offerings = await Purchases.getOfferings();
+        if (offerings.current) {
+          setAvailablePackages(offerings.current.availablePackages);
+          console.log('✅ Available packages:', offerings.current.availablePackages.length);
+        }
+
+        setIsConfigured(true);
+      } catch (error) {
+        console.error('❌ Error configuring RevenueCat:', error);
+      }
+    };
+
+    configure();
+  }, [isAuthenticated, user?.id]);
 
   const loadEntitlements = useCallback(async () => {
     try {
@@ -141,9 +191,45 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     await saveEntitlements(newEntitlements);
   }, [entitlements, saveEntitlements]);
 
+  // Process customer info from RevenueCat
+  const processCustomerInfo = useCallback(async (customerInfo: CustomerInfo) => {
+    try {
+      console.log('📦 Processing customer info...');
+      
+      // Check for active premium subscription
+      const hasPremium = customerInfo.entitlements.active['premium'] !== undefined;
+      const premiumExpiry = hasPremium 
+        ? new Date(customerInfo.entitlements.active['premium'].expirationDate || '').getTime()
+        : null;
+      
+      // Check for purchased credits (non-consumables stored as entitlements)
+      let totalCredits = entitlements.credits;
+      
+      // For credit purchases, we'll need to implement a custom solution
+      // since RevenueCat doesn't directly track consumables
+      // This would typically involve your backend tracking credit balance
+      
+      const newEntitlements: Entitlements = {
+        credits: totalCredits,
+        isPremium: hasPremium,
+        premiumExpiresAt: premiumExpiry,
+      };
+      
+      await saveEntitlements(newEntitlements);
+      console.log('✅ Customer info processed:', newEntitlements);
+    } catch (error) {
+      console.error('❌ Error processing customer info:', error);
+    }
+  }, [entitlements, saveEntitlements]);
+
   const purchase = useCallback(async (productId: IAPProductId) => {
     if (isPurchasing) {
       console.warn('⚠️ Purchase already in progress');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      Alert.alert('Account Required', 'Please sign in to make purchases.');
       return;
     }
 
@@ -156,26 +242,58 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         throw new Error('In-app purchases are not available on web. Please use the iOS or Android app.');
       }
 
+      if (!isConfigured) {
+        throw new Error('Payment system not ready. Please try again in a moment.');
+      }
+
+      // Find the package that matches the product ID
+      const pkg = availablePackages.find(p => p.product.identifier === productId);
+      
+      if (!pkg) {
+        throw new Error('Product not available. Please try again later.');
+      }
+
+      console.log('💳 Making purchase with RevenueCat...');
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      
+      // Process the purchase and update entitlements
+      await processCustomerInfo(customerInfo);
+      
       Alert.alert(
-        'Purchase Credits',
-        'Thank you for your interest! Your purchase will be processed and credits will be added to your account.',
+        'Purchase Complete',
+        'Thank you for your purchase! Your account has been updated.',
         [{ text: 'OK' }]
       );
       
-      console.log('✅ Purchase flow initiated for:', productId);
-    } catch (error) {
+      console.log('✅ Purchase completed successfully');
+    } catch (error: any) {
       console.error('❌ Purchase error:', error);
+      
+      if (error.userCancelled) {
+        console.log('ℹ️ User cancelled purchase');
+        return;
+      }
+      
       if (Platform.OS !== 'web') {
-        Alert.alert('Purchase Failed', error instanceof Error ? error.message : 'Unable to complete purchase. Please try again.');
+        Alert.alert(
+          'Purchase Failed', 
+          error?.message || 'Unable to complete purchase. Please try again.',
+          [{ text: 'OK' }]
+        );
       }
     } finally {
       setIsPurchasing(false);
     }
-  }, [isPurchasing]);
+  }, [isPurchasing, isAuthenticated, isConfigured, availablePackages, processCustomerInfo]);
 
   const restorePurchases = useCallback(async () => {
     if (isRestoring) {
       console.warn('⚠️ Restore already in progress');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      Alert.alert('Account Required', 'Please sign in to restore purchases.');
       return;
     }
 
@@ -188,18 +306,34 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         throw new Error('Purchase restoration is not available on web.');
       }
 
-      Alert.alert('Restore Purchases', 'No previous purchases found to restore.');
+      if (!isConfigured) {
+        throw new Error('Payment system not ready. Please try again in a moment.');
+      }
+
+      const customerInfo = await Purchases.restorePurchases();
+      await processCustomerInfo(customerInfo);
+      
+      Alert.alert(
+        'Restore Complete', 
+        'Your purchases have been restored successfully.',
+        [{ text: 'OK' }]
+      );
       
       console.log('✅ Restore completed');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Restore error:', error);
+      
       if (Platform.OS !== 'web') {
-        Alert.alert('Restore Failed', error instanceof Error ? error.message : 'Unable to restore purchases. Please try again.');
+        Alert.alert(
+          'Restore Failed', 
+          error?.message || 'Unable to restore purchases. Please try again.',
+          [{ text: 'OK' }]
+        );
       }
     } finally {
       setIsRestoring(false);
     }
-  }, [isRestoring]);
+  }, [isRestoring, isAuthenticated, isConfigured, processCustomerInfo]);
 
   const usageStats: UsageStats = useMemo(() => {
     const isPremiumActive = entitlements.isPremium && 
