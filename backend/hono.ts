@@ -93,6 +93,47 @@ app.get("/api/health", (c) => {
   });
 });
 
+app.all('/api/cron/youtube-batch', async (c) => {
+  try {
+    console.log('🕐 Cron job triggered: Running daily YouTube batch fetch');
+    
+    const authHeader = c.req.header('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    
+    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+      console.error('❌ Unauthorized cron request');
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    const fakeRequest = new Request('https://example.com/api/trpc/content.runDailyBatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        videosPerQuery: 5,
+        forceRefresh: false,
+      }),
+    });
+    
+    const context = await createContext({ 
+      req: fakeRequest,
+      resHeaders: new Headers(),
+      info: {} as any,
+    });
+    const caller = appRouter.createCaller(context);
+    
+    const result = await caller.content.runDailyBatch({
+      videosPerQuery: 5,
+      forceRefresh: false,
+    });
+    
+    console.log('✅ Daily batch completed:', result);
+    return c.json(result);
+  } catch (error: any) {
+    console.error('❌ Cron job failed:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 const handleTTS = async (c: any) => {
   try {
     console.log("[Hono] TTS request received");
