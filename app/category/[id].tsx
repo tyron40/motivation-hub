@@ -79,10 +79,12 @@ export default function CategoryScreen() {
             backgroundColor: colors.card,
           },
           headerTintColor: colors.text,
+          headerBackVisible: true,
+          headerBackTitle: 'Back',
           headerLeft: () => (
             <TouchableOpacity 
               onPress={() => router.back()} 
-              style={{ marginLeft: 16, padding: 8 }}
+              style={{ marginLeft: 0, padding: 8 }}
             >
               <ArrowLeft size={24} color={colors.text} />
             </TouchableOpacity>
