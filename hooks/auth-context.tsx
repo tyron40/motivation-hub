@@ -54,6 +54,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         
         if (error) {
           console.error('❌ Error getting session:', error);
+          
+          // Clear invalid session if refresh token error
+          if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
+            console.log('🔐 Clearing invalid session due to refresh token error');
+            await auth.clearSession();
+          }
         }
 
         if (isMounted) {
@@ -73,6 +79,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
       } catch (error) {
         console.error('❌ Error initializing auth:', error);
+        
+        // Clear session on any auth error
+        try {
+          await auth.clearSession();
+        } catch (clearError) {
+          console.error('❌ Error clearing session:', clearError);
+        }
+        
         if (isMounted) {
           setAuthState({
             user: null,
@@ -88,8 +102,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 Auth state changed:', event, session?.user?.email || 'no user');
+      
+      // Handle token refresh errors
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        console.log('🔐 Token refresh failed, clearing session');
+        await auth.clearSession();
+      }
+      
+      // Handle signed out state
+      if (event === 'SIGNED_OUT') {
+        console.log('🔐 User signed out');
+        await auth.clearSession();
+      }
       
       if (isMounted) {
         setAuthState({
@@ -229,6 +255,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       
       if (error) {
         console.error('❌ Error refreshing session:', error);
+        
+        // Clear invalid session if refresh token error
+        if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
+          console.log('🔐 Clearing invalid session due to refresh token error');
+          await auth.clearSession();
+          setAuthState({
+            user: null,
+            session: null,
+            isLoading: false,
+            isAuthenticated: false,
+            isGuest: false,
+          });
+        }
         return;
       }
       
@@ -243,6 +282,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('✅ Session refreshed');
     } catch (error) {
       console.error('❌ Exception refreshing session:', error);
+      
+      // Clear session on any error
+      try {
+        await auth.clearSession();
+      } catch (clearError) {
+        console.error('❌ Error clearing session:', clearError);
+      }
+      
+      setAuthState({
+        user: null,
+        session: null,
+        isLoading: false,
+        isAuthenticated: false,
+        isGuest: false,
+      });
     }
   }, []);
 

@@ -46,6 +46,21 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Add global error handler for refresh token errors
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'TOKEN_REFRESHED' && !session) {
+    console.warn('⚠️ Token refresh failed, clearing invalid session');
+    const storage = createStorageAdapter();
+    const keysToRemove = [
+      `sb-${supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase'}-auth-token`,
+      'supabase.auth.token',
+    ];
+    for (const key of keysToRemove) {
+      await storage.removeItem(key);
+    }
+  }
+});
+
 // Helper functions for authentication
 export const auth = {
   signUp: async (email: string, password: string, userData?: { name?: string }) => {
@@ -82,6 +97,27 @@ export const auth = {
 
   onAuthStateChange: (callback: (event: string, session: any) => void) => {
     return supabase.auth.onAuthStateChange(callback);
+  },
+
+  clearSession: async () => {
+    try {
+      console.log('🔐 Clearing stored session...');
+      const storage = createStorageAdapter();
+      
+      // Clear all Supabase auth keys from storage
+      const keysToRemove = [
+        `sb-${supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase'}-auth-token`,
+        'supabase.auth.token',
+      ];
+      
+      for (const key of keysToRemove) {
+        await storage.removeItem(key);
+      }
+      
+      console.log('✅ Session cleared from storage');
+    } catch (error) {
+      console.error('❌ Error clearing session storage:', error);
+    }
   },
 };
 
