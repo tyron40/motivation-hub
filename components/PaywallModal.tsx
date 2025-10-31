@@ -19,7 +19,7 @@ import { IAP_PRODUCTS, IAPProductId } from '@/constants/iap';
 import { useIAP } from '@/hooks/iap-context';
 import { useAuth } from '@/hooks/auth-context';
 
-const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && !('ReactNativeWebView' in window));
+const isWeb = Platform.OS === 'web';
 
 interface PaywallModalProps {
   visible: boolean;

@@ -6,7 +6,7 @@ import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchase
 import { IAPProductId, ALL_VOICES } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
-const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && !('ReactNativeWebView' in window));
+const isWeb = Platform.OS === 'web';
 
 interface Entitlements {
   credits: number;
