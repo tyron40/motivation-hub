@@ -37,6 +37,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       try {
         console.log('🔐 Initializing authentication...');
         
+        // Clear any invalid tokens before attempting to get session
+        await auth.checkAndClearInvalidTokens();
+        
         // Race between getting session and timeout
         const sessionPromise = auth.getSession();
         const timeoutPromise = new Promise<null>((resolve) => {
@@ -56,8 +59,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           console.error('❌ Error getting session:', error);
           
           // Clear invalid session if refresh token error
-          if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
-            console.log('🔐 Clearing invalid session due to refresh token error');
+          if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token') || error.message?.includes('Invalid') || error.status === 401) {
+            console.log('🔐 Clearing invalid session due to auth error');
             await auth.clearSession();
           }
         }
@@ -173,7 +176,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return { error: null, isDemo: true };
       }
       
-      const { data, error } = await auth.signIn(email, password);
+      const { error } = await auth.signIn(email, password);
       
       if (error) {
         console.error('❌ Sign in error:', error);
@@ -195,7 +198,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('🔐 Signing up user:', email);
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
-      const { data, error } = await auth.signUp(email, password, userData);
+      const { error } = await auth.signUp(email, password, userData);
       
       if (error) {
         console.error('❌ Sign up error:', error);

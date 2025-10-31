@@ -43,20 +43,37 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'pkce',
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'motivation-hub-app',
+    },
   },
 });
 
+let isClearing = false;
+
 // Add global error handler for refresh token errors
 supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'TOKEN_REFRESHED' && !session) {
-    console.warn('⚠️ Token refresh failed, clearing invalid session');
-    const storage = createStorageAdapter();
-    const keysToRemove = [
-      `sb-${supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase'}-auth-token`,
-      'supabase.auth.token',
-    ];
-    for (const key of keysToRemove) {
-      await storage.removeItem(key);
+  if ((event === 'TOKEN_REFRESHED' && !session) || event === 'SIGNED_OUT') {
+    if (!isClearing) {
+      isClearing = true;
+      console.warn('⚠️ Token refresh failed or signed out, clearing invalid session');
+      try {
+        const storage = createStorageAdapter();
+        const keysToRemove = [
+          `sb-${supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase'}-auth-token`,
+          'supabase.auth.token',
+        ];
+        for (const key of keysToRemove) {
+          await storage.removeItem(key);
+        }
+      } catch (error) {
+        console.error('❌ Error clearing session:', error);
+      } finally {
+        isClearing = false;
+      }
     }
   }
 });
@@ -102,21 +119,61 @@ export const auth = {
   clearSession: async () => {
     try {
       console.log('🔐 Clearing stored session...');
+      
+      // First try to sign out properly
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (signOutError) {
+        console.warn('⚠️ Error during signOut, continuing with storage clear:', signOutError);
+      }
+      
       const storage = createStorageAdapter();
       
       // Clear all Supabase auth keys from storage
       const keysToRemove = [
         `sb-${supabaseUrl.split('//')[1]?.split('.')[0] || 'supabase'}-auth-token`,
         'supabase.auth.token',
+        `sb-vncaboqllcykibwdnmwp-auth-token`,
       ];
       
       for (const key of keysToRemove) {
-        await storage.removeItem(key);
+        try {
+          await storage.removeItem(key);
+          console.log(`✅ Removed ${key}`);
+        } catch (err) {
+          console.warn(`⚠️ Could not remove ${key}:`, err);
+        }
       }
       
       console.log('✅ Session cleared from storage');
     } catch (error) {
       console.error('❌ Error clearing session storage:', error);
+    }
+  },
+
+  checkAndClearInvalidTokens: async () => {
+    try {
+      const storage = createStorageAdapter();
+      const tokenKey = `sb-vncaboqllcykibwdnmwp-auth-token`;
+      const tokenData = await storage.getItem(tokenKey);
+      
+      if (tokenData) {
+        try {
+          const parsed = JSON.parse(tokenData);
+          const expiresAt = parsed?.expires_at || 0;
+          
+          // Check if token is expired
+          if (expiresAt && expiresAt * 1000 < Date.now()) {
+            console.log('🔐 Found expired token, clearing...');
+            await storage.removeItem(tokenKey);
+          }
+        } catch (parseError) {
+          console.warn('⚠️ Could not parse token data, clearing:', parseError);
+          await storage.removeItem(tokenKey);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Error checking tokens:', error);
     }
   },
 };
