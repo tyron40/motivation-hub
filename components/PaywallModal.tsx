@@ -193,13 +193,9 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 ]}
                 onPress={() => {
                   console.log('🔵 BUTTON PRESSED:', product.productId);
-                  if (isDisabled) {
-                    console.log('⚠️ BUTTON IS DISABLED - should not fire');
-                  }
                   handlePurchase(product.productId);
                 }}
-                disabled={isDisabled}
-                activeOpacity={isDisabled ? 1 : 0.7}
+                activeOpacity={0.7}
               >
                 {product.badge && (
                   <View style={styles.productBadge}>
@@ -258,13 +254,9 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 ]}
                 onPress={() => {
                   console.log('🔵 PREMIUM BUTTON PRESSED:', product.productId);
-                  if (isDisabled) {
-                    console.log('⚠️ PREMIUM BUTTON IS DISABLED - should not fire');
-                  }
                   handlePurchase(product.productId);
                 }}
-                disabled={isDisabled}
-                activeOpacity={isDisabled ? 1 : 0.7}
+                activeOpacity={0.7}
               >
                 {product.badge && (
                   <View style={styles.premiumBadge}>
