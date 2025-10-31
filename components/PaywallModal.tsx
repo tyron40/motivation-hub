@@ -40,7 +40,13 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const router = useRouter();
 
   const handlePurchase = async (productId: IAPProductId) => {
+    console.log('🔵 PAYWALL: handlePurchase called with:', productId);
+    console.log('🔵 PAYWALL: isAuthenticated:', isAuthenticated);
+    console.log('🔵 PAYWALL: isWeb:', isWeb);
+    console.log('🔵 PAYWALL: isPurchasing:', isPurchasing);
+    
     if (!isAuthenticated) {
+      console.log('❌ PAYWALL: Not authenticated, showing alert');
       Alert.alert(
         'Account Required',
         'Please sign in or create an account to upgrade to Premium.',
@@ -58,7 +64,9 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
       return;
     }
 
+    console.log('✅ PAYWALL: Calling purchase function...');
     await purchase(productId);
+    console.log('✅ PAYWALL: Purchase function completed');
   };
 
   const handleRestore = async () => {
@@ -172,16 +180,26 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
               Use credits for AI chat and voice interactions
             </Text>
             
-            {creditProducts.map((product) => (
+            {creditProducts.map((product) => {
+              const isDisabled = isPurchasing || !isAuthenticated || isWeb;
+              
+              return (
               <TouchableOpacity
                 key={product.productId}
                 style={[
                   styles.productCard,
                   product.popular && styles.productCardPopular,
-                  (!isAuthenticated || isWeb) && styles.productCardDisabled,
+                  isDisabled && styles.productCardDisabled,
                 ]}
-                onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing || !isAuthenticated || isWeb}
+                onPress={() => {
+                  console.log('🔵 BUTTON PRESSED:', product.productId);
+                  if (isDisabled) {
+                    console.log('⚠️ BUTTON IS DISABLED - should not fire');
+                  }
+                  handlePurchase(product.productId);
+                }}
+                disabled={isDisabled}
+                activeOpacity={isDisabled ? 1 : 0.7}
               >
                 {product.badge && (
                   <View style={styles.productBadge}>
@@ -199,8 +217,22 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                   </View>
                 </View>
                 <Text style={styles.productDescription}>{product.description}</Text>
+                
+                {!isAuthenticated && (
+                  <View style={styles.lockedIndicator}>
+                    <LogIn color={Colors.textSecondary} size={14} />
+                    <Text style={styles.lockedText}>Sign in required</Text>
+                  </View>
+                )}
+                
+                {isPurchasing && (
+                  <View style={styles.processingIndicator}>
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <Text style={styles.processingText}>Processing...</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+            );})}
           </View>
 
           <View style={styles.section}>
@@ -212,17 +244,27 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
               Remove all ads for a seamless experience
             </Text>
             
-            {premiumProducts.map((product) => (
+            {premiumProducts.map((product) => {
+              const isDisabled = isPurchasing || !isAuthenticated || entitlements.isPremium || isWeb;
+              
+              return (
               <TouchableOpacity
                 key={product.productId}
                 style={[
                   styles.productCard,
                   styles.premiumCard,
-                  (!isAuthenticated || isWeb) && styles.productCardDisabled,
+                  isDisabled && styles.productCardDisabled,
                   entitlements.isPremium && styles.productCardActive,
                 ]}
-                onPress={() => handlePurchase(product.productId)}
-                disabled={isPurchasing || !isAuthenticated || entitlements.isPremium || isWeb}
+                onPress={() => {
+                  console.log('🔵 PREMIUM BUTTON PRESSED:', product.productId);
+                  if (isDisabled) {
+                    console.log('⚠️ PREMIUM BUTTON IS DISABLED - should not fire');
+                  }
+                  handlePurchase(product.productId);
+                }}
+                disabled={isDisabled}
+                activeOpacity={isDisabled ? 1 : 0.7}
               >
                 {product.badge && (
                   <View style={styles.premiumBadge}>
@@ -247,8 +289,22 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                     <Text style={styles.activeText}>Active</Text>
                   </View>
                 )}
+                
+                {!isAuthenticated && (
+                  <View style={styles.lockedIndicator}>
+                    <LogIn color={Colors.textSecondary} size={14} />
+                    <Text style={styles.lockedText}>Sign in required</Text>
+                  </View>
+                )}
+                
+                {isPurchasing && (
+                  <View style={styles.processingIndicator}>
+                    <ActivityIndicator size="small" color={Colors.accent} />
+                    <Text style={styles.processingText}>Processing...</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
+            );})}
           </View>
 
           <View style={styles.disclaimerCard}>
@@ -625,5 +681,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
     fontWeight: '600',
+  },
+  processingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  processingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  lockedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  lockedText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
 });
