@@ -1,10 +1,10 @@
 // Product IDs must match exactly with App Store Connect
 export const IAP_PRODUCT_IDS = {
-  CREDITS_100: 'mh_credits_100',
-  CREDITS_500: 'mh_credits_500',
-  CREDITS_1000: 'mh_credits_1000',
-  PREMIUM_MONTHLY: 'mh_premium_monthly',
-  PREMIUM_ANNUAL: 'mh_premium_annual',
+  CREDITS_100: 'com.tyrotech.motivationhub.credits.100',
+  CREDITS_500: 'com.tyrotech.motivationhub.credits.500',
+  CREDITS_1000: 'com.tyrotech.motivationhub.credits.1000',
+  PREMIUM_MONTHLY: 'com.tyrotech.motivationhub.premium.monthly',
+  PREMIUM_ANNUAL: 'com.tyrotech.motivationhub.premium.annual',
 } as const;
 
 export type IAPProductId = typeof IAP_PRODUCT_IDS[keyof typeof IAP_PRODUCT_IDS];

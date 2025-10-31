@@ -122,7 +122,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
               <Smartphone color={Colors.primary} size={24} />
               <Text style={styles.webNoticeTitle}>Mobile App Required</Text>
               <Text style={styles.webNoticeText}>
-                In-app purchases are only available on iOS and Android devices. Please download the mobile app to upgrade to Premium.
+                In-app purchases are only available on the iOS mobile app. Please download the app to upgrade to Premium.
               </Text>
             </View>
           )}

@@ -55,12 +55,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       try {
         console.log('🔧 Configuring RevenueCat...');
         
-        // Replace with your actual RevenueCat API keys from https://app.revenuecat.com
-        const apiKey = Platform.select({
-          ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '',
-          android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '',
-          default: '',
-        });
+        // Use iOS RevenueCat API key from https://app.revenuecat.com
+        const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
 
         if (!apiKey) {
           console.warn('⚠️ RevenueCat API key not configured');
