@@ -27,11 +27,11 @@ interface PaywallModalProps {
 }
 
 const PRICE_MAP: Record<string, string> = {
-  'com.tyrotech.motivationhub.credits.100': '$4.99',
-  'com.tyrotech.motivationhub.credits.500': '$19.99',
-  'com.tyrotech.motivationhub.credits.1000': '$34.99',
-  'com.tyrotech.motivationhub.premium.monthly': '$9.99/month',
-  'com.tyrotech.motivationhub.premium.annual': '$99.99/year',
+  'app.rork.motivational_speech_app.credits.100': '$4.99',
+  'app.rork.motivational_speech_app.credits.500': '$19.99',
+  'app.rork.motivational_speech_app.credits.1000': '$34.99',
+  'app.rork.motivational_speech_app.premium.monthly': '$9.99/month',
+  'app.rork.motivational_speech_app.premium.annual': '$99.99/year',
 };
 
 export default function PaywallModal({ visible, onClose }: PaywallModalProps) {

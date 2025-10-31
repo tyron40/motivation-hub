@@ -221,18 +221,42 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, [entitlements, saveEntitlements]);
 
   const purchase = useCallback(async (productId: IAPProductId) => {
+    console.log('🎯 Purchase button tapped! Product ID:', productId);
+    console.log('📊 State check:', {
+      isPurchasing,
+      isWeb,
+      isAuthenticated,
+      isConfigured,
+      availablePackagesCount: availablePackages.length
+    });
+
     if (isPurchasing) {
       console.warn('⚠️ Purchase already in progress');
+      Alert.alert('Please Wait', 'A purchase is already in progress.');
       return;
     }
 
     if (isWeb) {
       console.warn('⚠️ In-app purchases are not available on web');
+      Alert.alert('Not Available', 'In-app purchases are only available on mobile.');
       return;
     }
 
     if (!isAuthenticated) {
+      console.log('❌ User not authenticated');
       Alert.alert('Account Required', 'Please sign in to make purchases.');
+      return;
+    }
+
+    if (!isConfigured) {
+      console.log('❌ RevenueCat not configured');
+      Alert.alert('Not Ready', 'Payment system is still loading. Please try again in a moment.');
+      return;
+    }
+
+    if (availablePackages.length === 0) {
+      console.log('❌ No packages available');
+      Alert.alert('Products Unavailable', 'Unable to load products. Please check your connection and try again.');
       return;
     }
 
@@ -240,19 +264,25 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     
     try {
       console.log('🛒 Starting purchase for:', productId);
-
-      if (!isConfigured) {
-        throw new Error('Payment system not ready. Please try again in a moment.');
-      }
+      console.log('📦 Available packages:', availablePackages.map(p => p.product.identifier));
 
       // Find the package that matches the product ID
       const pkg = availablePackages.find(p => p.product.identifier === productId);
       
       if (!pkg) {
-        throw new Error('Product not available. Please try again later.');
+        console.log('❌ Product not found in available packages');
+        console.log('Looking for:', productId);
+        console.log('Available:', availablePackages.map(p => p.product.identifier));
+        throw new Error(`Product ${productId} not found. Available: ${availablePackages.map(p => p.product.identifier).join(', ')}`);
       }
 
       console.log('💳 Making purchase with RevenueCat...');
+      console.log('Package details:', {
+        identifier: pkg.identifier,
+        productId: pkg.product.identifier,
+        price: pkg.product.priceString
+      });
+      
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       
       // Process the purchase and update entitlements
@@ -267,6 +297,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       console.log('✅ Purchase completed successfully');
     } catch (error: any) {
       console.error('❌ Purchase error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       
       if (error.userCancelled) {
         console.log('ℹ️ User cancelled purchase');
