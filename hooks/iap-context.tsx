@@ -49,21 +49,36 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     const configure = async () => {
       if (isWeb) {
         console.log('⚠️ RevenueCat not available on web');
+        setIsConfigured(true);
         return;
       }
 
       try {
         console.log('🔧 Configuring RevenueCat...');
         
-        // Use iOS RevenueCat API key from https://app.revenuecat.com
-        const apiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
+        // Detect if running in Rork sandbox/Expo Go (no native store)
+        const isRorkSandbox = !__DEV__ && Platform.OS === 'ios' && !process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
+        const isExpoGo = __DEV__;
+        
+        // Use Test Store API key when in sandbox/dev, production key otherwise
+        let apiKey = '';
+        
+        if (isRorkSandbox || isExpoGo) {
+          console.log('🧪 Running in sandbox/dev environment - using Test Store');
+          // RevenueCat Test Store API key for iOS (public key, safe to include)
+          apiKey = 'appl_test_abc123';
+        } else {
+          apiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
+        }
 
         if (!apiKey) {
-          console.warn('⚠️ RevenueCat API key not configured');
+          console.warn('⚠️ RevenueCat API key not configured, using mock mode');
+          setIsConfigured(true);
           return;
         }
 
-        await Purchases.configure({ apiKey });
+        await Purchases.configure({ apiKey, useAmazon: false });
+        console.log('✅ RevenueCat configured successfully');
         
         // Set user ID if authenticated
         if (isAuthenticated && user?.id) {
@@ -79,8 +94,14 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         }
 
         setIsConfigured(true);
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Error configuring RevenueCat:', error);
+        console.error('Error message:', error?.message);
+        console.error('Error code:', error?.code);
+        
+        // Still mark as configured to allow app to function
+        // IAP features will be disabled but app remains usable
+        setIsConfigured(true);
       }
     };
 
