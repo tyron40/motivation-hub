@@ -1,17 +1,17 @@
 export default {
-  primary: '#9333EA',
-  secondary: '#C084FC',
-  accent: '#E879F9',
-  background: '#0F0F1E',
-  card: '#1A1A2E',
-  cardBackground: '#1A1A2E',
-  surface: '#1A1A2E',
+  primary: '#3B82F6',
+  secondary: '#60A5FA',
+  accent: '#93C5FD',
+  background: '#0A0E1A',
+  card: '#1E293B',
+  cardBackground: '#1E293B',
+  surface: '#1E293B',
   text: '#FFFFFF',
-  textSecondary: '#A0A0B8',
+  textSecondary: '#94A3B8',
   gradient: {
-    start: '#7C3AED',
-    middle: '#9333EA',
-    end: '#C084FC',
+    start: '#1E40AF',
+    middle: '#3B82F6',
+    end: '#60A5FA',
   },
   categories: {
     daily: '#10B981',
@@ -22,8 +22,8 @@ export default {
     relationships: '#EC4899',
   },
   tabBar: {
-    active: '#A855F7',
-    inactive: '#6B6B7B',
-    background: '#1A1A2E',
+    active: '#3B82F6',
+    inactive: '#64748B',
+    background: '#1E293B',
   }
 };

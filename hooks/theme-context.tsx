@@ -221,7 +221,7 @@ export const themeNames: Record<ThemeColor, string> = {
 };
 
 export const [ThemeProvider, useTheme] = createContextHook(() => {
-  const [selectedTheme, setSelectedTheme] = useState<ThemeColor>('purple');
+  const [selectedTheme, setSelectedTheme] = useState<ThemeColor>('blue');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
