@@ -56,23 +56,15 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       try {
         console.log('🔧 Configuring RevenueCat...');
         
-        // Detect if running in Rork sandbox/Expo Go (no native store)
-        const isRorkSandbox = !__DEV__ && Platform.OS === 'ios' && !process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-        const isExpoGo = __DEV__;
-        
-        // Use Test Store API key when in sandbox/dev, production key otherwise
-        let apiKey = '';
-        
-        if (isRorkSandbox || isExpoGo) {
-          console.log('🧪 Running in sandbox/dev environment - using Test Store');
-          // RevenueCat Test Store API key for iOS (public key, safe to include)
-          apiKey = 'appl_test_abc123';
-        } else {
-          apiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
-        }
+        const apiKey = Platform.select({
+          ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '',
+          android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '',
+          default: '',
+        });
 
         if (!apiKey) {
-          console.warn('⚠️ RevenueCat API key not configured, using mock mode');
+          console.warn('⚠️ RevenueCat API key not configured');
+          console.log('ℹ️ IAP features will be disabled in this environment');
           setIsConfigured(true);
           return;
         }
@@ -98,6 +90,12 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         console.error('❌ Error configuring RevenueCat:', error);
         console.error('Error message:', error?.message);
         console.error('Error code:', error?.code);
+        
+        // Check if it's the Rork sandbox error
+        if (error?.message?.includes('native store is not available')) {
+          console.log('ℹ️ Running in Rork sandbox - IAP will not work here');
+          console.log('ℹ️ To test IAP: Create a development build or test on actual device');
+        }
         
         // Still mark as configured to allow app to function
         // IAP features will be disabled but app remains usable
