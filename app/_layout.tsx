@@ -313,17 +313,15 @@ export default function RootLayout() {
                 <AuthProvider>
                   <IAPProvider>
                     <UserProfileProvider>
-                      <ErrorBoundary>
-                        <PlaylistProvider>
-                          <ScriptureFavoritesProvider>
-                            <ChatSessionsProvider>
-                              <SpeechProvider>
-                                <RootLayoutNav />
-                              </SpeechProvider>
-                            </ChatSessionsProvider>
-                          </ScriptureFavoritesProvider>
-                        </PlaylistProvider>
-                      </ErrorBoundary>
+                      <PlaylistProvider>
+                        <ScriptureFavoritesProvider>
+                          <ChatSessionsProvider>
+                            <SpeechProvider>
+                              <RootLayoutNav />
+                            </SpeechProvider>
+                          </ChatSessionsProvider>
+                        </ScriptureFavoritesProvider>
+                      </PlaylistProvider>
                     </UserProfileProvider>
                   </IAPProvider>
                 </AuthProvider>
