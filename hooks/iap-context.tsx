@@ -69,6 +69,17 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           return;
         }
 
+        // Check if we're in a sandbox environment (Rork preview, Expo Go, etc.)
+        const isSandbox = __DEV__ && (apiKey.startsWith('appl_') || apiKey.startsWith('goog_'));
+        
+        if (isSandbox) {
+          console.log('ℹ️ Running in sandbox environment with production API key');
+          console.log('ℹ️ IAP features will be disabled - this is expected');
+          console.log('ℹ️ Use RevenueCat Test Store API key for testing, or production build for native IAP');
+          setIsConfigured(true);
+          return;
+        }
+
         await Purchases.configure({ apiKey, useAmazon: false });
         console.log('✅ RevenueCat configured successfully');
         
@@ -88,19 +99,17 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         setIsConfigured(true);
       } catch (error: any) {
         // Check if it's the Rork sandbox error
-        if (error?.message?.includes('native store is not available') || error?.message?.includes('Invalid API key')) {
-          console.log('ℹ️ Running in Rork sandbox - RevenueCat features disabled');
-          console.log('ℹ️ This is expected behavior in sandbox environment');
-          console.log('ℹ️ IAP will work normally in production builds');
+        if (error?.message?.includes('native store is not available') || 
+            error?.message?.includes('Invalid API key') ||
+            error?.message?.includes('Test Store API Key')) {
+          console.log('ℹ️ Running in sandbox - RevenueCat features disabled');
+          console.log('ℹ️ This is expected in Rork preview/Expo Go');
+          console.log('ℹ️ IAP will work in production builds');
         } else {
-          // Only show errors for unexpected issues
           console.error('❌ Error configuring RevenueCat:', error);
           console.error('Error message:', error?.message);
-          console.error('Error code:', error?.code);
         }
         
-        // Still mark as configured to allow app to function
-        // IAP features will be disabled but app remains usable
         setIsConfigured(true);
       }
     };
