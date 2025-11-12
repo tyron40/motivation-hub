@@ -308,25 +308,23 @@ export default function RootLayout() {
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
-            <ErrorBoundary>
-              <ThemeProvider>
-                <AuthProvider>
-                  <IAPProvider>
-                    <UserProfileProvider>
-                      <PlaylistProvider>
-                        <ScriptureFavoritesProvider>
-                          <ChatSessionsProvider>
-                            <SpeechProvider>
-                              <RootLayoutNav />
-                            </SpeechProvider>
-                          </ChatSessionsProvider>
-                        </ScriptureFavoritesProvider>
-                      </PlaylistProvider>
-                    </UserProfileProvider>
-                  </IAPProvider>
-                </AuthProvider>
-              </ThemeProvider>
-            </ErrorBoundary>
+            <ThemeProvider>
+              <AuthProvider>
+                <IAPProvider>
+                  <UserProfileProvider>
+                    <PlaylistProvider>
+                      <ScriptureFavoritesProvider>
+                        <ChatSessionsProvider>
+                          <SpeechProvider>
+                            <RootLayoutNav />
+                          </SpeechProvider>
+                        </ChatSessionsProvider>
+                      </ScriptureFavoritesProvider>
+                    </PlaylistProvider>
+                  </UserProfileProvider>
+                </IAPProvider>
+              </AuthProvider>
+            </ThemeProvider>
           </QueryClientProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
