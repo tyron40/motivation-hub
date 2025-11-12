@@ -27,11 +27,11 @@ interface PaywallModalProps {
 }
 
 const PRICE_MAP: Record<string, string> = {
-  'app.rork.motivational_speech_app.credits.100': '$4.99',
-  'app.rork.motivational_speech_app.credits.500': '$19.99',
-  'app.rork.motivational_speech_app.credits.1000': '$34.99',
-  'app.rork.motivational_speech_app.premium.monthly': '$9.99/month',
-  'app.rork.motivational_speech_app.premium.annual': '$99.99/year',
+  'mh_credits_100': '$0.99',
+  'mh_credits_500': '$0.99',
+  'mh_credits_1000': '$0.99',
+  'mh_premium_monthly': '$99.99/month',
+  'mh_premium_annual': '$99.99/year',
 };
 
 export default function PaywallModal({ visible, onClose }: PaywallModalProps) {

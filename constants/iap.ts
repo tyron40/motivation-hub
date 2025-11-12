@@ -1,11 +1,10 @@
-// Product IDs must match exactly with App Store Connect
-// Bundle ID: app.rork.motivational-speech-app
+// Product IDs must match exactly with RevenueCat configuration
 export const IAP_PRODUCT_IDS = {
-  CREDITS_100: 'app.rork.motivational_speech_app.credits.100',
-  CREDITS_500: 'app.rork.motivational_speech_app.credits.500',
-  CREDITS_1000: 'app.rork.motivational_speech_app.credits.1000',
-  PREMIUM_MONTHLY: 'app.rork.motivational_speech_app.premium.monthly',
-  PREMIUM_ANNUAL: 'app.rork.motivational_speech_app.premium.annual',
+  CREDITS_100: 'mh_credits_100',
+  CREDITS_500: 'mh_credits_500',
+  CREDITS_1000: 'mh_credits_1000',
+  PREMIUM_MONTHLY: 'mh_premium_monthly',
+  PREMIUM_ANNUAL: 'mh_premium_annual',
 } as const;
 
 export type IAPProductId = typeof IAP_PRODUCT_IDS[keyof typeof IAP_PRODUCT_IDS];
