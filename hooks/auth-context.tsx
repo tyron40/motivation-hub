@@ -56,12 +56,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const { data: { session } = { session: null }, error } = result || { data: { session: null } };
         
         if (error) {
-          console.error('❌ Error getting session:', error);
-          
-          // Clear invalid session if refresh token error
+          // Only log auth errors that aren't token refresh issues
           if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token') || error.message?.includes('Invalid') || error.status === 401) {
-            console.log('🔐 Clearing invalid session due to auth error');
+            console.log('🔐 Clearing expired/invalid session');
             await auth.clearSession();
+          } else {
+            console.error('❌ Error getting session:', error);
           }
         }
 
