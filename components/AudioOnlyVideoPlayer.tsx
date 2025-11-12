@@ -56,15 +56,15 @@ export default function AudioOnlyVideoPlayer({
       }
       
       setIsLoading(false);
-      setError('Unable to load audio. Tap Next to skip.');
+      setError('Loading timeout. Skipping...');
       onError?.('Loading timeout');
       
-      // Auto-skip after 3 seconds if still can't load
+      // Auto-skip after 1.5 seconds if still can't load
       autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 3000);
-    }, 20000);
+      }, 1500);
+    }, 15000);
 
     return () => {
       if (progressRef) {
@@ -401,8 +401,35 @@ export default function AudioOnlyVideoPlayer({
           }
           
           const errorCode = data.error;
-          const errorMsg = data.errorMessage || `Failed to play audio: Error code ${errorCode}`;
+          let errorMsg = data.errorMessage || 'Playback error';
+          
+          // Provide more specific error messages
+          if (errorCode === 101 || errorCode === 150) {
+            errorMsg = 'This video cannot be embedded. Skipping...';
+          } else if (errorCode === 100) {
+            errorMsg = 'Video not available. Skipping...';
+          } else if (errorCode === 2) {
+            errorMsg = 'Invalid video ID. Skipping...';
+          } else if (errorCode === 5) {
+            errorMsg = 'Playback error. Skipping...';
+          }
+          
           console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
+          
+          // For embedding errors (101, 150), skip immediately without retry
+          if (errorCode === 101 || errorCode === 150 || errorCode === 100) {
+            setError(errorMsg);
+            setIsLoading(false);
+            setIsPlaying(false);
+            onError?.(errorMsg);
+            
+            // Auto-skip immediately for embedding restriction errors
+            console.log('⏭️ Auto-skipping unplayable video (embedding restricted)');
+            autoSkipTimeoutRef.current = setTimeout(() => {
+              onNext?.();
+            }, 1500);
+            return;
+          }
           
           if (retryCountRef.current < maxRetries && (errorCode === 5 || errorCode === 'PLAYBACK_START_FAILED')) {
             retryCountRef.current += 1;
@@ -419,11 +446,11 @@ export default function AudioOnlyVideoPlayer({
           setIsPlaying(false);
           onError?.(errorMsg);
           
-          // Auto-skip after 3 seconds if video can't be played
+          // Auto-skip after 2 seconds for other errors
           autoSkipTimeoutRef.current = setTimeout(() => {
             console.log('⏭️ Auto-skipping unplayable video after error');
             onNext?.();
-          }, 3000);
+          }, 2000);
           break;
       }
     } catch (e) {
