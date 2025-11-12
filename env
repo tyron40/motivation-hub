@@ -16,4 +16,6 @@ EXPO_PUBLIC_TOOLKIT_URL=https://toolkit.rork.com
 # YouTube API Configuration
 # Get your API key from: https://console.cloud.google.com/apis/credentials
 # Make sure YouTube Data API v3 is enabled
+# This is used by the Vercel backend to fetch YouTube videos
 YOUTUBE_API_KEY=your_youtube_api_key_here
+EXPO_PUBLIC_YOUTUBE_API_KEY=your_youtube_api_key_here
