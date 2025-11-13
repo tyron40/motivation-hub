@@ -44,8 +44,11 @@ export default function AudioOnlyVideoPlayer({
     const progressRef = progressIntervalRef.current;
     const loadingRef = loadingTimeoutRef.current;
     
+    console.log(`🎵 Initializing AudioOnlyVideoPlayer for video: ${videoId}`);
+    console.log(`📺 Video title: ${title}`);
+    
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Loading timeout - player may not be ready');
+      console.warn(`⚠️ Loading timeout for video ${videoId} - player may not be ready`);
       
       if (retryCountRef.current < maxRetries) {
         retryCountRef.current += 1;
@@ -404,7 +407,7 @@ export default function AudioOnlyVideoPlayer({
           let errorMsg = data.errorMessage || 'Playback error';
           
           // Provide more specific error messages
-          if (errorCode === 101 || errorCode === 150) {
+          if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
             errorMsg = 'This video cannot be embedded. Skipping...';
           } else if (errorCode === 100) {
             errorMsg = 'Video not available. Skipping...';
@@ -414,7 +417,7 @@ export default function AudioOnlyVideoPlayer({
             errorMsg = 'Playback error. Skipping...';
           }
           
-          console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
+          console.error(`❌ Player error for video ${videoId} (${title}):`, errorMsg, 'Code:', errorCode);
           
           // For embedding errors (101, 150), skip immediately without retry
           if (errorCode === 101 || errorCode === 150 || errorCode === 100) {

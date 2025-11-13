@@ -118,7 +118,7 @@ async function fetchYouTubeVideos(
     }
 
     const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
@@ -129,18 +129,27 @@ async function fetchYouTubeVideos(
 
     const detailsData = await detailsResponse.json();
 
-    return detailsData.items.map((item: any) => ({
-      id: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-      channelTitle: item.snippet.channelTitle,
-      channelId: item.snippet.channelId,
-      publishedAt: item.snippet.publishedAt,
-      duration: parseDuration(item.contentDetails.duration),
-      viewCount: parseInt(item.statistics.viewCount || '0'),
-      category: query,
-    }));
+    return detailsData.items
+      .filter((item: any) => {
+        const embeddable = item.status?.embeddable !== false;
+        const isPublic = item.status?.privacyStatus === 'public';
+        if (!embeddable || !isPublic) {
+          console.log(`⚠️ Filtering out non-embeddable video: ${item.snippet.title}`);
+        }
+        return embeddable && isPublic;
+      })
+      .map((item: any) => ({
+        id: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+        channelTitle: item.snippet.channelTitle,
+        channelId: item.snippet.channelId,
+        publishedAt: item.snippet.publishedAt,
+        duration: parseDuration(item.contentDetails.duration),
+        viewCount: parseInt(item.statistics.viewCount || '0'),
+        category: query,
+      }));
   } catch (error) {
     console.error('❌ Error fetching YouTube videos:', error);
     return [];
