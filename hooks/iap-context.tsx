@@ -70,18 +70,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           return;
         }
 
-        // Check if we're in a sandbox environment (Rork preview, Expo Go, etc.)
-        const sandboxMode = __DEV__ && (apiKey.startsWith('appl_') || apiKey.startsWith('goog_'));
-        
-        if (sandboxMode) {
-          console.log('ℹ️ Running in sandbox environment with production API key');
-          console.log('ℹ️ IAP features will be disabled - this is expected');
-          console.log('ℹ️ Use RevenueCat Test Store API key for testing, or production build for native IAP');
-          setIsSandbox(true);
-          setIsConfigured(true);
-          return;
-        }
-
         await Purchases.configure({ apiKey, useAmazon: false });
         console.log('✅ RevenueCat configured successfully');
         
@@ -100,20 +88,23 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
         setIsConfigured(true);
       } catch (error: any) {
+        console.log('⚠️ Error configuring RevenueCat:', error?.message);
+        
         // Check if it's the Rork sandbox error
         if (error?.message?.includes('native store is not available') || 
             error?.message?.includes('Invalid API key') ||
-            error?.message?.includes('Test Store API Key')) {
+            error?.message?.includes('Test Store API Key') ||
+            error?.message?.includes('Rork sandbox')) {
           console.log('ℹ️ Running in sandbox - RevenueCat features disabled');
           console.log('ℹ️ This is expected in Rork preview/Expo Go');
           console.log('ℹ️ IAP will work in production builds');
           setIsSandbox(true);
+          setIsConfigured(true);
         } else {
-          console.error('❌ Error configuring RevenueCat:', error);
+          console.error('❌ Unexpected error configuring RevenueCat:', error);
           console.error('Error message:', error?.message);
+          setIsConfigured(true);
         }
-        
-        setIsConfigured(true);
       }
     };
 
