@@ -287,12 +287,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       return;
     }
 
-    if (availablePackages.length === 0 && !isSandbox) {
-      console.log('❌ No packages available');
-      Alert.alert('Products Unavailable', 'Unable to load products. Please check your connection and try again.');
-      return;
-    }
-
     if (isSandbox) {
       console.log('ℹ️ Cannot purchase in sandbox mode');
       Alert.alert(
@@ -300,6 +294,12 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         'In-app purchases are not available in the Rork preview environment. This feature will work in production builds.',
         [{ text: 'OK' }]
       );
+      return;
+    }
+
+    if (availablePackages.length === 0) {
+      console.log('❌ No packages available');
+      Alert.alert('Products Unavailable', 'Unable to load products. Please check your connection and try again.');
       return;
     }
 
