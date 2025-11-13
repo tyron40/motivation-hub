@@ -40,6 +40,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const [isRestoring, setIsRestoring] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
   const [availablePackages, setAvailablePackages] = useState<PurchasesPackage[]>([]);
+  const [isSandbox, setIsSandbox] = useState(false);
   
   // Check if current user is demo account
   const isDemoAccount = user?.email === 'demo@motivationhub.app';
@@ -70,12 +71,13 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         }
 
         // Check if we're in a sandbox environment (Rork preview, Expo Go, etc.)
-        const isSandbox = __DEV__ && (apiKey.startsWith('appl_') || apiKey.startsWith('goog_'));
+        const sandboxMode = __DEV__ && (apiKey.startsWith('appl_') || apiKey.startsWith('goog_'));
         
-        if (isSandbox) {
+        if (sandboxMode) {
           console.log('ℹ️ Running in sandbox environment with production API key');
           console.log('ℹ️ IAP features will be disabled - this is expected');
           console.log('ℹ️ Use RevenueCat Test Store API key for testing, or production build for native IAP');
+          setIsSandbox(true);
           setIsConfigured(true);
           return;
         }
@@ -105,6 +107,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           console.log('ℹ️ Running in sandbox - RevenueCat features disabled');
           console.log('ℹ️ This is expected in Rork preview/Expo Go');
           console.log('ℹ️ IAP will work in production builds');
+          setIsSandbox(true);
         } else {
           console.error('❌ Error configuring RevenueCat:', error);
           console.error('Error message:', error?.message);
@@ -284,9 +287,19 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       return;
     }
 
-    if (availablePackages.length === 0) {
+    if (availablePackages.length === 0 && !isSandbox) {
       console.log('❌ No packages available');
       Alert.alert('Products Unavailable', 'Unable to load products. Please check your connection and try again.');
+      return;
+    }
+
+    if (isSandbox) {
+      console.log('ℹ️ Cannot purchase in sandbox mode');
+      Alert.alert(
+        'Sandbox Mode',
+        'In-app purchases are not available in the Rork preview environment. This feature will work in production builds.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -420,6 +433,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     refreshEntitlements: loadEntitlements,
+    isSandbox,
+    isConfigured,
   }), [
     entitlements,
     usageStats,
@@ -432,5 +447,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     setPremium,
     canUseVoice,
     loadEntitlements,
+    isSandbox,
+    isConfigured,
   ]);
 });

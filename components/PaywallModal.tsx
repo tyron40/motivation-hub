@@ -35,7 +35,7 @@ const PRICE_MAP: Record<string, string> = {
 };
 
 export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
-  const { entitlements, usageStats, isPurchasing, isRestoring, purchase, restorePurchases } = useIAP();
+  const { entitlements, usageStats, isPurchasing, isRestoring, purchase, restorePurchases, isSandbox, isConfigured } = useIAP();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
 
@@ -125,12 +125,16 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {isWeb && (
+          {(isWeb || isSandbox) && (
             <View style={styles.webNoticeCard}>
               <Smartphone color={Colors.primary} size={24} />
-              <Text style={styles.webNoticeTitle}>Mobile App Required</Text>
+              <Text style={styles.webNoticeTitle}>
+                {isWeb ? 'Mobile App Required' : 'Preview Mode'}
+              </Text>
               <Text style={styles.webNoticeText}>
-                In-app purchases are only available on the iOS mobile app. Please download the app to upgrade to Premium.
+                {isWeb 
+                  ? 'In-app purchases are only available on the iOS mobile app. Please download the app to upgrade to Premium.'
+                  : 'In-app purchases are not available in the Rork preview environment. This feature will work in production builds on real devices.'}
               </Text>
             </View>
           )}
@@ -181,7 +185,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
             </Text>
             
             {creditProducts.map((product) => {
-              const isDisabled = isPurchasing || !isAuthenticated || isWeb;
+              const isDisabled = isPurchasing || !isAuthenticated || isWeb || isSandbox;
               
               return (
               <TouchableOpacity
@@ -241,7 +245,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
             </Text>
             
             {premiumProducts.map((product) => {
-              const isDisabled = isPurchasing || !isAuthenticated || entitlements.isPremium || isWeb;
+              const isDisabled = isPurchasing || !isAuthenticated || entitlements.isPremium || isWeb || isSandbox;
               
               return (
               <TouchableOpacity
@@ -319,16 +323,16 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
           <TouchableOpacity
             style={styles.restoreButton}
             onPress={handleRestore}
-            disabled={isRestoring || isPurchasing || !isAuthenticated || isWeb}
+            disabled={isRestoring || isPurchasing || !isAuthenticated || isWeb || isSandbox}
           >
             {isRestoring ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : (
               <>
-                <RefreshCw color={(isAuthenticated && !isWeb) ? Colors.primary : Colors.textSecondary} size={18} />
+                <RefreshCw color={(isAuthenticated && !isWeb && !isSandbox) ? Colors.primary : Colors.textSecondary} size={18} />
                 <Text style={[
                   styles.restoreButtonText,
-                  (!isAuthenticated || isWeb) && styles.restoreButtonTextDisabled,
+                  (!isAuthenticated || isWeb || isSandbox) && styles.restoreButtonTextDisabled,
                 ]}>
                   Restore Purchases
                 </Text>
