@@ -337,17 +337,24 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
   }
 
   try {
+    const fetchLimit = Math.min(maxResults * 2, 50);
+    
     const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
     searchUrl.searchParams.set('part', 'snippet');
     searchUrl.searchParams.set('q', query);
     searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', maxResults.toString());
+    searchUrl.searchParams.set('maxResults', fetchLimit.toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
+    searchUrl.searchParams.set('videoEmbeddable', 'true');
+    searchUrl.searchParams.set('videoSyndicated', 'true');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     console.log('[YouTube] Fetching search results...');
+    console.log('[YouTube] Query:', query);
+    console.log('[YouTube] Requested:', maxResults, '| Fetching:', fetchLimit);
     console.log('[YouTube] API Key present:', YOUTUBE_API_KEY ? `Yes (${YOUTUBE_API_KEY.substring(0, 10)}...)` : 'No');
+    
     const searchResponse = await fetch(searchUrl.toString());
     if (!searchResponse.ok) {
       const errorText = await searchResponse.text();
@@ -390,6 +397,7 @@ Details: ${errorDetails}`;
     const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
 
     if (!videoIds) {
+      console.log('[YouTube] ⚠️ No videos found in search results');
       return [];
     }
 
@@ -398,7 +406,7 @@ Details: ${errorDetails}`;
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
-    console.log('[YouTube] Fetching video details...');
+    console.log('[YouTube] Fetching video details for', searchData.items.length, 'videos...');
     const detailsResponse = await fetch(detailsUrl.toString());
     if (!detailsResponse.ok) {
       const errorText = await detailsResponse.text();
@@ -412,11 +420,15 @@ Details: ${errorDetails}`;
       .filter((item: any) => {
         const embeddable = item.status?.embeddable !== false;
         const isPublic = item.status?.privacyStatus === 'public';
-        if (!embeddable || !isPublic) {
-          console.log(`[YouTube] ⚠️ Filtering out non-embeddable video: ${item.snippet.title}`);
+        const allowEmbed = item.status?.embeddable === true;
+        
+        if (!embeddable || !isPublic || !allowEmbed) {
+          console.log(`[YouTube] ⚠️ Filtering out non-embeddable/private video: ${item.snippet.title} (embeddable: ${embeddable}, public: ${isPublic}, allowEmbed: ${allowEmbed})`);
+          return false;
         }
-        return embeddable && isPublic;
+        return true;
       })
+      .slice(0, maxResults)
       .map((item: any) => ({
         id: item.id,
         title: item.snippet.title,
@@ -428,7 +440,7 @@ Details: ${errorDetails}`;
         duration: parseDuration(item.contentDetails.duration),
         viewCount: parseInt(item.statistics.viewCount || '0'),
         category: query,
-        embeddable: item.status?.embeddable !== false,
+        embeddable: true,
       }));
 
     REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
@@ -438,7 +450,7 @@ Details: ${errorDetails}`;
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`[YouTube] ✅ Successfully fetched and cached ${videos.length} videos`);
+    console.log(`[YouTube] ✅ Successfully fetched ${videos.length}/${detailsData.items.length} embeddable videos (requested: ${maxResults})`);
     return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);
