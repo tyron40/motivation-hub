@@ -418,12 +418,12 @@ Details: ${errorDetails}`;
 
     const videos = detailsData.items
       .filter((item: any) => {
-        const embeddable = item.status?.embeddable !== false;
+        const embeddable = item.status?.embeddable === true;
         const isPublic = item.status?.privacyStatus === 'public';
-        const allowEmbed = item.status?.embeddable === true;
+        const isNotLive = item.snippet?.liveBroadcastContent === 'none';
         
-        if (!embeddable || !isPublic || !allowEmbed) {
-          console.log(`[YouTube] ⚠️ Filtering out non-embeddable/private video: ${item.snippet.title} (embeddable: ${embeddable}, public: ${isPublic}, allowEmbed: ${allowEmbed})`);
+        if (!embeddable || !isPublic || !isNotLive) {
+          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (embeddable: ${embeddable}, public: ${isPublic}, notLive: ${isNotLive})`);
           return false;
         }
         return true;
