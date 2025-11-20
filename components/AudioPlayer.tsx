@@ -3,6 +3,25 @@ import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import { getBrowserSafeAudioUrl } from '@/services/speechService';
 
+// Check if URL is a YouTube URL
+function isYouTubeUrl(url: string): boolean {
+  return url.includes('youtube.com') || url.includes('youtu.be');
+}
+
+// Extract YouTube video ID
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) return match[1];
+  }
+  return null;
+}
+
 interface AudioPlayerProps {
   audioUrl: string;
   isPlaying: boolean;
@@ -42,11 +61,26 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
         // Validate audioUrl before processing
         if (!audioUrl || typeof audioUrl !== 'string' || audioUrl.trim().length === 0) {
           console.warn('⚠️ Invalid or empty audioUrl provided:', audioUrl);
-          // Set a fallback URL instead of empty string
           const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
           setSafeAudioUrl(fallbackUrl);
           setIsLoading(false);
           return;
+        }
+        
+        // Check if it's a YouTube URL - if so, pass it through as-is
+        // The parent component should handle YouTube video IDs differently
+        if (isYouTubeUrl(audioUrl)) {
+          const videoId = extractYouTubeId(audioUrl);
+          if (videoId) {
+            console.log('🎬 YouTube video detected:', videoId);
+            console.log('⚠️ YouTube URLs cannot be played as audio directly');
+            console.log('⚠️ Please use YouTubePlayer component for YouTube content');
+            // Signal to parent that this is a YouTube video
+            setSafeAudioUrl(`youtube:${videoId}`);
+            onError?.('YouTube videos require YouTubePlayer component');
+            setIsLoading(false);
+            return;
+          }
         }
         
         const safeUrl = await getBrowserSafeAudioUrl(audioUrl);
@@ -54,7 +88,6 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
         // Validate the returned safe URL
         if (!safeUrl || typeof safeUrl !== 'string' || safeUrl.trim().length === 0) {
           console.warn('⚠️ Invalid safe URL returned:', safeUrl);
-          // Set a fallback URL instead of empty string
           const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
           setSafeAudioUrl(fallbackUrl);
           onError?.('Using fallback audio');
@@ -64,7 +97,6 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
         }
       } catch (error) {
         console.error('Error getting safe audio URL:', error);
-        // Set a fallback URL instead of empty string
         const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
         setSafeAudioUrl(fallbackUrl);
         onError?.('Using fallback audio');
@@ -77,7 +109,6 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
       getSafeUrl();
     } else {
       console.log('⚠️ No valid audioUrl provided, using fallback');
-      // Set a fallback URL instead of empty string
       const fallbackUrl = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
       setSafeAudioUrl(fallbackUrl);
       setIsLoading(false);
