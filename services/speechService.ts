@@ -149,21 +149,23 @@ export const fetchYouTubeSpeechesByCategory = async (category: string, limit: nu
 // Fetch speeches by category using embedded YouTube speeches
 export const fetchSpeechesByCategory = async (category: string, limit: number = 500): Promise<Speech[]> => {
   try {
-    console.log(`📺 Fetching embedded YouTube speeches for category: ${category}`);
+    console.log(`📺 Fetching speeches for category: ${category}`);
     
-    // Get embedded YouTube speeches for the category (500 speeches per category)
+    // First, try fetching fresh YouTube content from backend API
+    const youtubeSpeeches = await fetchYouTubeSpeechesByCategory(category, Math.min(limit, 50));
+    
+    if (youtubeSpeeches.length > 0) {
+      console.log(`✅ Fetched ${youtubeSpeeches.length} speeches from YouTube API backend`);
+      return youtubeSpeeches;
+    }
+    
+    // Fallback to embedded speeches if API fails
+    console.log(`⚠️ YouTube API failed, using embedded speeches for category: ${category}`);
     const categorySpeeches = getSpeechesByCategory(category);
     
     if (categorySpeeches.length > 0) {
       console.log(`✅ Found ${categorySpeeches.length} embedded YouTube speeches for category: ${category}`);
       return categorySpeeches.slice(0, limit);
-    }
-    
-    // Fallback to fetching from YouTube API if no embedded speeches found
-    const youtubeSpeeches = await fetchYouTubeSpeechesByCategory(category, Math.min(limit, 20));
-    
-    if (youtubeSpeeches.length > 0) {
-      return youtubeSpeeches;
     }
     
     // Final fallback to PodcastIndex if YouTube fails
@@ -227,23 +229,31 @@ export const fetchYouTubeSpeeches = async (): Promise<Speech[]> => {
   }
 };
 
-// Fetch all speeches using embedded YouTube speeches
+// Fetch all speeches using backend YouTube API first, then fallback to embedded
 export const fetchRealSpeeches = async (): Promise<Speech[]> => {
-  console.log('📺 Fetching embedded YouTube speeches...');
+  console.log('📺 Fetching speeches...');
   
   try {
-    // Return all embedded YouTube speeches (4000 total speeches)
-    console.log(`✅ Returning ${allYoutubeSpeeches.length} embedded YouTube speeches`);
-    return allYoutubeSpeeches;
-  } catch (error) {
-    console.error('❌ Error fetching embedded speeches:', error);
-    
-    // Fallback to fetching from YouTube API
-    console.log('🎧 Falling back to YouTube API...');
+    // Try fetching from YouTube API backend first
+    console.log('🔄 Attempting to fetch from YouTube API backend...');
     const youtubeSpeeches = await fetchYouTubeSpeeches();
     
     if (youtubeSpeeches.length > 0) {
+      console.log(`✅ Fetched ${youtubeSpeeches.length} speeches from YouTube API backend`);
       return youtubeSpeeches;
+    }
+    
+    // Fallback to embedded speeches if API fails
+    console.log('⚠️ YouTube API failed, using embedded speeches...');
+    console.log(`✅ Returning ${allYoutubeSpeeches.length} embedded YouTube speeches`);
+    return allYoutubeSpeeches;
+  } catch (error) {
+    console.error('❌ Error fetching speeches:', error);
+    
+    // Final fallback to embedded speeches
+    console.log('⚠️ Using embedded speeches as final fallback...');
+    if (allYoutubeSpeeches.length > 0) {
+      return allYoutubeSpeeches;
     }
     
     // Final fallback to PodcastIndex if everything fails

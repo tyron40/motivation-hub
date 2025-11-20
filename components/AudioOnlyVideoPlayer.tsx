@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Play, Pause, SkipForward, SkipBack, Volume2 } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Volume2, ExternalLink } from 'lucide-react-native';
 import CustomSlider from './CustomSlider';
 
 interface AudioOnlyVideoPlayerProps {
@@ -479,6 +479,15 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
+  const openInYouTube = () => {
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log('📺 Opening YouTube video:', youtubeUrl);
+    Linking.openURL(youtubeUrl).catch((err) => {
+      console.error('Failed to open YouTube:', err);
+      onError?.('Could not open YouTube app');
+    });
+  };
+
   const togglePlayPause = () => {
     console.log('🎵 Toggle play/pause, currently:', isPlaying ? 'playing' : 'paused');
     if (isPlaying) {
@@ -526,8 +535,22 @@ export default function AudioOnlyVideoPlayer({
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Unable to play audio</Text>
+          {thumbnail && (
+            <Image 
+              source={{ uri: thumbnail }} 
+              style={styles.errorThumbnail} 
+              resizeMode="cover"
+            />
+          )}
+          <Text style={styles.errorText}>Cannot Play Embedded</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
+          <TouchableOpacity 
+            onPress={openInYouTube}
+            style={styles.youtubeButton}
+          >
+            <ExternalLink size={18} color="white" />
+            <Text style={styles.youtubeButtonText}>Watch on YouTube</Text>
+          </TouchableOpacity>
           <View style={styles.errorActions}>
             <TouchableOpacity 
               onPress={() => {
@@ -608,6 +631,13 @@ export default function AudioOnlyVideoPlayer({
           {channelTitle && (
             <Text style={styles.artist} numberOfLines={1}>{channelTitle}</Text>
           )}
+          <TouchableOpacity 
+            onPress={openInYouTube}
+            style={styles.openYouTubeLink}
+          >
+            <ExternalLink size={14} color="#ff6b6b" />
+            <Text style={styles.openYouTubeText}>Open in YouTube</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Progress Slider */}
@@ -823,6 +853,43 @@ const styles = StyleSheet.create({
   retryText: {
     color: 'white',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  errorThumbnail: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  youtubeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ff0000',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  youtubeButtonText: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  openYouTubeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+  },
+  openYouTubeText: {
+    color: '#ff6b6b',
+    fontSize: 13,
     fontWeight: '600',
   },
 });
