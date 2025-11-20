@@ -405,6 +405,8 @@ Details: ${errorDetails}`;
     detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
+    
+    console.log('[YouTube] Checking embeddability for', searchData.items.length, 'videos...');
 
     console.log('[YouTube] Fetching video details for', searchData.items.length, 'videos...');
     const detailsResponse = await fetch(detailsUrl.toString());
@@ -420,9 +422,10 @@ Details: ${errorDetails}`;
       .filter((item: any) => {
         const isPublic = item.status?.privacyStatus === 'public';
         const isNotLive = item.snippet?.liveBroadcastContent === 'none';
+        const isEmbeddable = item.status?.embeddable !== false;
         
-        if (!isPublic || !isNotLive) {
-          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive})`);
+        if (!isPublic || !isNotLive || !isEmbeddable) {
+          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive}, embeddable: ${isEmbeddable})`);
           return false;
         }
         return true;
@@ -448,7 +451,13 @@ Details: ${errorDetails}`;
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`[YouTube] ✅ Successfully fetched ${videos.length}/${detailsData.items.length} embeddable videos (requested: ${maxResults})`);
+    console.log(`[YouTube] ✅ Successfully fetched ${videos.length}/${detailsData.items.length} playable videos (requested: ${maxResults}, embeddable & public)`);
+    
+    // Log which videos are being returned
+    videos.forEach((video: any, idx: number) => {
+      console.log(`[YouTube]   ${idx + 1}. ${video.title} (ID: ${video.id})`);
+    });
+    
     return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);
