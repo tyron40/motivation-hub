@@ -346,7 +346,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
     searchUrl.searchParams.set('maxResults', fetchLimit.toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
-    searchUrl.searchParams.set('videoEmbeddable', 'true');
+
     searchUrl.searchParams.set('videoSyndicated', 'true');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
@@ -418,12 +418,11 @@ Details: ${errorDetails}`;
 
     const videos = detailsData.items
       .filter((item: any) => {
-        const embeddable = item.status?.embeddable === true;
         const isPublic = item.status?.privacyStatus === 'public';
         const isNotLive = item.snippet?.liveBroadcastContent === 'none';
         
-        if (!embeddable || !isPublic || !isNotLive) {
-          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (embeddable: ${embeddable}, public: ${isPublic}, notLive: ${isNotLive})`);
+        if (!isPublic || !isNotLive) {
+          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive})`);
           return false;
         }
         return true;
@@ -440,7 +439,6 @@ Details: ${errorDetails}`;
         duration: parseDuration(item.contentDetails.duration),
         viewCount: parseInt(item.statistics.viewCount || '0'),
         category: query,
-        embeddable: true,
       }));
 
     REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
