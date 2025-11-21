@@ -41,13 +41,10 @@ export default function AudioOnlyVideoPlayer({
   const autoSkipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const progressRef = progressIntervalRef.current;
-    const loadingRef = loadingTimeoutRef.current;
-    
     console.log(`🎵 Initializing AudioOnlyVideoPlayer for video: ${videoId}`);
     console.log(`📺 Video title: ${title}`);
     
-    loadingTimeoutRef.current = setTimeout(() => {
+    const loadingTimeout = setTimeout(() => {
       console.warn(`⚠️ Loading timeout for video ${videoId} - player may not be ready`);
       
       if (retryCountRef.current < maxRetries) {
@@ -63,27 +60,31 @@ export default function AudioOnlyVideoPlayer({
       onError?.('Loading timeout');
       
       // Auto-skip after 1 second if still can't load
-      autoSkipTimeoutRef.current = setTimeout(() => {
+      const autoSkip = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
       }, 1000);
+      
+      autoSkipTimeoutRef.current = autoSkip;
     }, 10000);
+    
+    loadingTimeoutRef.current = loadingTimeout;
 
     return () => {
-      if (progressRef) {
-        clearInterval(progressRef);
-      }
-      if (loadingRef) {
-        clearTimeout(loadingRef);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
       }
       if (autoSkipTimeoutRef.current) {
         clearTimeout(autoSkipTimeoutRef.current);
+        autoSkipTimeoutRef.current = null;
       }
     };
-  }, [onError, onNext]);
+  }, [videoId, title, onError, onNext]);
 
   // Clean up auto-skip timeout when video changes
   useEffect(() => {
