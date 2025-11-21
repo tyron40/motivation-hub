@@ -14,7 +14,7 @@ import { Play } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
-import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { fetchRealSpeeches } from '@/services/speechService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
@@ -44,24 +44,22 @@ export default function HomeScreen() {
   const { toggleFavorite, setCurrentSpeech, isLoading } = speechContext;
 
   React.useEffect(() => {
-    const loadYouTubeSpeeches = async () => {
+    const loadPodcastSpeeches = async () => {
       try {
         setLoadingYoutube(true);
-        console.log('🔄 Loading YouTube speeches from Vercel backend...');
-        const videos = await getTrendingVideos(50);
-        console.log(`✅ Loaded ${videos.length} YouTube videos`);
-        
-        const speeches = videos.map(video => convertVideoToSpeech(video));
+        console.log('🔄 Loading podcast speeches from RSS feeds...');
+        const speeches = await fetchRealSpeeches();
+        console.log(`✅ Loaded ${speeches.length} podcast speeches`);
         
         setYoutubeSpeeches(speeches);
       } catch (error) {
-        console.error('❌ Failed to load YouTube speeches:', error);
+        console.error('❌ Failed to load podcast speeches:', error);
       } finally {
         setLoadingYoutube(false);
       }
     };
     
-    loadYouTubeSpeeches();
+    loadPodcastSpeeches();
   }, []);
 
   const handleSpeechPress = (speech: any) => {
