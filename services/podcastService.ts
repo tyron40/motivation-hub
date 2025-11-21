@@ -1,4 +1,5 @@
 import { Speech } from '@/types/speech';
+import { trpcClient } from '@/lib/trpc';
 
 export interface PodcastFeed {
   name: string;
@@ -132,8 +133,10 @@ function generateTags(title: string, description: string): string[] {
 
 async function parseRSSFeed(url: string): Promise<any> {
   try {
-    const response = await fetch(url);
-    const xmlText = await response.text();
+    console.log(`📡 Requesting RSS feed via backend proxy: ${url}`);
+    
+    const result = await trpcClient.podcast.rssFeed.query({ url });
+    const xmlText = result.xml;
     
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, 'text/xml');

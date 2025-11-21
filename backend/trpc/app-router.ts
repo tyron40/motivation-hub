@@ -4,6 +4,7 @@ import { chatRouter } from "./routes/chat/route";
 import { ttsRouter } from "./routes/tts/route";
 import { fetchContentProcedure, searchContentProcedure, trendingContentProcedure } from "./routes/content/youtube-fetch";
 import { runDailyBatchProcedure, getCachedVideosProcedure, getBatchStatusProcedure } from "./routes/content/daily-batch";
+import { rssFeedProxyProcedure } from "./routes/podcast/rss-proxy";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -18,6 +19,9 @@ export const appRouter = createTRPCRouter({
     runDailyBatch: runDailyBatchProcedure,
     getCachedVideos: getCachedVideosProcedure,
     getBatchStatus: getBatchStatusProcedure,
+  }),
+  podcast: createTRPCRouter({
+    rssFeed: rssFeedProxyProcedure,
   }),
 });
 
