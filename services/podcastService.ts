@@ -1,15 +1,4 @@
-import Parser from 'rss-parser';
 import { Speech } from '@/types/speech';
-
-const parser = new Parser({
-  customFields: {
-    item: [
-      ['itunes:duration', 'duration'],
-      ['itunes:image', 'image'],
-      ['itunes:author', 'author'],
-    ],
-  },
-});
 
 export interface PodcastFeed {
   name: string;
@@ -141,11 +130,59 @@ function generateTags(title: string, description: string): string[] {
   return [...commonTags, ...titleWords.slice(0, 4)].slice(0, 8);
 }
 
+async function parseRSSFeed(url: string): Promise<any> {
+  try {
+    const response = await fetch(url);
+    const xmlText = await response.text();
+    
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+    
+    const getTextContent = (element: Element | null): string => {
+      return element?.textContent?.trim() || '';
+    };
+    
+    const items = Array.from(xmlDoc.querySelectorAll('item')).map(item => {
+      const enclosure = item.querySelector('enclosure');
+      
+      return {
+        title: getTextContent(item.querySelector('title')),
+        description: getTextContent(item.querySelector('description')),
+        link: getTextContent(item.querySelector('link')),
+        guid: getTextContent(item.querySelector('guid')),
+        pubDate: getTextContent(item.querySelector('pubDate')),
+        duration: getTextContent(item.querySelector('itunes\\:duration, duration')),
+        image: item.querySelector('itunes\\:image, image')?.getAttribute('href') || '',
+        author: getTextContent(item.querySelector('itunes\\:author, author')),
+        enclosure: enclosure ? {
+          url: enclosure.getAttribute('url') || '',
+          type: enclosure.getAttribute('type') || '',
+          length: enclosure.getAttribute('length') || '0',
+        } : null,
+      };
+    });
+    
+    const channelImage = xmlDoc.querySelector('channel > image > url') ||
+                        xmlDoc.querySelector('channel > itunes\\:image');
+    const imageUrl = channelImage instanceof Element 
+      ? (channelImage.textContent?.trim() || channelImage.getAttribute('href') || '')
+      : '';
+    
+    return {
+      items,
+      image: { url: imageUrl },
+    };
+  } catch (error) {
+    console.error('Error parsing RSS feed:', error);
+    throw error;
+  }
+}
+
 export async function fetchPodcastFeed(podcast: PodcastFeed, limit: number = 10): Promise<Speech[]> {
   try {
     console.log(`🎧 Fetching podcast feed: ${podcast.name}`);
     
-    const feed = await parser.parseURL(podcast.rssUrl);
+    const feed = await parseRSSFeed(podcast.rssUrl);
     
     if (!feed.items || feed.items.length === 0) {
       console.log(`⚠️ No episodes found in ${podcast.name}`);
@@ -160,7 +197,7 @@ export async function fetchPodcastFeed(podcast: PodcastFeed, limit: number = 10)
     
     const speeches: Speech[] = itemsWithAudio.map((item: any) => {
       const audioUrl = extractAudioUrl(item)!;
-      const description = item.contentSnippet || item.content || item.description || '';
+      const description = item.description || '';
       
       return {
         id: `podcast-${item.guid || item.link || Math.random()}`,
