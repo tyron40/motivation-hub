@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Play, AlertCircle, ExternalLink } from 'lucide-react-native';
+import { Play, AlertCircle } from 'lucide-react-native';
 
 interface YouTubeEmbedProps {
   url: string;
@@ -102,23 +102,6 @@ export default function YouTubeEmbed({
     setShowPlayer(true);
   };
   
-  const openInYouTube = async () => {
-    const youtubeAppUrl = `vnd.youtube://${videoId}`;
-    const youtubeWebUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    
-    try {
-      const canOpen = await Linking.canOpenURL(youtubeAppUrl);
-      if (canOpen) {
-        await Linking.openURL(youtubeAppUrl);
-      } else {
-        await Linking.openURL(youtubeWebUrl);
-      }
-    } catch (error) {
-      console.error('Error opening YouTube:', error);
-      Alert.alert('Error', 'Unable to open YouTube');
-    }
-  };
-  
   const retryLoad = () => {
     setError(null);
     setIsLoading(true);
@@ -152,15 +135,6 @@ export default function YouTubeEmbed({
             <Text style={styles.playText}>Tap to play</Text>
             <Text style={styles.titleText} numberOfLines={2}>{title}</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={openInYouTube} 
-            style={styles.openYouTubeButton}
-            activeOpacity={0.8}
-          >
-            <ExternalLink size={16} color="white" />
-            <Text style={styles.openYouTubeText}>Open in YouTube</Text>
-          </TouchableOpacity>
         </View>
       </View>
     );
@@ -189,14 +163,6 @@ export default function YouTubeEmbed({
         showsVerticalScrollIndicator={false}
         userAgent={Platform.OS === 'web' ? undefined : 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15'}
       />
-      
-      <TouchableOpacity 
-        onPress={openInYouTube} 
-        style={styles.floatingYouTubeButton}
-        activeOpacity={0.8}
-      >
-        <ExternalLink size={18} color="white" />
-      </TouchableOpacity>
       
       {isLoading && (
         <View style={styles.loadingOverlay}>
@@ -308,45 +274,5 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 14,
     textAlign: 'center',
-  },
-  openYouTubeButton: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    right: 12,
-    backgroundColor: '#FF0000',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  openYouTubeText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  floatingYouTubeButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 0, 0, 0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
 });

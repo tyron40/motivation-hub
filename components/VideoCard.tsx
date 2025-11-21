@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Linking, Alert } from 'react-native';
-import { Play, Clock, Eye, ImageIcon, ExternalLink } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { Play, Clock, Eye, ImageIcon } from 'lucide-react-native';
 
 interface VideoCardProps {
   id: string;
@@ -53,24 +53,6 @@ export default function VideoCard({
     setImageLoading(false);
     setImageError(true);
   };
-  
-  const openInYouTube = async (e: any) => {
-    e.stopPropagation();
-    const youtubeAppUrl = `vnd.youtube://${id}`;
-    const youtubeWebUrl = `https://www.youtube.com/watch?v=${id}`;
-    
-    try {
-      const canOpen = await Linking.canOpenURL(youtubeAppUrl);
-      if (canOpen) {
-        await Linking.openURL(youtubeAppUrl);
-      } else {
-        await Linking.openURL(youtubeWebUrl);
-      }
-    } catch (error) {
-      console.error('Error opening YouTube:', error);
-      Alert.alert('Error', 'Unable to open YouTube');
-    }
-  };
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.thumbnailContainer}>
@@ -101,28 +83,18 @@ export default function VideoCard({
           <Text style={styles.durationText}>{String(duration || '0:00')}</Text>
         </View>
         
-        <View style={styles.thumbnailActions}>
-          {onPlayAudio && (
-            <TouchableOpacity 
-              style={styles.playButton} 
-              onPress={(e) => {
-                e.stopPropagation();
-                onPlayAudio();
-              }}
-              activeOpacity={0.8}
-            >
-              <Play size={20} color="white" fill="white" />
-            </TouchableOpacity>
-          )}
-          
+        {onPlayAudio && (
           <TouchableOpacity 
-            style={styles.youtubeButton} 
-            onPress={openInYouTube}
+            style={styles.playButton} 
+            onPress={(e) => {
+              e.stopPropagation();
+              onPlayAudio();
+            }}
             activeOpacity={0.8}
           >
-            <ExternalLink size={16} color="white" />
+            <Play size={20} color="white" fill="white" />
           </TouchableOpacity>
-        </View>
+        )}
       </View>
       
       <View style={styles.content}>
@@ -190,13 +162,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  thumbnailActions: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   playButton: {
     position: 'absolute',
     top: '50%',
@@ -208,22 +173,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  youtubeButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FF0000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
   },
   content: {
     padding: 12,
