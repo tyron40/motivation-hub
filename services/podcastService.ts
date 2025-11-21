@@ -136,44 +136,12 @@ async function parseRSSFeed(url: string): Promise<any> {
     console.log(`📡 Requesting RSS feed via backend proxy: ${url}`);
     
     const result = await trpcClient.podcast.rssFeed.query({ url });
-    const xmlText = result.xml;
     
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-    
-    const getTextContent = (element: Element | null): string => {
-      return element?.textContent?.trim() || '';
-    };
-    
-    const items = Array.from(xmlDoc.querySelectorAll('item')).map(item => {
-      const enclosure = item.querySelector('enclosure');
-      
-      return {
-        title: getTextContent(item.querySelector('title')),
-        description: getTextContent(item.querySelector('description')),
-        link: getTextContent(item.querySelector('link')),
-        guid: getTextContent(item.querySelector('guid')),
-        pubDate: getTextContent(item.querySelector('pubDate')),
-        duration: getTextContent(item.querySelector('itunes\\:duration, duration')),
-        image: item.querySelector('itunes\\:image, image')?.getAttribute('href') || '',
-        author: getTextContent(item.querySelector('itunes\\:author, author')),
-        enclosure: enclosure ? {
-          url: enclosure.getAttribute('url') || '',
-          type: enclosure.getAttribute('type') || '',
-          length: enclosure.getAttribute('length') || '0',
-        } : null,
-      };
-    });
-    
-    const channelImage = xmlDoc.querySelector('channel > image > url') ||
-                        xmlDoc.querySelector('channel > itunes\\:image');
-    const imageUrl = channelImage instanceof Element 
-      ? (channelImage.textContent?.trim() || channelImage.getAttribute('href') || '')
-      : '';
+    console.log(`✅ Received parsed RSS feed with ${result.items.length} items`);
     
     return {
-      items,
-      image: { url: imageUrl },
+      items: result.items,
+      image: result.image,
     };
   } catch (error) {
     console.error('Error parsing RSS feed:', error);
