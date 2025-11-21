@@ -37,7 +37,7 @@ export default function AudioOnlyVideoPlayer({
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
-  const maxRetries = 2;
+  const maxRetries = 1;
   const autoSkipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -62,12 +62,12 @@ export default function AudioOnlyVideoPlayer({
       setError('Loading timeout. Skipping...');
       onError?.('Loading timeout');
       
-      // Auto-skip after 1.5 seconds if still can't load
+      // Auto-skip after 1 second if still can't load
       autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 1500);
-    }, 15000);
+      }, 1000);
+    }, 10000);
 
     return () => {
       if (progressRef) {
@@ -430,7 +430,7 @@ export default function AudioOnlyVideoPlayer({
             console.log('⏭️ Auto-skipping unplayable video (embedding restricted)');
             autoSkipTimeoutRef.current = setTimeout(() => {
               onNext?.();
-            }, 1500);
+            }, 800);
             return;
           }
           
@@ -449,11 +449,11 @@ export default function AudioOnlyVideoPlayer({
           setIsPlaying(false);
           onError?.(errorMsg);
           
-          // Auto-skip after 2 seconds for other errors
+          // Auto-skip after 1.5 seconds for other errors
           autoSkipTimeoutRef.current = setTimeout(() => {
             console.log('⏭️ Auto-skipping unplayable video after error');
             onNext?.();
-          }, 2000);
+          }, 1500);
           break;
       }
     } catch (e) {

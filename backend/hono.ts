@@ -337,7 +337,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
   }
 
   try {
-    const fetchLimit = Math.min(maxResults * 2, 50);
+    const fetchLimit = Math.min(maxResults * 3, 50);
     
     const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
     searchUrl.searchParams.set('part', 'snippet');
@@ -346,8 +346,9 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
     searchUrl.searchParams.set('maxResults', fetchLimit.toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
-
+    searchUrl.searchParams.set('videoEmbeddable', 'true');
     searchUrl.searchParams.set('videoSyndicated', 'true');
+    searchUrl.searchParams.set('safeSearch', 'none');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     console.log('[YouTube] Fetching search results...');
@@ -422,10 +423,11 @@ Details: ${errorDetails}`;
       .filter((item: any) => {
         const isPublic = item.status?.privacyStatus === 'public';
         const isNotLive = item.snippet?.liveBroadcastContent === 'none';
-        const isEmbeddable = item.status?.embeddable !== false;
+        const isEmbeddable = item.status?.embeddable === true;
+        const hasLicense = item.status?.license === 'youtube' || !item.status?.license;
         
-        if (!isPublic || !isNotLive || !isEmbeddable) {
-          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive}, embeddable: ${isEmbeddable})`);
+        if (!isPublic || !isNotLive || !isEmbeddable || !hasLicense) {
+          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive}, embeddable: ${isEmbeddable}, license: ${hasLicense})`);
           return false;
         }
         return true;
