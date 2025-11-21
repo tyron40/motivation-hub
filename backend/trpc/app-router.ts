@@ -25,4 +25,7 @@ export const appRouter = createTRPCRouter({
   }),
 });
 
+console.log('[tRPC] App router initialized with routes:', Object.keys(appRouter._def.procedures));
+console.log('[tRPC] Podcast routes:', Object.keys((appRouter._def.procedures as any).podcast?._def?.procedures || {}));
+
 export type AppRouter = typeof appRouter;
