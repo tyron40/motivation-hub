@@ -5,7 +5,8 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import OpenAI from "openai";
 
-console.log('[Backend] Hono server initializing with content.trending support');
+// Deployment v2.1 - Podcast RSS Proxy Support Added
+console.log('[Backend] Hono server initializing with content.trending and podcast.rssFeed support');
 
 const app = new Hono();
 
