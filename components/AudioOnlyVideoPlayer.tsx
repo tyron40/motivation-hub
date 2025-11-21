@@ -71,6 +71,7 @@ export default function AudioOnlyVideoPlayer({
     loadingTimeoutRef.current = loadingTimeout;
 
     return () => {
+      // Clean up intervals and timeouts
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
