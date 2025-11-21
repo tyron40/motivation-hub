@@ -290,11 +290,14 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
           // Native Audio (Expo AV)
           if (soundRef.current) {
             try {
+              // Clear status update callback first
+              soundRef.current.setOnPlaybackStatusUpdate(null);
               await soundRef.current.unloadAsync();
             } catch (e) {
               console.log('⚠️ Error unloading previous sound:', e);
+            } finally {
+              soundRef.current = null;
             }
-            soundRef.current = null;
           }
 
           // Set audio mode for playback with error handling
@@ -358,7 +361,6 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
               return;
             }
 
-            soundRef.current = sound;
             console.log('✅ Native sound created successfully');
 
             // Additional status update handler for ongoing playback
@@ -385,9 +387,11 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
                 }
               } catch (statusError) {
                 console.error('❌ Error in playback status update:', statusError);
-                // Don't call onError here to avoid infinite loops
               }
             });
+            
+            // Store the sound in ref
+            soundRef.current = sound;
           } catch (soundCreationError) {
             console.error('❌ Error creating sound:', soundCreationError);
             if (isMounted) {
@@ -431,8 +435,15 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
             }
             webAudioRef.current = null;
           } else if (soundRef.current) {
-            await soundRef.current.unloadAsync();
-            soundRef.current = null;
+            try {
+              // Set status update callback to null before unloading
+              soundRef.current.setOnPlaybackStatusUpdate(null);
+              await soundRef.current.unloadAsync();
+            } catch (unloadError) {
+              console.log('⚠️ Error during sound cleanup:', unloadError);
+            } finally {
+              soundRef.current = null;
+            }
           }
         } catch (e) {
           console.log('⚠️ Cleanup error:', e);
