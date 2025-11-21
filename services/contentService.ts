@@ -18,6 +18,43 @@ function sanitizeBaseUrl(input: string | undefined): string {
 
 const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
 
+console.log('🔧 ========================================');
+console.log('🔧 Content Service Configuration');
+console.log('🔧 ========================================');
+console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
+console.log('🔧 FINAL URL BEING USED:', API_BASE);
+console.log('🔧 ========================================');
+
+// Test backend connection on load
+async function testBackendConnection() {
+  try {
+    console.log('🔍 Testing backend connection...');
+    const response = await fetch(`${API_BASE}/api/health`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Backend is reachable:', data);
+      console.log('✅ YouTube API Key present in backend:', data.env?.hasYouTubeKey);
+    } else {
+      console.error('❌ Backend health check failed:', response.status);
+    }
+  } catch (error) {
+    console.error('❌ Cannot reach backend:', error);
+    console.error('❌ This will cause "Failed to fetch" errors');
+    console.error('❌ Please check:');
+    console.error('   1. Is your Vercel deployment active?');
+    console.error('   2. Is the URL correct in .env?');
+    console.error('   3. Is there an internet connection?');
+  }
+}
+
+// Run test on module load
+testBackendConnection();
+
 interface YouTubeVideo {
   id: string;
   title: string;
@@ -35,11 +72,19 @@ async function fetchYouTubeByCategory(category: string, limit: number): Promise<
   try {
     console.log(`📺 Fetching YouTube content via Vercel backend for: ${category}`);
     console.log(`🔗 API URL: ${API_BASE}/api/youtube/category`);
+    console.log(`🔗 Full URL: ${API_BASE}/api/youtube/category`);
+    console.log(`📦 Request body:`, JSON.stringify({ category, limit }));
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ Request timeout after 30 seconds');
+      controller.abort();
+    }, 30000);
     
-    const response = await fetch(`${API_BASE}/api/youtube/category`, {
+    const requestUrl = `${API_BASE}/api/youtube/category`;
+    console.log(`🚀 Making POST request to: ${requestUrl}`);
+    
+    const response = await fetch(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,6 +96,7 @@ async function fetchYouTubeByCategory(category: string, limit: number): Promise<
     });
     
     clearTimeout(timeoutId);
+    console.log(`✅ Response received with status: ${response.status}`);
 
     const contentType = response.headers.get('content-type');
     console.log('📡 Response content-type:', contentType);
