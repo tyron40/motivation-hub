@@ -131,22 +131,38 @@ function generateTags(title: string, description: string): string[] {
   return [...commonTags, ...titleWords.slice(0, 4)].slice(0, 8);
 }
 
-async function parseRSSFeed(url: string): Promise<any> {
-  try {
-    console.log(`📡 Requesting RSS feed via backend proxy: ${url}`);
-    
-    const result = await trpcClient.podcast.rssFeed.query({ url });
-    
-    console.log(`✅ Received parsed RSS feed with ${result.items.length} items`);
-    
-    return {
-      items: result.items,
-      image: result.image,
-    };
-  } catch (error) {
-    console.error('Error parsing RSS feed:', error);
-    throw error;
+async function parseRSSFeed(url: string, retries: number = 2): Promise<any> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`📡 Retry attempt ${attempt} for RSS feed: ${url}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      } else {
+        console.log(`📡 Requesting RSS feed via backend proxy: ${url}`);
+      }
+      
+      const result = await trpcClient.podcast.rssFeed.query({ url });
+      
+      console.log(`✅ Received parsed RSS feed with ${result.items.length} items`);
+      
+      return {
+        items: result.items,
+        image: result.image,
+      };
+    } catch (error) {
+      lastError = error as Error;
+      console.error(`❌ Error parsing RSS feed (attempt ${attempt + 1}/${retries + 1}):`, error);
+      
+      if (attempt === retries) {
+        break;
+      }
+    }
   }
+  
+  console.error('❌ Failed to parse RSS feed after all retries');
+  throw lastError || new Error('Failed to fetch RSS feed');
 }
 
 export async function fetchPodcastFeed(podcast: PodcastFeed, limit: number = 10): Promise<Speech[]> {
