@@ -76,7 +76,7 @@ function parseXML(xmlText: string): ParsedRSS {
   };
 }
 
-const rssFeedProcedure = publicProcedure
+export const rssFeedProcedure = publicProcedure
   .input(
     z.object({
       url: z.string().url(),
