@@ -131,14 +131,12 @@ export function PodcastDiagnostic() {
     });
 
     try {
-      const manualResponse = await fetch(`${BACKEND_URL}/api/trpc/podcast.rssFeed`, {
-        method: 'POST',
+      const input = JSON.stringify({ url: TEST_RSS_URL });
+      const manualResponse = await fetch(`${BACKEND_URL}/api/trpc/podcast.rssFeed?input=${encodeURIComponent(input)}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          url: TEST_RSS_URL,
-        }),
       });
 
       console.log('Manual tRPC response status:', manualResponse.status);
