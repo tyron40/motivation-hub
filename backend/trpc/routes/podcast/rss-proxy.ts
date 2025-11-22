@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure } from "../../create-context";
+import { createTRPCRouter, publicProcedure } from "../../create-context";
 
 interface RSSItem {
   title: string;
@@ -76,7 +76,7 @@ function parseXML(xmlText: string): ParsedRSS {
   };
 }
 
-export const rssFeedProxyProcedure = publicProcedure
+const rssFeedProcedure = publicProcedure
   .input(
     z.object({
       url: z.string().url(),
@@ -113,3 +113,7 @@ export const rssFeedProxyProcedure = publicProcedure
       throw new Error(`Failed to fetch RSS feed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
+
+export const podcastRouter = createTRPCRouter({
+  rssFeed: rssFeedProcedure,
+});

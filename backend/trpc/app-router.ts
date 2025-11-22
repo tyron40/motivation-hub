@@ -4,7 +4,7 @@ import { chatRouter } from "./routes/chat/route";
 import { ttsRouter } from "./routes/tts/route";
 import { fetchContentProcedure, searchContentProcedure, trendingContentProcedure } from "./routes/content/youtube-fetch";
 import { runDailyBatchProcedure, getCachedVideosProcedure, getBatchStatusProcedure } from "./routes/content/daily-batch";
-import { rssFeedProxyProcedure } from "./routes/podcast/rss-proxy";
+import { podcastRouter } from "./routes/podcast/rss-proxy";
 
 export const appRouter = createTRPCRouter({
   example: createTRPCRouter({
@@ -20,9 +20,7 @@ export const appRouter = createTRPCRouter({
     getCachedVideos: getCachedVideosProcedure,
     getBatchStatus: getBatchStatusProcedure,
   }),
-  podcast: createTRPCRouter({
-    rssFeed: rssFeedProxyProcedure,
-  }),
+  podcast: podcastRouter,
 });
 
 console.log('[tRPC] App router initialized with routes:', Object.keys(appRouter._def.procedures));
