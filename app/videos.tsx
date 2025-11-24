@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Search } from 'lucide-react-native';
 import VideoCard from '@/components/VideoCard';
@@ -234,7 +234,7 @@ export default function VideosScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen
         options={{
           title: 'Motivational Videos',

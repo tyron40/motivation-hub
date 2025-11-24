@@ -5,10 +5,25 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import OpenAI from "openai";
 
-// Deployment v2.3 - Podcast RSS Proxy Fixed
+// Deployment v2.4 - Podcast Router Debug
 console.log('[Backend] Hono server initializing with content.trending and podcast.rssFeed support');
+console.log('[Backend] App router type:', typeof appRouter);
+console.log('[Backend] App router _def:', typeof appRouter._def);
 console.log('[Backend] App router procedures:', Object.keys(appRouter._def.procedures));
-console.log('[Backend] Podcast procedures:', Object.keys((appRouter._def.procedures as any).podcast?._def?.procedures || {}));
+
+try {
+  const podcastRoute = (appRouter._def.procedures as any).podcast;
+  console.log('[Backend] Podcast route type:', typeof podcastRoute);
+  console.log('[Backend] Podcast route _def:', podcastRoute?._def ? 'exists' : 'missing');
+  
+  if (podcastRoute?._def?.procedures) {
+    console.log('[Backend] Podcast procedures:', Object.keys(podcastRoute._def.procedures));
+  } else {
+    console.log('[Backend] Podcast procedures structure:', JSON.stringify(podcastRoute, null, 2).substring(0, 500));
+  }
+} catch (error: any) {
+  console.error('[Backend] Error inspecting podcast routes:', error?.message || error);
+}
 
 const app = new Hono();
 

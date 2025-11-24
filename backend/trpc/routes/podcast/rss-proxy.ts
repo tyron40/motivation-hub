@@ -76,6 +76,8 @@ function parseXML(xmlText: string): ParsedRSS {
   };
 }
 
+console.log('[podcast/rss-proxy] Module loading...');
+
 export const rssFeedProcedure = publicProcedure
   .input(
     z.object({
@@ -117,3 +119,5 @@ export const rssFeedProcedure = publicProcedure
 export const podcastRouter = createTRPCRouter({
   rssFeed: rssFeedProcedure,
 });
+
+console.log('[podcast/rss-proxy] Router created with procedures:', Object.keys(podcastRouter._def.procedures));
