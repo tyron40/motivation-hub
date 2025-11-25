@@ -56,15 +56,15 @@ export default function AudioOnlyVideoPlayer({
       }
       
       setIsLoading(false);
-      setError('Loading timeout. Skipping...');
+      setError('Video cannot be played. Skipping...');
       onError?.('Loading timeout');
       
-      // Auto-skip after 1.5 seconds if still can't load
+      // Auto-skip after 1 second if still can't load
       autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 1500);
-    }, 15000);
+      }, 1000);
+    }, 10000);
 
     return () => {
       if (progressRef) {
@@ -267,7 +267,8 @@ export default function AudioOnlyVideoPlayer({
         5: 'HTML5 player error',
         100: 'Video not found or private',
         101: 'Video not allowed to be played in embedded players',
-        150: 'Video not allowed to be played in embedded players'
+        150: 'Video not allowed to be played in embedded players',
+        153: 'Video not allowed to be played in embedded players'
       };
       
       console.error('YouTube player error:', event.data, errorMessages[event.data] || 'Unknown error');
@@ -404,7 +405,7 @@ export default function AudioOnlyVideoPlayer({
           let errorMsg = data.errorMessage || 'Playback error';
           
           // Provide more specific error messages
-          if (errorCode === 101 || errorCode === 150) {
+          if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
             errorMsg = 'This video cannot be embedded. Skipping...';
           } else if (errorCode === 100) {
             errorMsg = 'Video not available. Skipping...';
@@ -416,18 +417,18 @@ export default function AudioOnlyVideoPlayer({
           
           console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
           
-          // For embedding errors (101, 150), skip immediately without retry
-          if (errorCode === 101 || errorCode === 150 || errorCode === 100) {
+          // For embedding errors (101, 150, 153), skip immediately without retry
+          if (errorCode === 101 || errorCode === 150 || errorCode === 153 || errorCode === 100) {
             setError(errorMsg);
             setIsLoading(false);
             setIsPlaying(false);
             onError?.(errorMsg);
             
             // Auto-skip immediately for embedding restriction errors
-            console.log('⏭️ Auto-skipping unplayable video (embedding restricted)');
+            console.log('⏭️ Auto-skipping unplayable video (embedding restricted, code:', errorCode, ')');
             autoSkipTimeoutRef.current = setTimeout(() => {
               onNext?.();
-            }, 1500);
+            }, 800);
             return;
           }
           
