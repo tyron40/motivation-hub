@@ -62,8 +62,8 @@ export default function YouTubeEmbed({
     );
   }
   
-  // YouTube embed URL optimized for embeddable playback
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?${
+  // Privacy-friendly embed URL with all necessary parameters
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?${
     new URLSearchParams({
       autoplay: autoplay ? '1' : '0',
       controls: '1',
@@ -76,9 +76,8 @@ export default function YouTubeEmbed({
       cc_load_policy: '0',
       iv_load_policy: '3',
       disablekb: '0',
-      widget_referrer: '',
       ...(Platform.OS === 'web' && {
-        origin: typeof window !== 'undefined' ? window.location.origin : ''
+        origin: typeof window !== 'undefined' ? window.location.origin : 'https://localhost'
       })
     }).toString()
   }`;

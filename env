@@ -14,16 +14,6 @@ EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=
 EXPO_PUBLIC_TOOLKIT_URL=https://toolkit.rork.com
 
 # YouTube API Configuration
-# IMPORTANT: Set your YouTube API key in Vercel environment variables!
 # Get your API key from: https://console.cloud.google.com/apis/credentials
-# Make sure YouTube Data API v3 is enabled in Google Cloud Console
-# 
-# To set up:
-# 1. Go to https://console.cloud.google.com/apis/credentials
-# 2. Create a new API key (or use existing one)
-# 3. Enable "YouTube Data API v3" in Google Cloud Console
-# 4. Add the API key to Vercel environment variables as YOUTUBE_API_KEY
-# 
-# The backend will read from process.env.YOUTUBE_API_KEY
-# DO NOT commit your actual API key to git!
+# Make sure YouTube Data API v3 is enabled
 YOUTUBE_API_KEY=your_youtube_api_key_here

@@ -5,25 +5,7 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import OpenAI from "openai";
 
-// Deployment v2.4 - Podcast Router Debug
-console.log('[Backend] Hono server initializing with content.trending and podcast.rssFeed support');
-console.log('[Backend] App router type:', typeof appRouter);
-console.log('[Backend] App router _def:', typeof appRouter._def);
-console.log('[Backend] App router procedures:', Object.keys(appRouter._def.procedures));
-
-try {
-  const podcastRoute = (appRouter._def.procedures as any).podcast;
-  console.log('[Backend] Podcast route type:', typeof podcastRoute);
-  console.log('[Backend] Podcast route _def:', podcastRoute?._def ? 'exists' : 'missing');
-  
-  if (podcastRoute?._def?.procedures) {
-    console.log('[Backend] Podcast procedures:', Object.keys(podcastRoute._def.procedures));
-  } else {
-    console.log('[Backend] Podcast procedures structure:', JSON.stringify(podcastRoute, null, 2).substring(0, 500));
-  }
-} catch (error: any) {
-  console.error('[Backend] Error inspecting podcast routes:', error?.message || error);
-}
+console.log('[Backend] Hono server initializing with content.trending support');
 
 const app = new Hono();
 
@@ -355,25 +337,17 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
   }
 
   try {
-    const fetchLimit = Math.min(maxResults * 3, 50);
-    
     const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
     searchUrl.searchParams.set('part', 'snippet');
     searchUrl.searchParams.set('q', query);
     searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', fetchLimit.toString());
+    searchUrl.searchParams.set('maxResults', maxResults.toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
-    searchUrl.searchParams.set('videoEmbeddable', 'true');
-    searchUrl.searchParams.set('videoSyndicated', 'true');
-    searchUrl.searchParams.set('safeSearch', 'none');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     console.log('[YouTube] Fetching search results...');
-    console.log('[YouTube] Query:', query);
-    console.log('[YouTube] Requested:', maxResults, '| Fetching:', fetchLimit);
     console.log('[YouTube] API Key present:', YOUTUBE_API_KEY ? `Yes (${YOUTUBE_API_KEY.substring(0, 10)}...)` : 'No');
-    
     const searchResponse = await fetch(searchUrl.toString());
     if (!searchResponse.ok) {
       const errorText = await searchResponse.text();
@@ -416,18 +390,15 @@ Details: ${errorDetails}`;
     const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
 
     if (!videoIds) {
-      console.log('[YouTube] ⚠️ No videos found in search results');
       return [];
     }
 
     const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
+    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
-    
-    console.log('[YouTube] Checking embeddability for', searchData.items.length, 'videos...');
 
-    console.log('[YouTube] Fetching video details for', searchData.items.length, 'videos...');
+    console.log('[YouTube] Fetching video details...');
     const detailsResponse = await fetch(detailsUrl.toString());
     if (!detailsResponse.ok) {
       const errorText = await detailsResponse.text();
@@ -437,32 +408,18 @@ Details: ${errorDetails}`;
 
     const detailsData = await detailsResponse.json();
 
-    const videos = detailsData.items
-      .filter((item: any) => {
-        const isPublic = item.status?.privacyStatus === 'public';
-        const isNotLive = item.snippet?.liveBroadcastContent === 'none';
-        const isEmbeddable = item.status?.embeddable === true;
-        const hasLicense = item.status?.license === 'youtube' || !item.status?.license;
-        
-        if (!isPublic || !isNotLive || !isEmbeddable || !hasLicense) {
-          console.log(`[YouTube] ⚠️ Filtering out video: ${item.snippet.title} (public: ${isPublic}, notLive: ${isNotLive}, embeddable: ${isEmbeddable}, license: ${hasLicense})`);
-          return false;
-        }
-        return true;
-      })
-      .slice(0, maxResults)
-      .map((item: any) => ({
-        id: item.id,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-        channelTitle: item.snippet.channelTitle,
-        channelId: item.snippet.channelId,
-        publishedAt: item.snippet.publishedAt,
-        duration: parseDuration(item.contentDetails.duration),
-        viewCount: parseInt(item.statistics.viewCount || '0'),
-        category: query,
-      }));
+    const videos = detailsData.items.map((item: any) => ({
+      id: item.id,
+      title: item.snippet.title,
+      description: item.snippet.description,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+      channelTitle: item.snippet.channelTitle,
+      channelId: item.snippet.channelId,
+      publishedAt: item.snippet.publishedAt,
+      duration: parseDuration(item.contentDetails.duration),
+      viewCount: parseInt(item.statistics.viewCount || '0'),
+      category: query,
+    }));
 
     REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
     
@@ -471,13 +428,7 @@ Details: ${errorDetails}`;
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`[YouTube] ✅ Successfully fetched ${videos.length}/${detailsData.items.length} playable videos (requested: ${maxResults}, embeddable & public)`);
-    
-    // Log which videos are being returned
-    videos.forEach((video: any, idx: number) => {
-      console.log(`[YouTube]   ${idx + 1}. ${video.title} (ID: ${video.id})`);
-    });
-    
+    console.log(`[YouTube] ✅ Successfully fetched and cached ${videos.length} videos`);
     return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);

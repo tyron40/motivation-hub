@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -22,7 +22,6 @@ export default function PlayerScreen() {
   const { toggleFavorite, speeches, setCurrentSpeech } = useSpeechContext();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [skipMessage, setSkipMessage] = useState<string | null>(null);
   const styles = getStyles(colors);
 
   const handleNext = () => {
@@ -36,8 +35,6 @@ export default function PlayerScreen() {
     
     if (nextSpeech) {
       console.log('⏭️ Skipping to next video:', nextSpeech.title);
-      setSkipMessage('Loading next video...');
-      setTimeout(() => setSkipMessage(null), 2000);
       setCurrentSpeech(nextSpeech);
     }
   };
@@ -53,8 +50,6 @@ export default function PlayerScreen() {
     
     if (previousSpeech) {
       console.log('⏮️ Skipping to previous video:', previousSpeech.title);
-      setSkipMessage('Loading previous video...');
-      setTimeout(() => setSkipMessage(null), 2000);
       setCurrentSpeech(previousSpeech);
     }
   };
@@ -105,11 +100,6 @@ export default function PlayerScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          {skipMessage && (
-            <View style={styles.skipMessageContainer}>
-              <Text style={styles.skipMessage}>{skipMessage}</Text>
-            </View>
-          )}
           {currentSpeech.youtubeId ? (
             <View style={styles.playerWrapper}>
               <AudioOnlyVideoPlayer
@@ -123,8 +113,6 @@ export default function PlayerScreen() {
                 autoplay={true}
                 onError={(error: string) => {
                   console.error('Audio playback error:', error);
-                  setSkipMessage('Video not playable, skipping...');
-                  setTimeout(() => setSkipMessage(null), 1500);
                 }}
                 onEnd={() => {
                   console.log('Audio playback ended');
@@ -340,27 +328,5 @@ const getStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
-  },
-  skipMessageContainer: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(255, 107, 107, 0.95)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  skipMessage: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

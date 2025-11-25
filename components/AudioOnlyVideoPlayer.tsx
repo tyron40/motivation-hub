@@ -37,15 +37,15 @@ export default function AudioOnlyVideoPlayer({
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
-  const maxRetries = 1;
+  const maxRetries = 2;
   const autoSkipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    console.log(`🎵 Initializing AudioOnlyVideoPlayer for video: ${videoId}`);
-    console.log(`📺 Video title: ${title}`);
+    const progressRef = progressIntervalRef.current;
+    const loadingRef = loadingTimeoutRef.current;
     
-    const loadingTimeout = setTimeout(() => {
-      console.warn(`⚠️ Loading timeout for video ${videoId} - player may not be ready`);
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.warn('⚠️ Loading timeout - player may not be ready');
       
       if (retryCountRef.current < maxRetries) {
         retryCountRef.current += 1;
@@ -59,33 +59,28 @@ export default function AudioOnlyVideoPlayer({
       setError('Loading timeout. Skipping...');
       onError?.('Loading timeout');
       
-      // Auto-skip after 1 second if still can't load
-      const autoSkip = setTimeout(() => {
+      // Auto-skip after 1.5 seconds if still can't load
+      autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 1000);
-      
-      autoSkipTimeoutRef.current = autoSkip;
-    }, 10000);
-    
-    loadingTimeoutRef.current = loadingTimeout;
+      }, 1500);
+    }, 15000);
 
     return () => {
-      // Clean up intervals and timeouts
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
+      if (progressRef) {
+        clearInterval(progressRef);
+      }
+      if (loadingRef) {
+        clearTimeout(loadingRef);
       }
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
       }
       if (autoSkipTimeoutRef.current) {
         clearTimeout(autoSkipTimeoutRef.current);
-        autoSkipTimeoutRef.current = null;
       }
     };
-  }, [videoId, title, onError, onNext]);
+  }, [onError, onNext]);
 
   // Clean up auto-skip timeout when video changes
   useEffect(() => {
@@ -409,7 +404,7 @@ export default function AudioOnlyVideoPlayer({
           let errorMsg = data.errorMessage || 'Playback error';
           
           // Provide more specific error messages
-          if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
+          if (errorCode === 101 || errorCode === 150) {
             errorMsg = 'This video cannot be embedded. Skipping...';
           } else if (errorCode === 100) {
             errorMsg = 'Video not available. Skipping...';
@@ -419,7 +414,7 @@ export default function AudioOnlyVideoPlayer({
             errorMsg = 'Playback error. Skipping...';
           }
           
-          console.error(`❌ Player error for video ${videoId} (${title}):`, errorMsg, 'Code:', errorCode);
+          console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
           
           // For embedding errors (101, 150), skip immediately without retry
           if (errorCode === 101 || errorCode === 150 || errorCode === 100) {
@@ -432,7 +427,7 @@ export default function AudioOnlyVideoPlayer({
             console.log('⏭️ Auto-skipping unplayable video (embedding restricted)');
             autoSkipTimeoutRef.current = setTimeout(() => {
               onNext?.();
-            }, 800);
+            }, 1500);
             return;
           }
           
@@ -451,11 +446,11 @@ export default function AudioOnlyVideoPlayer({
           setIsPlaying(false);
           onError?.(errorMsg);
           
-          // Auto-skip after 1.5 seconds for other errors
+          // Auto-skip after 2 seconds for other errors
           autoSkipTimeoutRef.current = setTimeout(() => {
             console.log('⏭️ Auto-skipping unplayable video after error');
             onNext?.();
-          }, 1500);
+          }, 2000);
           break;
       }
     } catch (e) {
@@ -480,8 +475,6 @@ export default function AudioOnlyVideoPlayer({
       `);
     }
   };
-
-
 
   const togglePlayPause = () => {
     console.log('🎵 Toggle play/pause, currently:', isPlaying ? 'playing' : 'paused');
@@ -530,14 +523,7 @@ export default function AudioOnlyVideoPlayer({
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          {thumbnail && (
-            <Image 
-              source={{ uri: thumbnail }} 
-              style={styles.errorThumbnail} 
-              resizeMode="cover"
-            />
-          )}
-          <Text style={styles.errorText}>Cannot Play Video</Text>
+          <Text style={styles.errorText}>Unable to play audio</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
           <View style={styles.errorActions}>
             <TouchableOpacity 
@@ -836,11 +822,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  errorThumbnail: {
-    width: 200,
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-
 });

@@ -1,12 +1,7 @@
 import { Speech } from '@/types/speech';
 import { speechContent } from '@/mocks/speechContent';
+
 import { allYoutubeSpeeches, getSpeechesByCategory } from '@/mocks/youtube-speeches';
-import {
-  fetchAllPodcasts,
-  fetchPodcastsByCategory,
-  searchPodcasts as searchPodcastFeeds,
-  getTrendingPodcasts,
-} from './podcastService';
 
 export const testPodcastAPI = async (): Promise<boolean> => {
   console.log('✅ Using embedded speeches (no API needed)');
@@ -151,76 +146,187 @@ export const fetchYouTubeSpeechesByCategory = async (category: string, limit: nu
   }
 };
 
-// Fetch speeches by category using podcast RSS feeds
+// Fetch speeches by category using embedded YouTube speeches
 export const fetchSpeechesByCategory = async (category: string, limit: number = 500): Promise<Speech[]> => {
   try {
-    console.log(`🎧 Fetching podcast speeches for category: ${category}`);
+    console.log(`📺 Fetching embedded YouTube speeches for category: ${category}`);
     
-    const podcastSpeeches = await fetchPodcastsByCategory(category, limit);
+    // Get embedded YouTube speeches for the category (500 speeches per category)
+    const categorySpeeches = getSpeechesByCategory(category);
     
-    if (podcastSpeeches.length > 0) {
-      console.log(`✅ Fetched ${podcastSpeeches.length} podcast speeches for category: ${category}`);
-      return podcastSpeeches;
+    if (categorySpeeches.length > 0) {
+      console.log(`✅ Found ${categorySpeeches.length} embedded YouTube speeches for category: ${category}`);
+      return categorySpeeches.slice(0, limit);
     }
     
-    console.log(`⚠️ No podcast speeches found for category: ${category}`);
-    return [];
+    // Fallback to fetching from YouTube API if no embedded speeches found
+    const youtubeSpeeches = await fetchYouTubeSpeechesByCategory(category, Math.min(limit, 20));
+    
+    if (youtubeSpeeches.length > 0) {
+      return youtubeSpeeches;
+    }
+    
+    // Final fallback to PodcastIndex if YouTube fails
+    console.log(`🎧 Falling back to PodcastIndex for category: ${category}`);
+    const episodes = await getPodcastsByCategory(category, Math.min(limit, 20));
+    
+    if (episodes.length === 0) {
+      console.log(`⚠️ No episodes found for category: ${category}`);
+      return [];
+    }
+    
+    // Convert podcast episodes to Speech objects
+    const speeches: Speech[] = episodes.map((episode) => {
+      return {
+        id: episode.id,
+        title: episode.title,
+        speaker: extractSpeaker(episode.title, episode.podcastTitle),
+        duration: episode.duration,
+        category: episode.category,
+        imageUrl: episode.podcastImage,
+        audioUrl: episode.audioUrl,
+        youtubeId: undefined, // No YouTube ID for podcasts
+        description: episode.description,
+        playCount: Math.floor(Math.random() * 10000) + 1000, // Random play count
+        tags: generateTags(episode.title, episode.description),
+      };
+    });
+    
+    console.log(`✅ Converted ${speeches.length} episodes to speeches for category: ${category}`);
+    return speeches;
   } catch (error) {
     console.error(`❌ Error fetching speeches for ${category}:`, error);
     return [];
   }
 };
 
-// Fetch all speeches from podcast RSS feeds
-export const fetchPodcastSpeeches = async (): Promise<Speech[]> => {
-  console.log('🎧 Fetching podcast motivational speeches...');
+// Fetch all speeches from YouTube
+export const fetchYouTubeSpeeches = async (): Promise<Speech[]> => {
+  console.log('📺 Fetching YouTube motivational speeches...');
   
   try {
-    const speeches = await fetchAllPodcasts(5);
+    // Import YouTube service
+    const { getTrendingVideos, convertVideoToSpeech } = await import('@/services/youtubeService');
     
-    if (speeches.length === 0) {
-      console.log('⚠️ No podcast speeches found');
+    // Get trending motivational videos from YouTube
+    const videos = await getTrendingVideos(20);
+    
+    if (videos.length === 0) {
+      console.log('⚠️ No YouTube videos found');
       return [];
     }
     
-    console.log(`✅ Fetched ${speeches.length} podcast speeches`);
+    // Convert YouTube videos to Speech objects
+    const speeches: Speech[] = videos.map(video => convertVideoToSpeech(video));
+    
+    console.log(`✅ Converted ${speeches.length} YouTube videos to speeches`);
     return speeches;
   } catch (error) {
-    console.error('❌ Error fetching podcast speeches:', error);
+    console.error('❌ Error fetching YouTube speeches:', error);
     return [];
   }
 };
 
-// Fetch all speeches using podcast RSS feeds
+// Fetch all speeches using embedded YouTube speeches
 export const fetchRealSpeeches = async (): Promise<Speech[]> => {
-  console.log('🎧 Fetching speeches from podcast RSS feeds...');
+  console.log('📺 Fetching embedded YouTube speeches...');
   
   try {
-    const podcastSpeeches = await fetchPodcastSpeeches();
+    // Return all embedded YouTube speeches (4000 total speeches)
+    console.log(`✅ Returning ${allYoutubeSpeeches.length} embedded YouTube speeches`);
+    return allYoutubeSpeeches;
+  } catch (error) {
+    console.error('❌ Error fetching embedded speeches:', error);
     
-    if (podcastSpeeches.length > 0) {
-      console.log(`✅ Fetched ${podcastSpeeches.length} podcast speeches`);
-      return podcastSpeeches;
+    // Fallback to fetching from YouTube API
+    console.log('🎧 Falling back to YouTube API...');
+    const youtubeSpeeches = await fetchYouTubeSpeeches();
+    
+    if (youtubeSpeeches.length > 0) {
+      return youtubeSpeeches;
     }
     
-    console.log('⚠️ No podcast speeches found');
-    return [];
-  } catch (error) {
-    console.error('❌ Error fetching speeches:', error);
-    return [];
+    // Final fallback to PodcastIndex if everything fails
+    console.log('🎧 Falling back to PodcastIndex...');
+    
+    // Search for various motivational topics
+    const searchQueries = [
+      'david goggins motivation',
+      'tony robbins success',
+      'jocko willink discipline',
+      'les brown inspiration',
+      'eric thomas motivation',
+      'mel robbins confidence',
+      'personal development',
+      'mindset motivation'
+    ];
+    
+    const allSpeeches: Speech[] = [];
+    
+    // Search multiple topics to get diverse content
+    for (const query of searchQueries.slice(0, 4)) { // Limit to 4 queries to avoid rate limits
+      try {
+        console.log(`🔍 Searching for: ${query}`);
+        const episodes = await searchPodcastEpisodes(query, 6); // 6 episodes per query
+        
+        const speeches = episodes.map((episode) => ({
+          id: episode.id,
+          title: episode.title,
+          speaker: extractSpeaker(episode.title, episode.podcastTitle),
+          duration: episode.duration,
+          category: episode.category,
+          imageUrl: episode.podcastImage,
+          audioUrl: episode.audioUrl,
+          youtubeId: undefined,
+          description: episode.description,
+          playCount: Math.floor(Math.random() * 10000) + 1000,
+          tags: generateTags(episode.title, episode.description),
+        }));
+        
+        allSpeeches.push(...speeches);
+        
+        // Add small delay between requests to be respectful
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (queryError) {
+        console.error(`❌ Error searching for "${query}":`, queryError);
+      }
+    }
+    
+    // Remove duplicates based on ID
+    const uniqueSpeeches = allSpeeches.filter((speech, index, self) => 
+      index === self.findIndex(s => s.id === speech.id)
+    );
+    
+    console.log(`✅ Total unique speeches fetched: ${uniqueSpeeches.length}`);
+    return uniqueSpeeches;
   }
 };
 
-// Search for specific speaker using podcast RSS feeds
+// Search for specific speaker using PodcastIndex
 export const searchSpeaker = async (speakerName: string, limit: number = 10): Promise<Speech[]> => {
   try {
     console.log(`🎧 Searching for speaker: ${speakerName}`);
-    const speeches = await searchPodcastFeeds(speakerName, limit);
+    const query = `${speakerName} motivation`;
+    const episodes = await searchPodcastEpisodes(query, limit);
     
-    if (speeches.length === 0) {
-      console.log(`⚠️ No speeches found for speaker: ${speakerName}`);
+    if (episodes.length === 0) {
+      console.log(`⚠️ No episodes found for speaker: ${speakerName}`);
       return [];
     }
+    
+    const speeches = episodes.map(episode => ({
+      id: episode.id,
+      title: episode.title,
+      speaker: speakerName,
+      duration: episode.duration,
+      category: episode.category,
+      imageUrl: episode.podcastImage,
+      audioUrl: episode.audioUrl,
+      youtubeId: undefined,
+      description: episode.description,
+      playCount: Math.floor(Math.random() * 10000) + 1000,
+      tags: generateTags(episode.title, episode.description),
+    }));
     
     console.log(`✅ Found ${speeches.length} speeches for speaker: ${speakerName}`);
     return speeches;
@@ -230,14 +336,17 @@ export const searchSpeaker = async (speakerName: string, limit: number = 10): Pr
   }
 };
 
-// Get trending motivational speeches from podcast RSS feeds
+// Get trending motivational speeches using embedded YouTube speeches
 export const getTrendingSpeeches = async (limit: number = 50): Promise<Speech[]> => {
   try {
-    console.log('🎧 Getting trending podcast speeches...');
+    console.log('📺 Getting trending embedded YouTube speeches...');
     
-    const trendingSpeeches = await getTrendingPodcasts(limit);
+    // Return the most popular embedded YouTube speeches (sorted by play count)
+    const trendingSpeeches = allYoutubeSpeeches
+      .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+      .slice(0, limit);
     
-    console.log(`✅ Found ${trendingSpeeches.length} trending podcast speeches`);
+    console.log(`✅ Found ${trendingSpeeches.length} trending embedded speeches`);
     return trendingSpeeches;
   } catch (error) {
     console.error('❌ Error getting trending speeches:', error);
@@ -245,14 +354,53 @@ export const getTrendingSpeeches = async (limit: number = 50): Promise<Speech[]>
   }
 };
 
-// Search speeches by keyword using podcast RSS feeds
+// Search speeches by keyword using embedded YouTube speeches
 export const searchSpeeches = async (keyword: string, limit: number = 100): Promise<Speech[]> => {
   try {
-    console.log(`🎧 Searching podcast speeches for keyword: ${keyword}`);
+    console.log(`📺 Searching embedded speeches for keyword: ${keyword}`);
+    const lowercaseKeyword = keyword.toLowerCase();
     
-    const speeches = await searchPodcastFeeds(keyword, limit);
+    // Search through all embedded YouTube speeches
+    const matchingSpeeches = allYoutubeSpeeches.filter(speech => 
+      speech.title.toLowerCase().includes(lowercaseKeyword) ||
+      speech.speaker.toLowerCase().includes(lowercaseKeyword) ||
+      speech.category.toLowerCase().includes(lowercaseKeyword) ||
+      speech.description.toLowerCase().includes(lowercaseKeyword) ||
+      (speech.tags && speech.tags.some(tag => tag.toLowerCase().includes(lowercaseKeyword)))
+    );
     
-    console.log(`✅ Found ${speeches.length} podcast speeches for keyword: ${keyword}`);
+    const results = matchingSpeeches.slice(0, limit);
+    console.log(`✅ Found ${results.length} embedded speeches for keyword: ${keyword}`);
+    
+    if (results.length > 0) {
+      return results;
+    }
+    
+    // Fallback to PodcastIndex if no embedded speeches match
+    console.log(`🎧 No embedded matches, searching PodcastIndex for: ${keyword}`);
+    const query = `${keyword} motivation`;
+    const episodes = await searchPodcastEpisodes(query, Math.min(limit, 20));
+    
+    if (episodes.length === 0) {
+      console.log(`⚠️ No episodes found for keyword: ${keyword}`);
+      return [];
+    }
+    
+    const speeches = episodes.map(episode => ({
+      id: episode.id,
+      title: episode.title,
+      speaker: extractSpeaker(episode.title, episode.podcastTitle),
+      duration: episode.duration,
+      category: episode.category,
+      imageUrl: episode.podcastImage,
+      audioUrl: episode.audioUrl,
+      youtubeId: undefined,
+      description: episode.description,
+      playCount: Math.floor(Math.random() * 10000) + 1000,
+      tags: generateTags(episode.title, episode.description),
+    }));
+    
+    console.log(`✅ Found ${speeches.length} speeches from PodcastIndex for keyword: ${keyword}`);
     return speeches;
   } catch (error) {
     console.error(`❌ Error searching speeches for keyword ${keyword}:`, error);
