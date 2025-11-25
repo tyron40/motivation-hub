@@ -78,46 +78,45 @@ function parseXML(xmlText: string): ParsedRSS {
 
 console.log('[podcast/rss-proxy] Module loading...');
 
-export const rssFeedProcedure = publicProcedure
-  .input(
-    z.object({
-      url: z.string().url(),
-    })
-  )
-  .query(async ({ input }) => {
-    try {
-      console.log(`📡 Fetching RSS feed from backend: ${input.url}`);
-      
-      const response = await fetch(input.url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; PodcastApp/1.0)',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const xmlText = await response.text();
-      
-      console.log(`✅ Successfully fetched RSS feed (${xmlText.length} bytes)`);
-      
-      const parsed = parseXML(xmlText);
-      
-      console.log(`✅ Parsed ${parsed.items.length} items from RSS feed`);
-      
-      return {
-        ...parsed,
-        success: true,
-      };
-    } catch (error) {
-      console.error(`❌ Error fetching RSS feed:`, error);
-      throw new Error(`Failed to fetch RSS feed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  });
-
 export const podcastRouter = createTRPCRouter({
-  rssFeed: rssFeedProcedure,
+  rssFeed: publicProcedure
+    .input(
+      z.object({
+        url: z.string().url(),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        console.log(`📡 Fetching RSS feed from backend: ${input.url}`);
+        
+        const response = await fetch(input.url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; PodcastApp/1.0)',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const xmlText = await response.text();
+        
+        console.log(`✅ Successfully fetched RSS feed (${xmlText.length} bytes)`);
+        
+        const parsed = parseXML(xmlText);
+        
+        console.log(`✅ Parsed ${parsed.items.length} items from RSS feed`);
+        
+        return {
+          ...parsed,
+          success: true,
+        };
+      } catch (error) {
+        console.error(`❌ Error fetching RSS feed:`, error);
+        throw new Error(`Failed to fetch RSS feed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }),
 });
 
-console.log('[podcast/rss-proxy] Router created with procedures:', Object.keys(podcastRouter._def.procedures));
+console.log('[podcast/rss-proxy] Router created successfully');
+console.log('[podcast/rss-proxy] Available procedures:', Object.keys(podcastRouter._def.procedures));
