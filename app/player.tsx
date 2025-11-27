@@ -7,13 +7,13 @@ import {
   Image,
   SafeAreaView,
   Animated,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2, Youtube, MoreVertical } from 'lucide-react-native';
+import { ChevronDown, Heart, Share2, Youtube, MoreVertical, SkipForward, SkipBack } from 'lucide-react-native';
 import { useCurrentSpeech, useSpeechContext } from '@/hooks/speech-context';
 import { Speech } from '@/types/speech';
 import { router } from 'expo-router';
-import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 
 export default function PlayerScreen() {
@@ -102,25 +102,62 @@ export default function PlayerScreen() {
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {currentSpeech.youtubeId ? (
             <View style={styles.playerWrapper}>
-              <AudioOnlyVideoPlayer
-                videoId={currentSpeech.youtubeId}
-                title={currentSpeech.title}
-                thumbnail={currentSpeech.youtubeId 
-                  ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/hqdefault.jpg`
-                  : currentSpeech.imageUrl
-                }
-                channelTitle={currentSpeech.speaker}
-                autoplay={true}
-                onError={(error: string) => {
-                  console.error('Audio playback error:', error);
-                }}
-                onEnd={() => {
-                  console.log('Audio playback ended');
-                  handleNext();
-                }}
-                onNext={handleNext}
-                onPrevious={handlePrevious}
-              />
+              <Animated.View style={[styles.imageContainer, { transform: [{ scale: scaleAnim }] }]}>
+                <Image 
+                  source={{ 
+                    uri: currentSpeech.youtubeId 
+                      ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/maxresdefault.jpg`
+                      : currentSpeech.imageUrl
+                  }} 
+                  style={styles.image} 
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.4)']}
+                  style={styles.imageGradient}
+                />
+                <TouchableOpacity 
+                  style={styles.playOverlay}
+                  onPress={() => {
+                    if (currentSpeech.youtubeId) {
+                      const youtubeUrl = `https://www.youtube.com/watch?v=${currentSpeech.youtubeId}`;
+                      console.log('🎬 Opening YouTube:', youtubeUrl);
+                      Linking.openURL(youtubeUrl).catch(err => {
+                        console.error('Failed to open YouTube:', err);
+                      });
+                    }
+                  }}
+                >
+                  <View style={styles.playButton}>
+                    <Youtube color="#FFFFFF" size={48} />
+                  </View>
+                  <Text style={styles.playText}>Watch on YouTube</Text>
+                </TouchableOpacity>
+              </Animated.View>
+              
+              <View style={styles.info}>
+                <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
+                <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
+                <View style={styles.categoryBadge}>
+                  <Text style={styles.categoryText}>{(currentSpeech.category || '').toUpperCase()}</Text>
+                </View>
+              </View>
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity 
+                  onPress={handlePrevious}
+                  style={styles.navButton}
+                  disabled={!speeches || speeches.length <= 1}
+                >
+                  <SkipBack color="#FFFFFF" size={28} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={handleNext}
+                  style={styles.navButton}
+                  disabled={!speeches || speeches.length <= 1}
+                >
+                  <SkipForward color="#FFFFFF" size={28} />
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <>
@@ -224,6 +261,55 @@ const getStyles = (colors: any) => StyleSheet.create({
   playerWrapper: {
     width: '100%',
     alignItems: 'center',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FF0000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF0000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  playText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+    marginTop: 32,
+  },
+  navButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   imageContainer: {
     width: '85%',
