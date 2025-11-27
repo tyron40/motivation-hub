@@ -69,13 +69,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           return;
         }
 
-        // Check if we're in a sandbox environment (Rork preview, Expo Go, etc.)
-        const isSandbox = __DEV__ && (apiKey.startsWith('appl_') || apiKey.startsWith('goog_'));
-        
-        if (isSandbox) {
-          console.log('ℹ️ Running in sandbox environment with production API key');
-          console.log('ℹ️ IAP features will be disabled - this is expected');
-          console.log('ℹ️ Use RevenueCat Test Store API key for testing, or production build for native IAP');
+        // Always skip RevenueCat configuration in development/sandbox
+        if (__DEV__) {
+          console.log('ℹ️ Development mode: Skipping RevenueCat configuration');
+          console.log('ℹ️ IAP features will be simulated locally');
+          console.log('ℹ️ Use production build for real IAP testing');
           setIsConfigured(true);
           return;
         }
@@ -144,7 +142,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         setTimeout(() => {
           console.warn('⚠️ Entitlements loading timeout');
           resolve(null);
-        }, 3000);
+        }, 1000);
       });
       
       const loadPromise = AsyncStorage.getItem('entitlements');

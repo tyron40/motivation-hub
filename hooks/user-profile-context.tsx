@@ -34,7 +34,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
           setTimeout(() => {
             console.warn('⚠️ Profile loading timeout');
             resolve(null);
-          }, 5000);
+          }, 1000);
         });
         
         const loadPromise = AsyncStorage.getItem('userProfile');

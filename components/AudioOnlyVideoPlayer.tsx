@@ -63,7 +63,7 @@ export default function AudioOnlyVideoPlayer({
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
       }, 800);
-    }, 15000);
+    }, 8000);
 
     return () => {
       if (progressRef) {
@@ -160,8 +160,6 @@ export default function AudioOnlyVideoPlayer({
             'playsinline': 1,
             'mute': 0,
             'enablejsapi': 1,
-            'origin': window.location.origin || 'https://localhost',
-            'widget_referrer': window.location.href || 'https://localhost',
             'fs': 0,
             'iv_load_policy': 3
           },

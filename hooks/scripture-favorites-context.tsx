@@ -16,7 +16,7 @@ export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContext
           setTimeout(() => {
             console.warn('⚠️ Scripture favorites loading timeout');
             resolve(null);
-          }, 5000);
+          }, 1000);
         });
         
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
