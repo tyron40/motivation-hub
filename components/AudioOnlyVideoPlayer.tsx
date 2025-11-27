@@ -436,7 +436,7 @@ export default function AudioOnlyVideoPlayer({
           
           // Provide more specific error messages
           if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
-            errorMsg = 'This video cannot be embedded. Skipping...';
+            errorMsg = 'Video has embedding restrictions. Skipping...';
           } else if (errorCode === 100) {
             errorMsg = 'Video not available. Skipping...';
           } else if (errorCode === 2) {
