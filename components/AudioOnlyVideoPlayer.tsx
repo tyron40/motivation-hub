@@ -59,12 +59,11 @@ export default function AudioOnlyVideoPlayer({
       setError('Video cannot be played. Skipping...');
       onError?.('Loading timeout');
       
-      // Auto-skip after 1 second if still can't load
       autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
       }, 1000);
-    }, 10000);
+    }, 20000);
 
     return () => {
       if (progressRef) {
@@ -146,58 +145,91 @@ export default function AudioOnlyVideoPlayer({
     var isReady = false;
     
     function onYouTubeIframeAPIReady() {
-      player = new YT.Player('player', {
-        height: '1',
-        width: '1',
-        videoId: '${safeVideoId}',
-        playerVars: {
-          'autoplay': 0,
-          'controls': 0,
-          'modestbranding': 1,
-          'rel': 0,
-          'showinfo': 0,
-          'playsinline': 1,
-          'mute': 0,
-          'enablejsapi': 1,
-          'origin': window.location.origin || 'https://localhost',
-          'widget_referrer': window.location.href || 'https://localhost',
-          'fs': 0,
-          'iv_load_policy': 3
-        },
-        events: {
-          'onReady': onPlayerReady,
-          'onStateChange': onPlayerStateChange,
-          'onError': onPlayerError
-        }
-      });
+      console.log('🎬 YouTube IFrame API ready, creating player');
+      try {
+        player = new YT.Player('player', {
+          height: '1',
+          width: '1',
+          videoId: '${safeVideoId}',
+          playerVars: {
+            'autoplay': 0,
+            'controls': 0,
+            'modestbranding': 1,
+            'rel': 0,
+            'showinfo': 0,
+            'playsinline': 1,
+            'mute': 0,
+            'enablejsapi': 1,
+            'origin': window.location.origin || 'https://localhost',
+            'widget_referrer': window.location.href || 'https://localhost',
+            'fs': 0,
+            'iv_load_policy': 3
+          },
+          events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange,
+            'onError': onPlayerError
+          }
+        });
+        console.log('✅ Player object created successfully');
+      } catch(e) {
+        console.error('❌ Error creating player:', e);
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'error',
+          error: 'PLAYER_CREATION_FAILED',
+          errorMessage: 'Failed to create player: ' + e.message
+        }));
+      }
     }
 
     function onPlayerReady(event) {
+      console.log('✅ Player ready event received');
       isReady = true;
-      var videoDuration = player.getDuration();
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'ready',
-        duration: videoDuration
-      }));
       
-      setTimeout(function() {
-        if (player && player.playVideo) {
-          try {
-            player.unMute();
-            player.setVolume(100);
-            console.log('Player ready, waiting for manual play');
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'playbackReady'
-            }));
-          } catch(e) {
-            console.error('Error in ready handler:', e);
+      try {
+        var videoDuration = player.getDuration();
+        console.log('📊 Video duration:', videoDuration, 'seconds');
+        
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'ready',
+          duration: videoDuration
+        }));
+        
+        setTimeout(function() {
+          if (player && player.playVideo) {
+            try {
+              player.unMute();
+              player.setVolume(100);
+              console.log('🔊 Player unmuted and volume set to 100');
+              console.log('✅ Player ready, waiting for manual play');
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'playbackReady'
+              }));
+            } catch(e) {
+              console.error('❌ Error in ready handler:', e);
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'error',
+                error: 'READY_HANDLER_FAILED',
+                errorMessage: e.message || 'Ready handler failed'
+              }));
+            }
+          } else {
+            console.error('❌ Player or playVideo method not available');
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'error',
-              error: 'READY_HANDLER_FAILED'
+              error: 'PLAYER_NOT_AVAILABLE',
+              errorMessage: 'Player not available after ready'
             }));
           }
-        }
-      }, 500);
+        }, 500);
+      } catch(e) {
+        console.error('❌ Error in onPlayerReady:', e);
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'error',
+          error: 'READY_EVENT_FAILED',
+          errorMessage: e.message || 'Ready event failed'
+        }));
+      }
       
       setInterval(function() {
         if (player && player.getCurrentTime) {
