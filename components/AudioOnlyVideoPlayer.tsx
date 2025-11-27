@@ -62,8 +62,8 @@ export default function AudioOnlyVideoPlayer({
       autoSkipTimeoutRef.current = setTimeout(() => {
         console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 1000);
-    }, 20000);
+      }, 800);
+    }, 15000);
 
     return () => {
       if (progressRef) {
@@ -460,7 +460,7 @@ export default function AudioOnlyVideoPlayer({
             console.log('⏭️ Auto-skipping unplayable video (embedding restricted, code:', errorCode, ')');
             autoSkipTimeoutRef.current = setTimeout(() => {
               onNext?.();
-            }, 800);
+            }, 500);
             return;
           }
           
