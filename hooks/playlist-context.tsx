@@ -16,7 +16,7 @@ export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
           setTimeout(() => {
             console.warn('⚠️ Playlists loading timeout');
             resolve(null);
-          }, 2000);
+          }, 5000);
         });
         
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);

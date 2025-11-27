@@ -63,7 +63,8 @@ export default function YouTubeEmbed({
   }
   
   // Privacy-friendly embed URL with all necessary parameters
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?${
+  // Use youtube.com instead of youtube-nocookie.com for better mobile compatibility
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?${
     new URLSearchParams({
       autoplay: autoplay ? '1' : '0',
       controls: '1',

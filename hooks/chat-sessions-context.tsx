@@ -17,7 +17,7 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
           setTimeout(() => {
             console.warn('⚠️ Chat sessions loading timeout');
             resolve(null);
-          }, 2000);
+          }, 5000);
         });
         
         const loadPromise = AsyncStorage.getItem(STORAGE_KEY);

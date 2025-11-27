@@ -144,7 +144,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         setTimeout(() => {
           console.warn('⚠️ Entitlements loading timeout');
           resolve(null);
-        }, 1000);
+        }, 3000);
       });
       
       const loadPromise = AsyncStorage.getItem('entitlements');
