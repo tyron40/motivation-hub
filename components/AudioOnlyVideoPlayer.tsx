@@ -45,7 +45,7 @@ export default function AudioOnlyVideoPlayer({
     const loadingRef = loadingTimeoutRef.current;
     
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Loading timeout - player may not be ready');
+      console.warn('⚠️ Loading timeout - player may not be ready for videoId:', videoId);
       
       if (retryCountRef.current < maxRetries) {
         retryCountRef.current += 1;
@@ -56,14 +56,15 @@ export default function AudioOnlyVideoPlayer({
       }
       
       setIsLoading(false);
-      setError('Video cannot be played. Skipping...');
-      onError?.('Loading timeout');
+      const timeoutError = 'Video loading timeout. This video may not be available for playback.';
+      setError(timeoutError);
+      onError?.(timeoutError);
       
+      console.log('⏭️ Auto-skipping unplayable video after timeout');
       autoSkipTimeoutRef.current = setTimeout(() => {
-        console.log('⏭️ Auto-skipping unplayable video');
         onNext?.();
-      }, 800);
-    }, 8000);
+      }, 500);
+    }, 5000);
 
     return () => {
       if (progressRef) {
@@ -79,7 +80,7 @@ export default function AudioOnlyVideoPlayer({
         clearTimeout(autoSkipTimeoutRef.current);
       }
     };
-  }, [onError, onNext]);
+  }, [videoId, onError, onNext]);
 
   // Clean up auto-skip timeout when video changes
   useEffect(() => {
@@ -455,6 +456,7 @@ export default function AudioOnlyVideoPlayer({
           onEnd?.();
           break;
         case 'error':
+          console.log('❌ Received error from player for video:', videoId);
           if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
           }
@@ -464,29 +466,28 @@ export default function AudioOnlyVideoPlayer({
           
           // Provide more specific error messages
           if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
-            errorMsg = 'Video cannot be embedded (restricted by owner)';
+            errorMsg = 'This video cannot be embedded. The creator has restricted playback outside YouTube.';
           } else if (errorCode === 100) {
-            errorMsg = 'Video not found or private';
+            errorMsg = 'Video not found or is private';
           } else if (errorCode === 2) {
             errorMsg = 'Invalid video ID';
           } else if (errorCode === 5) {
             errorMsg = 'Playback error occurred';
           }
           
-          console.error('❌ Player error:', errorMsg, 'Code:', errorCode);
+          console.error('❌ Player error for video', videoId, ':', errorMsg, 'Code:', errorCode);
           
-          // For embedding errors (101, 150, 153), skip immediately without retry
+          // For embedding errors (101, 150, 153) or not found (100), skip immediately
           if (errorCode === 101 || errorCode === 150 || errorCode === 153 || errorCode === 100) {
             setError(errorMsg);
             setIsLoading(false);
             setIsPlaying(false);
             onError?.(errorMsg);
             
-            // Auto-skip immediately for embedding restriction errors
-            console.log('⏭️ Auto-skipping unplayable video (embedding restricted, code:', errorCode, ')');
+            console.log('⏭️ Auto-skipping unplayable video (error code:', errorCode, ')');
             autoSkipTimeoutRef.current = setTimeout(() => {
               onNext?.();
-            }, 500);
+            }, 400);
             return;
           }
           
@@ -505,11 +506,12 @@ export default function AudioOnlyVideoPlayer({
           setIsPlaying(false);
           onError?.(errorMsg);
           
-          // Auto-skip after 2 seconds for other errors
+          // Auto-skip after 1.5 seconds for other errors
+          console.log('⏭️ Scheduling auto-skip for playback error');
           autoSkipTimeoutRef.current = setTimeout(() => {
             console.log('⏭️ Auto-skipping unplayable video after error');
             onNext?.();
-          }, 2000);
+          }, 1500);
           break;
       }
     } catch (e) {

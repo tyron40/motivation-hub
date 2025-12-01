@@ -120,9 +120,10 @@ export async function fetchYouTubeVideosDirect(
       searchUrl.searchParams.set('type', 'video');
       searchUrl.searchParams.set('maxResults', currentBatchSize.toString());
       searchUrl.searchParams.set('order', 'relevance');
-      searchUrl.searchParams.set('videoDuration', 'medium');
+      searchUrl.searchParams.set('videoDuration', 'any');
       searchUrl.searchParams.set('videoEmbeddable', 'true');
       searchUrl.searchParams.set('videoSyndicated', 'true');
+      searchUrl.searchParams.set('videoLicense', 'any');
       searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
       
       if (pageToken) {
