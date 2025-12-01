@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Play, Pause, SkipForward, SkipBack, Volume2 } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Volume2, ExternalLink, Youtube } from 'lucide-react-native';
 import CustomSlider from './CustomSlider';
 
 interface AudioOnlyVideoPlayerProps {
@@ -90,6 +90,34 @@ export default function AudioOnlyVideoPlayer({
       }
     };
   }, [videoId]);
+
+  const openInYouTube = async () => {
+    if (!videoId) return;
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    try {
+      const youtubeAppUrl = Platform.select({
+        ios: `youtube://watch?v=${videoId}`,
+        android: `vnd.youtube://watch?v=${videoId}`,
+        web: youtubeUrl,
+        default: youtubeUrl,
+      });
+      
+      const supported = await Linking.canOpenURL(youtubeAppUrl || youtubeUrl);
+      if (supported && youtubeAppUrl) {
+        await Linking.openURL(youtubeAppUrl);
+      } else {
+        await Linking.openURL(youtubeUrl);
+      }
+      console.log('📱 Opened YouTube video:', videoId);
+    } catch (error) {
+      console.error('❌ Error opening YouTube:', error);
+      try {
+        await Linking.openURL(youtubeUrl);
+      } catch (fallbackError) {
+        console.error('❌ Fallback also failed:', fallbackError);
+      }
+    }
+  };
 
   if (!videoId || typeof videoId !== 'string' || videoId.trim().length === 0) {
     console.warn('⚠️ AudioOnlyVideoPlayer: Invalid videoId provided:', videoId);
@@ -554,23 +582,17 @@ export default function AudioOnlyVideoPlayer({
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Unable to play audio</Text>
+          <Youtube size={48} color="#ff6b6b" />
+          <Text style={styles.errorText}>Unable to play in-app</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
+          <Text style={styles.errorHint}>This video needs to be played in YouTube</Text>
           <View style={styles.errorActions}>
             <TouchableOpacity 
-              onPress={() => {
-                if (autoSkipTimeoutRef.current) {
-                  clearTimeout(autoSkipTimeoutRef.current);
-                }
-                setError(null);
-                setIsLoading(true);
-                setCurrentTime(0);
-                setDuration(0);
-                retryCountRef.current = 0;
-              }}
-              style={styles.retryButton}
+              onPress={openInYouTube}
+              style={[styles.retryButton, styles.youtubeButton]}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <ExternalLink size={16} color="white" style={{ marginRight: 8 }} />
+              <Text style={styles.retryText}>Open in YouTube</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               onPress={() => {
@@ -636,6 +658,13 @@ export default function AudioOnlyVideoPlayer({
           {channelTitle && (
             <Text style={styles.artist} numberOfLines={1}>{channelTitle}</Text>
           )}
+          <TouchableOpacity 
+            onPress={openInYouTube}
+            style={styles.openYouTubeButton}
+          >
+            <Youtube size={16} color="#ff6b6b" />
+            <Text style={styles.openYouTubeText}>Open in YouTube</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Progress Slider */}
@@ -831,11 +860,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorHint: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
     marginBottom: 16,
+    fontStyle: 'italic',
   },
   errorActions: {
     flexDirection: 'row',
     gap: 12,
+    width: '100%',
   },
   retryButton: {
     backgroundColor: '#ff6b6b',
@@ -844,9 +881,31 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 8,
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  youtubeButton: {
+    backgroundColor: '#ff0000',
   },
   skipButton: {
     backgroundColor: '#666',
+  },
+  openYouTubeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    alignSelf: 'center',
+  },
+  openYouTubeText: {
+    fontSize: 13,
+    color: '#ff6b6b',
+    fontWeight: '600',
   },
   retryText: {
     color: 'white',
