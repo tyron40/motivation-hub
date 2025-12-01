@@ -344,6 +344,8 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
     searchUrl.searchParams.set('maxResults', maxResults.toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
+    searchUrl.searchParams.set('videoEmbeddable', 'true');
+    searchUrl.searchParams.set('videoSyndicated', 'true');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     console.log('[YouTube] Fetching search results...');

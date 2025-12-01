@@ -436,13 +436,13 @@ export default function AudioOnlyVideoPlayer({
           
           // Provide more specific error messages
           if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
-            errorMsg = 'Video has embedding restrictions. Skipping...';
+            errorMsg = 'Video cannot be embedded (restricted by owner)';
           } else if (errorCode === 100) {
-            errorMsg = 'Video not available. Skipping...';
+            errorMsg = 'Video not found or private';
           } else if (errorCode === 2) {
-            errorMsg = 'Invalid video ID. Skipping...';
+            errorMsg = 'Invalid video ID';
           } else if (errorCode === 5) {
-            errorMsg = 'Playback error. Skipping...';
+            errorMsg = 'Playback error occurred';
           }
           
           console.error('❌ Player error:', errorMsg, 'Code:', errorCode);

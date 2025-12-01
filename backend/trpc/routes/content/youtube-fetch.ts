@@ -104,6 +104,7 @@ async function fetchYouTubeVideos(
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
     searchUrl.searchParams.set('videoEmbeddable', 'true');
+    searchUrl.searchParams.set('videoSyndicated', 'true');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
     const searchResponse = await fetch(searchUrl.toString());
