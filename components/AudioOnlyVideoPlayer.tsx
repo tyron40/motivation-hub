@@ -1,9 +1,33 @@
+// ====================
+//  AUDIO ONLY PLAYER FIXED VERSION
+// ====================
+
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Platform, Linking } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Platform,
+  Linking
+} from 'react-native';
+
 import { WebView } from 'react-native-webview';
-import { Play, Pause, SkipForward, SkipBack, Volume2, ExternalLink, Youtube } from 'lucide-react-native';
+import {
+  Play,
+  Pause,
+  SkipForward,
+  SkipBack,
+  Volume2,
+  ExternalLink,
+  Youtube
+} from 'lucide-react-native';
+
 import CustomSlider from './CustomSlider';
 
+// Props
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
   title: string;
@@ -15,6 +39,10 @@ interface AudioOnlyVideoPlayerProps {
   onNext?: () => void;
   onPrevious?: () => void;
 }
+
+// =========================
+//     COMPONENT START
+// =========================
 
 export default function AudioOnlyVideoPlayer({
   videoId,
@@ -33,732 +61,328 @@ export default function AudioOnlyVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+
   const webViewRef = useRef<WebView>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const retryCountRef = useRef(0);
   const maxRetries = 2;
-  const autoSkipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    const progressRef = progressIntervalRef.current;
-    const loadingRef = loadingTimeoutRef.current;
-    
-    loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Loading timeout - player may not be ready for videoId:', videoId);
-      
-      if (retryCountRef.current < maxRetries) {
-        retryCountRef.current += 1;
-        console.log(`🔄 Retrying... (${retryCountRef.current}/${maxRetries})`);
-        setIsLoading(true);
-        setError(null);
-        return;
-      }
-      
-      setIsLoading(false);
-      const timeoutError = 'Video loading timeout. This video may not be available for playback.';
-      setError(timeoutError);
-      onError?.(timeoutError);
-      
-      console.log('⏭️ Auto-skipping unplayable video after timeout');
-      autoSkipTimeoutRef.current = setTimeout(() => {
-        onNext?.();
-      }, 500);
-    }, 5000);
+  // ===============================
+  //  FIX: YouTube Hidden Player HTML
+  // ===============================
 
-    return () => {
-      if (progressRef) {
-        clearInterval(progressRef);
-      }
-      if (loadingRef) {
-        clearTimeout(loadingRef);
-      }
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      if (autoSkipTimeoutRef.current) {
-        clearTimeout(autoSkipTimeoutRef.current);
-      }
-    };
-  }, [videoId, onError, onNext]);
-
-  // Clean up auto-skip timeout when video changes
-  useEffect(() => {
-    return () => {
-      if (autoSkipTimeoutRef.current) {
-        clearTimeout(autoSkipTimeoutRef.current);
-        autoSkipTimeoutRef.current = null;
-      }
-    };
-  }, [videoId]);
-
-  const openInYouTube = async () => {
-    if (!videoId) return;
-    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    try {
-      const youtubeAppUrl = Platform.select({
-        ios: `youtube://watch?v=${videoId}`,
-        android: `vnd.youtube://watch?v=${videoId}`,
-        web: youtubeUrl,
-        default: youtubeUrl,
-      });
-      
-      const supported = await Linking.canOpenURL(youtubeAppUrl || youtubeUrl);
-      if (supported && youtubeAppUrl) {
-        await Linking.openURL(youtubeAppUrl);
-      } else {
-        await Linking.openURL(youtubeUrl);
-      }
-      console.log('📱 Opened YouTube video:', videoId);
-    } catch (error) {
-      console.error('❌ Error opening YouTube:', error);
-      try {
-        await Linking.openURL(youtubeUrl);
-      } catch (fallbackError) {
-        console.error('❌ Fallback also failed:', fallbackError);
-      }
-    }
-  };
-
-  if (!videoId || typeof videoId !== 'string' || videoId.trim().length === 0) {
-    console.warn('⚠️ AudioOnlyVideoPlayer: Invalid videoId provided:', videoId);
-    return (
-      <View style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Invalid video ID</Text>
-          <Text style={styles.errorSubtext}>Cannot play audio</Text>
-        </View>
-      </View>
-    );
-  }
-
-  // HTML for invisible YouTube player that only plays audio
   const getHtmlContent = () => {
-    // Ensure videoId is properly escaped for HTML
     const safeVideoId = String(videoId).replace(/["'<>&]/g, '');
-    
-    return `<!DOCTYPE html>
+
+    return `
+<!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background: #000;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    #player-container {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 2px;
-      height: 2px;
-      opacity: 0.01;
-      pointer-events: none;
-    }
-    #player {
-      width: 100%;
-      height: 100%;
-    }
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+  }
+
+  /* FIXED: Player MUST be visible to YouTube */
+  #player-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    height: 2px;
+    opacity: 0.01;          /* MUST NOT be 0 */
+    pointer-events: auto;   /* FIXED */
+  }
+
+  #player {
+    width: 100%;
+    height: 100%;
+  }
+</style>
 </head>
+
 <body>
   <div id="player-container">
     <div id="player"></div>
   </div>
+
   <script>
     var tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    document.body.appendChild(tag);
 
     var player;
     var isReady = false;
-    
+
     function onYouTubeIframeAPIReady() {
-      console.log('🎬 YouTube IFrame API ready, creating player');
-      try {
-        player = new YT.Player('player', {
-          height: '360',
-          width: '640',
-          videoId: '${safeVideoId}',
-          playerVars: {
-            'autoplay': 0,
-            'controls': 1,
-            'modestbranding': 1,
-            'rel': 0,
-            'showinfo': 0,
-            'playsinline': 1,
-            'mute': 0,
-            'enablejsapi': 1,
-            'fs': 1,
-            'iv_load_policy': 3,
-            'widget_referrer': window.location.origin,
-            'origin': window.location.origin
-          },
-          events: {
-            'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange,
-            'onError': onPlayerError
-          }
-        });
-        console.log('✅ Player object created successfully');
-      } catch(e) {
-        console.error('❌ Error creating player:', e);
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'error',
-          error: 'PLAYER_CREATION_FAILED',
-          errorMessage: 'Failed to create player: ' + e.message
-        }));
-      }
+      player = new YT.Player('player', {
+        width: "640",
+        height: "360",
+        videoId: "${safeVideoId}",
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          enablejsapi: 1,
+          origin: "https://youtube.com"
+        },
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+          onError: onPlayerError
+        }
+      });
     }
 
-    function onPlayerReady(event) {
-      console.log('✅ Player ready event received');
+    function onPlayerReady() {
       isReady = true;
-      
-      try {
-        var videoDuration = player.getDuration();
-        console.log('📊 Video duration:', videoDuration, 'seconds');
-        
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'ready',
-          duration: videoDuration
-        }));
-        
-        setTimeout(function() {
-          if (player && player.playVideo) {
-            try {
-              player.unMute();
-              player.setVolume(100);
-              console.log('🔊 Player unmuted and volume set to 100');
-              console.log('✅ Player ready, waiting for manual play');
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'playbackReady'
-              }));
-            } catch(e) {
-              console.error('❌ Error in ready handler:', e);
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'error',
-                error: 'READY_HANDLER_FAILED',
-                errorMessage: e.message || 'Ready handler failed'
-              }));
-            }
-          } else {
-            console.error('❌ Player or playVideo method not available');
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'error',
-              error: 'PLAYER_NOT_AVAILABLE',
-              errorMessage: 'Player not available after ready'
-            }));
-          }
-        }, 500);
-      } catch(e) {
-        console.error('❌ Error in onPlayerReady:', e);
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'error',
-          error: 'READY_EVENT_FAILED',
-          errorMessage: e.message || 'Ready event failed'
-        }));
-      }
-      
-      setInterval(function() {
-        if (player && player.getCurrentTime) {
-          var currentTime = player.getCurrentTime();
-          var duration = player.getDuration();
-          var state = player.getPlayerState();
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'timeUpdate',
-            currentTime: currentTime,
-            duration: duration,
-            state: state
-          }));
-        }
-      }, 500);
+
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: "ready",
+        duration: player.getDuration()
+      }));
     }
 
     function onPlayerStateChange(event) {
-      var stateNames = {
-        '-1': 'UNSTARTED',
-        '0': 'ENDED',
-        '1': 'PLAYING',
-        '2': 'PAUSED',
-        '3': 'BUFFERING',
-        '5': 'CUED'
-      };
-      
-      console.log('Player state changed to:', stateNames[event.data] || event.data);
-      
+      const state = event.data;
       window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'stateChange',
-        state: event.data,
-        stateName: stateNames[event.data] || 'UNKNOWN'
+        type: "stateChange",
+        state: state
       }));
-      
-      if (event.data == YT.PlayerState.ENDED) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'ended'
-        }));
+
+      if (state === YT.PlayerState.ENDED) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: "ended" }));
       }
-      
-      if (event.data == -1 || event.data == 5) {
-        setTimeout(function() {
-          if (player && player.getPlayerState && (player.getPlayerState() == -1 || player.getPlayerState() == 5)) {
-            console.log('Video stuck in unstarted/cued state, attempting to play');
-            try {
-              player.unMute();
-              player.setVolume(100);
-              player.playVideo();
-            } catch(e) {
-              console.error('Error attempting to play stuck video:', e);
-            }
-          }
-        }, 1500);
-      }
-      
-      if (event.data == 3) {
-        console.log('Video buffering...');
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'buffering'
-        }));
+
+      if (state === YT.PlayerState.PLAYING) {
+        setInterval(() => {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "timeUpdate",
+            currentTime: player.getCurrentTime(),
+            duration: player.getDuration(),
+            state: state
+          }));
+        }, 500);
       }
     }
 
     function onPlayerError(event) {
-      var errorMessages = {
-        2: 'Invalid video ID',
-        5: 'HTML5 player error',
-        100: 'Video not found or private',
-        101: 'Video not allowed to be played in embedded players',
-        150: 'Video not allowed to be played in embedded players',
-        153: 'Video not allowed to be played in embedded players'
+      const errors = {
+        2: "Invalid video ID",
+        5: "HTML5 error",
+        100: "Video removed/private",
+        101: "Embedding disabled",
+        150: "Embedding disabled",
+        153: "Embedding disabled"
       };
-      
-      console.error('YouTube player error:', event.data, errorMessages[event.data] || 'Unknown error');
-      
+
       window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'error',
+        type: "error",
         error: event.data,
-        errorMessage: errorMessages[event.data] || 'Unknown error'
+        errorMessage: errors[event.data] || "Playback error"
       }));
     }
 
-    window.addEventListener('message', function(event) {
-      if (!isReady || !player) return;
-      
-      try {
-        var data = JSON.parse(event.data);
-        switch(data.command) {
-          case 'play':
-            player.playVideo();
-            break;
-          case 'pause':
-            player.pauseVideo();
-            break;
-          case 'seekTo':
-            if (data.time !== undefined) {
-              player.seekTo(data.time, true);
-            }
-            break;
-        }
-      } catch(e) {
-        console.error('Error processing command:', e);
-      }
+    window.addEventListener("message", function(event) {
+      if (!player || !isReady) return;
+      const data = JSON.parse(event.data);
+
+      if (data.command === "play") player.playVideo();
+      if (data.command === "pause") player.pauseVideo();
+      if (data.command === "seekTo") player.seekTo(data.time, true);
     });
   </script>
 </body>
 </html>`;
   };
 
+  // ====================================
+  //  WebView -> RN Message Handler
+  // ====================================
+
   const handleMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      
-      console.log('📨 WebView message:', data.type, data.stateName || '', data);
-      
-      switch(data.type) {
-        case 'ready':
-          console.log('✅ Player ready, duration:', data.duration);
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          setIsLoading(false);
-          setError(null);
-          retryCountRef.current = 0;
-          if (data.duration) {
-            setDuration(data.duration);
-          }
-          if (autoplay) {
-            setTimeout(() => {
-              console.log('🎵 Auto-starting playback');
-              sendCommand('play');
-            }, 500);
-          }
-          break;
-        case 'playbackReady':
-          console.log('▶️ Playback system ready');
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          setIsLoading(false);
-          setError(null);
-          retryCountRef.current = 0;
-          if (autoplay) {
-            setTimeout(() => {
-              console.log('🎵 Auto-starting playback');
-              sendCommand('play');
-            }, 500);
-          }
-          break;
-        case 'playbackStarted':
-          console.log('▶️ Playback started successfully');
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          setIsLoading(false);
-          setIsPlaying(true);
-          setError(null);
-          retryCountRef.current = 0;
-          break;
-        case 'stateChange':
-          console.log('🔄 State change:', data.stateName, '(', data.state, ')');
-          if (data.state === 1) {
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-            }
-            setIsPlaying(true);
-            setIsLoading(false);
-            setError(null);
-          } else if (data.state === 2 || data.state === 0) {
-            setIsPlaying(false);
-          } else if (data.state === 3) {
-            console.log('⏳ Buffering...');
-          }
-          break;
-        case 'timeUpdate':
-          if (!isSeeking && data.currentTime !== undefined) {
-            setCurrentTime(data.currentTime);
-          }
-          if (data.duration !== undefined && data.duration > 0) {
-            setDuration(data.duration);
-          }
-          if (data.state === 1) {
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-            }
-            setIsLoading(false);
-            setError(null);
-            if (!isPlaying) {
-              setIsPlaying(true);
-            }
-          }
-          break;
-        case 'ended':
-          console.log('⏹️ Playback ended');
-          setIsPlaying(false);
-          setCurrentTime(0);
-          onEnd?.();
-          break;
-        case 'error':
-          console.log('❌ Received error from player for video:', videoId);
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          
-          const errorCode = data.error;
-          let errorMsg = data.errorMessage || 'Playback error';
-          let canAutoSkip = false;
-          
-          // Provide more specific error messages
-          if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
-            errorMsg = 'This video cannot be embedded. The creator has restricted playback outside YouTube.';
-            canAutoSkip = true;
-          } else if (errorCode === 100) {
-            errorMsg = 'Video not found or is private';
-            canAutoSkip = true;
-          } else if (errorCode === 2) {
-            errorMsg = 'Invalid video ID';
-            canAutoSkip = true;
-          } else if (errorCode === 5) {
-            errorMsg = 'Playback error occurred';
-          }
-          
-          console.error('❌ Player error for video', videoId, ':', errorMsg, 'Code:', errorCode);
-          
-          // For embedding errors (101, 150, 153) or not found (100), show message briefly then skip
-          if (canAutoSkip) {
-            setError(errorMsg);
-            setIsLoading(false);
-            setIsPlaying(false);
-            onError?.(errorMsg);
-            
-            console.log('⏭️ Auto-skipping unplayable video in 2 seconds (error code:', errorCode, ')');
-            autoSkipTimeoutRef.current = setTimeout(() => {
-              console.log('⏭️ Skipping now...');
-              onNext?.();
-            }, 2000);
-            return;
-          }
-          
-          if (retryCountRef.current < maxRetries && (errorCode === 5 || errorCode === 'PLAYBACK_START_FAILED')) {
-            retryCountRef.current += 1;
-            console.log(`🔄 Retrying after error... (${retryCountRef.current}/${maxRetries})`);
-            setTimeout(() => {
-              setIsLoading(true);
-              setError(null);
-            }, 1000);
-            return;
-          }
-          
-          setError(errorMsg);
-          setIsLoading(false);
-          setIsPlaying(false);
-          onError?.(errorMsg);
-          
-          // Auto-skip after 1.5 seconds for other errors
-          console.log('⏭️ Scheduling auto-skip for playback error');
-          autoSkipTimeoutRef.current = setTimeout(() => {
-            console.log('⏭️ Auto-skipping unplayable video after error');
-            onNext?.();
-          }, 1500);
-          break;
-      }
-    } catch (e) {
-      console.error('❌ Error parsing WebView message:', e, event.nativeEvent.data);
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      setError('Communication error with player');
+    const data = JSON.parse(event.nativeEvent.data);
+
+    if (data.type === "ready") {
+      setDuration(data.duration || 0);
       setIsLoading(false);
-      onError?.('WebView communication error');
+      if (autoplay) sendCommand("play");
+    }
+
+    if (data.type === "stateChange") {
+      if (data.state === 1) setIsPlaying(true);
+      if (data.state === 2) setIsPlaying(false);
+    }
+
+    if (data.type === "timeUpdate") {
+      if (!isSeeking) setCurrentTime(data.currentTime);
+      setDuration(data.duration);
+    }
+
+    if (data.type === "ended") {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      onEnd?.();
+    }
+
+    if (data.type === "error") {
+      setError(data.errorMessage);
+      setIsLoading(false);
+
+      setTimeout(() => onNext?.(), 1500);
     }
   };
+
+  // ====================================
+  //  Commands to WebView
+  // ====================================
 
   const sendCommand = (command: string, data?: any) => {
-    const message = JSON.stringify({ command, ...data });
-    if (Platform.OS === 'web') {
-      webViewRef.current?.postMessage(message);
-    } else {
-      webViewRef.current?.injectJavaScript(`
-        window.postMessage(${JSON.stringify(message)}, '*');
-        true;
-      `);
-    }
+    const msg = JSON.stringify({ command, ...data });
+
+    webViewRef.current?.injectJavaScript(`
+      window.postMessage('${msg}', '*');
+      true;
+    `);
   };
 
+  // ====================================
+  //   PLAY / PAUSE TOGGLE
+  // ====================================
   const togglePlayPause = () => {
-    console.log('🎵 Toggle play/pause, currently:', isPlaying ? 'playing' : 'paused');
     if (isPlaying) {
-      sendCommand('pause');
+      sendCommand("pause");
       setIsPlaying(false);
     } else {
-      if (error) {
-        setError(null);
-        setIsLoading(true);
-        retryCountRef.current = 0;
-        setTimeout(() => {
-          sendCommand('play');
-        }, 1000);
-      } else {
-        sendCommand('play');
-        setIsPlaying(true);
-      }
+      sendCommand("play");
+      setIsPlaying(true);
     }
   };
 
-  const handleNext = () => {
-    if (onNext) {
-      onNext();
-    }
+  // ====================================
+  //  GO TO YOUTUBE BUTTON
+  // ====================================
+  const openInYouTube = () => {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    Linking.openURL(url);
   };
 
-  const handlePrevious = () => {
-    if (onPrevious) {
-      onPrevious();
-    }
-  };
-
-  const handleSeek = (value: number) => {
-    setCurrentTime(value);
-    sendCommand('seekTo', { time: value });
-  };
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // ================================
+  //           UI RENDER
+  // ================================
 
   if (error && !isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Youtube size={48} color="#ff6b6b" />
-          <Text style={styles.errorText}>Cannot Play In-App</Text>
-          <Text style={styles.errorSubtext}>{error}</Text>
-          <Text style={styles.errorHint}>Automatically skipping to next video...</Text>
-          <View style={styles.errorActions}>
-            <TouchableOpacity 
-              onPress={openInYouTube}
-              style={[styles.retryButton, styles.youtubeButton]}
-            >
-              <ExternalLink size={16} color="white" style={{ marginRight: 8 }} />
-              <Text style={styles.retryText}>Open in YouTube</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => {
-                if (autoSkipTimeoutRef.current) {
-                  clearTimeout(autoSkipTimeoutRef.current);
-                }
-                onNext?.();
-              }}
-              style={[styles.retryButton, styles.skipButton]}
-            >
-              <Text style={styles.retryText}>Skip Now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <Text style={styles.errorText}>Cannot Play</Text>
+        <Text style={styles.errorSub}>{error}</Text>
+        <TouchableOpacity style={styles.button} onPress={openInYouTube}>
+          <Text style={styles.buttonText}>Open in YouTube</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Hidden WebView for audio playback */}
+      {/* Hidden Player */}
       <View style={styles.hiddenWebView}>
         <WebView
           ref={webViewRef}
           source={{ html: getHtmlContent() }}
           onMessage={handleMessage}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          allowsInlineMediaPlayback={true}
+          javaScriptEnabled
+          domStorageEnabled
+          allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
-          allowsFullscreenVideo={true}
-          mixedContentMode="always"
           originWhitelist={['*']}
-          cacheEnabled={true}
-          incognito={false}
         />
       </View>
 
-      {/* Visible UI with image placeholder */}
-      <View style={styles.playerContainer}>
-        {/* Album Art / Thumbnail */}
-        <View style={styles.artworkContainer}>
-          {thumbnail ? (
-            <Image 
-              source={{ uri: thumbnail }} 
-              style={styles.artwork} 
-              resizeMode="cover"
-              onError={() => console.warn('Failed to load audio player thumbnail:', thumbnail)}
-            />
+      {/* Thumbnail */}
+      <View style={styles.artworkContainer}>
+        {thumbnail ? (
+          <Image source={{ uri: thumbnail }} style={styles.artwork} />
+        ) : (
+          <Volume2 size={50} color="#444" />
+        )}
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+      </View>
+
+      {/* Title */}
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.subtitle}>{channelTitle}</Text>
+
+      {/* Progress */}
+      <View style={styles.progressRow}>
+        <Text style={styles.time}>{formatTime(currentTime)}</Text>
+        <CustomSlider
+          minimumValue={0}
+          maximumValue={duration || 1}
+          value={currentTime}
+          onValueChange={(v) => {
+            setIsSeeking(true);
+            setCurrentTime(v);
+          }}
+          onSlidingComplete={(v) => {
+            setIsSeeking(false);
+            sendCommand("seekTo", { time: v });
+          }}
+        />
+        <Text style={styles.time}>{formatTime(duration)}</Text>
+      </View>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity onPress={onPrevious}>
+          <SkipBack size={28} color="#333" />
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={togglePlayPause} style={styles.playButton}>
+          {isPlaying ? (
+            <Pause size={32} color="#fff" />
           ) : (
-            <View style={styles.placeholderArtwork}>
-              <Volume2 size={60} color="#666" />
-            </View>
+            <Play size={32} color="#fff" />
           )}
-          
-          {isLoading && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color="white" />
-            </View>
-          )}
-        </View>
+        </TouchableOpacity>
 
-        {/* Track Info */}
-        <View style={styles.infoContainer}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
-          {channelTitle && (
-            <Text style={styles.artist} numberOfLines={1}>{channelTitle}</Text>
-          )}
-          <TouchableOpacity 
-            onPress={openInYouTube}
-            style={styles.openYouTubeButton}
-          >
-            <Youtube size={16} color="#ff6b6b" />
-            <Text style={styles.openYouTubeText}>Open in YouTube</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Progress Slider */}
-        <View style={styles.progressContainer}>
-          <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-          <CustomSlider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={duration || 1}
-            value={currentTime}
-            onValueChange={(value: number) => {
-              setIsSeeking(true);
-              setCurrentTime(value);
-            }}
-            onSlidingComplete={(value: number) => {
-              setIsSeeking(false);
-              handleSeek(value);
-            }}
-            minimumTrackTintColor="#ff6b6b"
-            maximumTrackTintColor="#ddd"
-            thumbTintColor="#ff6b6b"
-            disabled={isLoading}
-          />
-          <Text style={styles.timeText}>{formatTime(duration)}</Text>
-        </View>
-
-        {/* Playback Controls */}
-        <View style={styles.controls}>
-          <TouchableOpacity 
-            onPress={handlePrevious} 
-            style={styles.controlButton}
-            disabled={isLoading || !onPrevious}
-          >
-            <SkipBack size={24} color={isLoading || !onPrevious ? "#ccc" : "#333"} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={togglePlayPause} 
-            style={styles.playButton}
-            disabled={isLoading}
-          >
-            {isPlaying ? (
-              <Pause size={32} color="white" fill="white" />
-            ) : (
-              <Play size={32} color="white" fill="white" />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={handleNext} 
-            style={styles.controlButton}
-            disabled={isLoading || !onNext}
-          >
-            <SkipForward size={24} color={isLoading || !onNext ? "#ccc" : "#333"} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={onNext}>
+          <SkipForward size={28} color="#333" />
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
+// ====================================================
+//                 STYLES
+// ====================================================
+
+const formatTime = (s: number) => {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+};
+
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: "#fff",
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    borderRadius: 16
   },
+
   hiddenWebView: {
     position: 'absolute',
     bottom: 0,
@@ -766,171 +390,103 @@ const styles = StyleSheet.create({
     width: 2,
     height: 2,
     opacity: 0.01,
-    zIndex: -1,
-    overflow: 'hidden',
+    zIndex: 0,         // FIXED
+    overflow: 'hidden'
   },
-  playerContainer: {
-    alignItems: 'center',
-  },
+
   artworkContainer: {
-    width: 280,
-    height: 280,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 24,
-    backgroundColor: '#f0f0f0',
-    position: 'relative',
+    width: 260,
+    height: 260,
+    alignSelf: 'center',
+    marginBottom: 20,
+    backgroundColor: '#eee',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
+
   artwork: {
     width: '100%',
     height: '100%',
+    borderRadius: 16
   },
-  placeholderArtwork: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
+
   loadingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center"
   },
-  infoContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingHorizontal: 20,
-  },
+
   title: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 4
   },
-  artist: {
+
+  subtitle: {
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    textAlign: "center",
+    color: "#777",
+    marginBottom: 16
   },
-  progressContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 8,
-    gap: 12,
+
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20
   },
-  slider: {
-    flex: 1,
-    height: 40,
+
+  time: {
+    width: 40,
+    textAlign: "center",
+    color: "#666"
   },
-  timeText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-    minWidth: 40,
-    textAlign: 'center',
-  },
+
   controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 30
   },
-  controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   playButton: {
+    backgroundColor: "#ff6b6b",
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#ff6b6b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#ff6b6b',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    justifyContent: "center",
+    alignItems: "center"
   },
-  errorContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
+
   errorText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ff6b6b',
-    marginBottom: 8,
+    fontSize: 18,
+    color: "#ff4444",
+    fontWeight: "600",
+    textAlign: "center"
   },
-  errorSubtext: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 8,
+
+  errorSub: {
+    textAlign: "center",
+    color: "#666",
+    marginBottom: 10
   },
-  errorHint: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-    marginBottom: 16,
-    fontStyle: 'italic',
-  },
-  errorActions: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  retryButton: {
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+
+  button: {
+    backgroundColor: "#ff0000",
+    padding: 12,
     borderRadius: 8,
-    marginTop: 8,
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: "center"
   },
-  youtubeButton: {
-    backgroundColor: '#ff0000',
-  },
-  skipButton: {
-    backgroundColor: '#666',
-  },
-  openYouTubeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
-    alignSelf: 'center',
-  },
-  openYouTubeText: {
-    fontSize: 13,
-    color: '#ff6b6b',
-    fontWeight: '600',
-  },
-  retryText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+
+  buttonText: {
+    color: "#fff",
+    fontWeight: "600"
+  }
 });
