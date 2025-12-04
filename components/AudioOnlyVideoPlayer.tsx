@@ -155,10 +155,10 @@ export default function AudioOnlyVideoPlayer({
       position: absolute;
       bottom: 0;
       left: 0;
-      width: 1px;
-      height: 1px;
+      width: 2px;
+      height: 2px;
       opacity: 0.01;
-      z-index: -1;
+      pointer-events: none;
     }
     #player {
       width: 100%;
@@ -197,6 +197,7 @@ export default function AudioOnlyVideoPlayer({
             'enablejsapi': 1,
             'fs': 1,
             'iv_load_policy': 3,
+            'widget_referrer': window.location.origin,
             'origin': window.location.origin
           },
           events: {
@@ -762,10 +763,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     left: 0,
-    width: 1,
-    height: 1,
+    width: 2,
+    height: 2,
     opacity: 0.01,
     zIndex: -1,
+    overflow: 'hidden',
   },
   playerContainer: {
     alignItems: 'center',
