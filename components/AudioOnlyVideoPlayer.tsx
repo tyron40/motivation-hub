@@ -151,19 +151,25 @@ export default function AudioOnlyVideoPlayer({
       align-items: center;
       height: 100vh;
     }
-    #player {
+    #player-container {
       position: absolute;
       top: -9999px;
       left: -9999px;
-      width: 1px;
-      height: 1px;
+      width: 640px;
+      height: 360px;
       opacity: 0;
       pointer-events: none;
+    }
+    #player {
+      width: 100%;
+      height: 100%;
     }
   </style>
 </head>
 <body>
-  <div id="player"></div>
+  <div id="player-container">
+    <div id="player"></div>
+  </div>
   <script>
     var tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
@@ -177,20 +183,21 @@ export default function AudioOnlyVideoPlayer({
       console.log('🎬 YouTube IFrame API ready, creating player');
       try {
         player = new YT.Player('player', {
-          height: '1',
-          width: '1',
+          height: '360',
+          width: '640',
           videoId: '${safeVideoId}',
           playerVars: {
             'autoplay': 0,
-            'controls': 0,
+            'controls': 1,
             'modestbranding': 1,
             'rel': 0,
             'showinfo': 0,
             'playsinline': 1,
             'mute': 0,
             'enablejsapi': 1,
-            'fs': 0,
-            'iv_load_policy': 3
+            'fs': 1,
+            'iv_load_policy': 3,
+            'origin': window.location.origin
           },
           events: {
             'onReady': onPlayerReady,
@@ -625,8 +632,11 @@ export default function AudioOnlyVideoPlayer({
           domStorageEnabled={true}
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
+          allowsFullscreenVideo={true}
           mixedContentMode="always"
           originWhitelist={['*']}
+          cacheEnabled={true}
+          incognito={false}
         />
       </View>
 
