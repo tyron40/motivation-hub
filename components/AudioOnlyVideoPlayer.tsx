@@ -470,31 +470,36 @@ export default function AudioOnlyVideoPlayer({
           
           const errorCode = data.error;
           let errorMsg = data.errorMessage || 'Playback error';
+          let canAutoSkip = false;
           
           // Provide more specific error messages
           if (errorCode === 101 || errorCode === 150 || errorCode === 153) {
             errorMsg = 'This video cannot be embedded. The creator has restricted playback outside YouTube.';
+            canAutoSkip = true;
           } else if (errorCode === 100) {
             errorMsg = 'Video not found or is private';
+            canAutoSkip = true;
           } else if (errorCode === 2) {
             errorMsg = 'Invalid video ID';
+            canAutoSkip = true;
           } else if (errorCode === 5) {
             errorMsg = 'Playback error occurred';
           }
           
           console.error('❌ Player error for video', videoId, ':', errorMsg, 'Code:', errorCode);
           
-          // For embedding errors (101, 150, 153) or not found (100), skip immediately
-          if (errorCode === 101 || errorCode === 150 || errorCode === 153 || errorCode === 100) {
+          // For embedding errors (101, 150, 153) or not found (100), show message briefly then skip
+          if (canAutoSkip) {
             setError(errorMsg);
             setIsLoading(false);
             setIsPlaying(false);
             onError?.(errorMsg);
             
-            console.log('⏭️ Auto-skipping unplayable video (error code:', errorCode, ')');
+            console.log('⏭️ Auto-skipping unplayable video in 2 seconds (error code:', errorCode, ')');
             autoSkipTimeoutRef.current = setTimeout(() => {
+              console.log('⏭️ Skipping now...');
               onNext?.();
-            }, 400);
+            }, 2000);
             return;
           }
           
@@ -592,9 +597,9 @@ export default function AudioOnlyVideoPlayer({
       <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Youtube size={48} color="#ff6b6b" />
-          <Text style={styles.errorText}>Unable to play in-app</Text>
+          <Text style={styles.errorText}>Cannot Play In-App</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
-          <Text style={styles.errorHint}>This video needs to be played in YouTube</Text>
+          <Text style={styles.errorHint}>Automatically skipping to next video...</Text>
           <View style={styles.errorActions}>
             <TouchableOpacity 
               onPress={openInYouTube}
@@ -612,7 +617,7 @@ export default function AudioOnlyVideoPlayer({
               }}
               style={[styles.retryButton, styles.skipButton]}
             >
-              <Text style={styles.retryText}>Skip</Text>
+              <Text style={styles.retryText}>Skip Now</Text>
             </TouchableOpacity>
           </View>
         </View>
