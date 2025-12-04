@@ -76,142 +76,195 @@ export default function AudioOnlyVideoPlayer({
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <style>
+  * {
+    margin: 0;
+    padding: 0;
+  }
   body {
     margin: 0;
     padding: 0;
     background: #000;
+    overflow: hidden;
   }
-
-  /* FIXED: Player MUST be visible to YouTube */
   #player-container {
     position: absolute;
     bottom: 0;
     left: 0;
-    width: 2px;
-    height: 2px;
-    opacity: 0.01;          /* MUST NOT be 0 */
-    pointer-events: auto;   /* FIXED */
+    width: 1px;
+    height: 1px;
+    opacity: 0.01;
+    overflow: hidden;
   }
-
   #player {
     width: 100%;
     height: 100%;
   }
 </style>
 </head>
-
 <body>
   <div id="player-container">
     <div id="player"></div>
   </div>
 
   <script>
+    console.log('🎵 Initializing YouTube player for video: ${safeVideoId}');
+    
     var tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-    var player;
+    var player = null;
     var isReady = false;
+    var timeUpdateInterval = null;
+    var playerLoadTimeout = null;
 
     function onYouTubeIframeAPIReady() {
-      player = new YT.Player('player', {
-        width: "640",
-        height: "360",
-        videoId: "${safeVideoId}",
-        playerVars: {
-          autoplay: 0,
-          controls: 1,
-          playsinline: 1,
-          rel: 0,
-          modestbranding: 1,
-          enablejsapi: 1,
-          origin: "https://youtube.com"
-        },
-        events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-          onError: onPlayerError
+      console.log('🎵 YouTube IFrame API loaded');
+      
+      playerLoadTimeout = setTimeout(function() {
+        if (!isReady) {
+          console.error('❌ Player failed to load within 10 seconds');
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "error",
+            error: 'timeout',
+            errorMessage: "Player loading timeout"
+          }));
         }
-      });
+      }, 10000);
+      
+      try {
+        player = new YT.Player('player', {
+          height: '360',
+          width: '640',
+          videoId: '${safeVideoId}',
+          playerVars: {
+            autoplay: 0,
+            controls: 1,
+            playsinline: 1,
+            rel: 0,
+            modestbranding: 1,
+            enablejsapi: 1,
+            origin: window.location.origin,
+            widget_referrer: window.location.origin
+          },
+          events: {
+            onReady: onPlayerReady,
+            onStateChange: onPlayerStateChange,
+            onError: onPlayerError
+          }
+        });
+        console.log('🎵 Player created successfully');
+      } catch (error) {
+        console.error('❌ Error creating player:', error);
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: "error",
+          error: 'init_error',
+          errorMessage: "Failed to initialize player: " + error.message
+        }));
+      }
     }
 
-    function onPlayerReady() {
+    function onPlayerReady(event) {
       console.log('🎵 YouTube Player is ready');
       isReady = true;
-
-      var duration = player.getDuration();
-      console.log('🎵 Video duration:', duration);
-
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: "ready",
-        duration: duration
-      }));
-
-      setTimeout(function() {
-        if (${autoplay ? 'true' : 'false'}) {
-          console.log('🎵 Auto-playing video');
-          player.playVideo();
-        }
-      }, 500);
-    }
-
-    var timeUpdateInterval = null;
-
-    function onPlayerStateChange(event) {
-      const state = event.data;
-      console.log('🎵 Player state changed:', state);
       
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: "stateChange",
-        state: state
-      }));
-
-      if (state === YT.PlayerState.ENDED) {
-        console.log('🎵 Video ended');
-        if (timeUpdateInterval) {
-          clearInterval(timeUpdateInterval);
-          timeUpdateInterval = null;
-        }
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: "ended" }));
+      if (playerLoadTimeout) {
+        clearTimeout(playerLoadTimeout);
+        playerLoadTimeout = null;
       }
 
-      if (state === YT.PlayerState.PLAYING) {
-        console.log('🎵 Video is playing');
-        if (timeUpdateInterval) {
-          clearInterval(timeUpdateInterval);
+      try {
+        var duration = player.getDuration();
+        console.log('🎵 Video duration:', duration);
+
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: "ready",
+          duration: duration
+        }));
+
+        if (${autoplay ? 'true' : 'false'}) {
+          setTimeout(function() {
+            console.log('🎵 Auto-playing video');
+            try {
+              player.playVideo();
+            } catch (playError) {
+              console.error('❌ Error auto-playing:', playError);
+            }
+          }, 500);
         }
-        timeUpdateInterval = setInterval(function() {
-          if (player && typeof player.getCurrentTime === 'function') {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: "timeUpdate",
-              currentTime: player.getCurrentTime(),
-              duration: player.getDuration(),
-              state: state
-            }));
+      } catch (error) {
+        console.error('❌ Error in onPlayerReady:', error);
+      }
+    }
+
+    function onPlayerStateChange(event) {
+      try {
+        const state = event.data;
+        console.log('🎵 Player state changed:', state);
+        
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: "stateChange",
+          state: state
+        }));
+
+        if (state === YT.PlayerState.ENDED) {
+          console.log('🎵 Video ended');
+          if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
           }
-        }, 500);
-      } else if (state === YT.PlayerState.PAUSED) {
-        console.log('🎵 Video paused');
-        if (timeUpdateInterval) {
-          clearInterval(timeUpdateInterval);
-          timeUpdateInterval = null;
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: "ended" }));
+        } else if (state === YT.PlayerState.PLAYING) {
+          console.log('🎵 Video is playing');
+          if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+          }
+          timeUpdateInterval = setInterval(function() {
+            try {
+              if (player && typeof player.getCurrentTime === 'function') {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: "timeUpdate",
+                  currentTime: player.getCurrentTime(),
+                  duration: player.getDuration(),
+                  state: state
+                }));
+              }
+            } catch (timeError) {
+              console.error('❌ Error in time update:', timeError);
+            }
+          }, 500);
+        } else if (state === YT.PlayerState.PAUSED) {
+          console.log('⏸️ Video paused');
+          if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+          }
+        } else if (state === YT.PlayerState.BUFFERING) {
+          console.log('⏳ Video buffering...');
+        } else if (state === YT.PlayerState.CUED) {
+          console.log('📼 Video cued');
         }
+      } catch (error) {
+        console.error('❌ Error in onPlayerStateChange:', error);
       }
     }
 
     function onPlayerError(event) {
       const errors = {
-        2: "Invalid video ID",
-        5: "HTML5 error",
-        100: "Video removed/private",
-        101: "Embedding disabled",
-        150: "Embedding disabled",
-        153: "Embedding disabled"
+        2: "Invalid video ID or parameters",
+        5: "HTML5 player error",
+        100: "Video not found or private",
+        101: "Video owner does not allow embedding",
+        150: "Video owner does not allow embedding",
+        153: "Video owner does not allow embedding"
       };
 
-      console.error('❌ YouTube Player error:', event.data, errors[event.data]);
+      const errorCode = event.data;
+      const errorMessage = errors[errorCode] || "Unknown playback error";
+      
+      console.error('❌ YouTube Player error:', errorCode, errorMessage);
 
       if (timeUpdateInterval) {
         clearInterval(timeUpdateInterval);
@@ -220,19 +273,37 @@ export default function AudioOnlyVideoPlayer({
 
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: "error",
-        error: event.data,
-        errorMessage: errors[event.data] || "Playback error"
+        error: errorCode,
+        errorMessage: errorMessage
       }));
     }
 
     window.addEventListener("message", function(event) {
-      if (!player || !isReady) return;
-      const data = JSON.parse(event.data);
+      try {
+        if (!player || !isReady) {
+          console.warn('⚠️ Player not ready, ignoring command');
+          return;
+        }
+        
+        const data = JSON.parse(event.data);
+        console.log('📩 Received command:', data.command);
 
-      if (data.command === "play") player.playVideo();
-      if (data.command === "pause") player.pauseVideo();
-      if (data.command === "seekTo") player.seekTo(data.time, true);
+        if (data.command === "play") {
+          player.playVideo();
+        } else if (data.command === "pause") {
+          player.pauseVideo();
+        } else if (data.command === "seekTo" && typeof data.time !== 'undefined') {
+          player.seekTo(data.time, true);
+        }
+      } catch (error) {
+        console.error('❌ Error handling message:', error);
+      }
     });
+
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error('❌ Global error:', msg, 'at', url, lineNo, columnNo);
+      return false;
+    };
   </script>
 </body>
 </html>`;
@@ -378,11 +449,27 @@ export default function AudioOnlyVideoPlayer({
           ref={webViewRef}
           source={{ html: getHtmlContent() }}
           onMessage={handleMessage}
-          javaScriptEnabled
-          domStorageEnabled
-          allowsInlineMediaPlayback
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
           originWhitelist={['*']}
+          allowsFullscreenVideo={false}
+          mixedContentMode="always"
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('❌ WebView error:', nativeEvent);
+          }}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('❌ WebView HTTP error:', nativeEvent.statusCode, nativeEvent.url);
+          }}
+          onLoadStart={() => {
+            console.log('🔄 WebView started loading');
+          }}
+          onLoadEnd={() => {
+            console.log('✅ WebView finished loading');
+          }}
         />
       </View>
 
