@@ -159,7 +159,7 @@ export async function fetchYouTubeVideosDirect(
       console.log(`✅ Found ${searchData.items.length} videos in batch ${i + 1}, fetching details...`);
 
       const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-      detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+      detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
       detailsUrl.searchParams.set('id', videoIds);
       detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
@@ -183,18 +183,26 @@ export async function fetchYouTubeVideosDirect(
 
       const detailsData = await detailsResponse.json();
 
-      const batchVideos = detailsData.items.map((item: any) => ({
-        id: item.id,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-        channelTitle: item.snippet.channelTitle,
-        channelId: item.snippet.channelId,
-        publishedAt: item.snippet.publishedAt,
-        duration: parseDuration(item.contentDetails.duration),
-        viewCount: parseInt(item.statistics.viewCount || '0'),
-        category: query,
-      }));
+      const batchVideos = detailsData.items
+        .filter((item: any) => {
+          const isEmbeddable = item.status?.embeddable !== false;
+          if (!isEmbeddable) {
+            console.log(`⏭️ Skipping non-embeddable video: ${item.snippet.title}`);
+          }
+          return isEmbeddable;
+        })
+        .map((item: any) => ({
+          id: item.id,
+          title: item.snippet.title,
+          description: item.snippet.description,
+          thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+          channelTitle: item.snippet.channelTitle,
+          channelId: item.snippet.channelId,
+          publishedAt: item.snippet.publishedAt,
+          duration: parseDuration(item.contentDetails.duration),
+          viewCount: parseInt(item.statistics.viewCount || '0'),
+          category: query,
+        }));
       
       allVideos.push(...batchVideos);
       console.log(`✅ Total videos fetched: ${allVideos.length}/${maxResults}`);
