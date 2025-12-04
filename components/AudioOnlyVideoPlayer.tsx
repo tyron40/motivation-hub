@@ -153,12 +153,12 @@ export default function AudioOnlyVideoPlayer({
     }
     #player-container {
       position: absolute;
-      top: -9999px;
-      left: -9999px;
-      width: 640px;
-      height: 360px;
-      opacity: 0;
-      pointer-events: none;
+      bottom: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0.01;
+      z-index: -1;
     }
     #player {
       width: 100%;
@@ -755,10 +755,12 @@ const styles = StyleSheet.create({
   },
   hiddenWebView: {
     position: 'absolute',
+    bottom: 0,
+    left: 0,
     width: 1,
     height: 1,
-    opacity: 0,
-    pointerEvents: 'none',
+    opacity: 0.01,
+    zIndex: -1,
   },
   playerContainer: {
     alignItems: 'center',
