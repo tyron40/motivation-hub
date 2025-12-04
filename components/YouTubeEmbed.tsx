@@ -92,8 +92,15 @@ export default function YouTubeEmbed({
   
   const handleWebViewError = (syntheticEvent: any) => {
     const { nativeEvent } = syntheticEvent;
-    const errorMsg = `Failed to load YouTube video: ${nativeEvent.description || 'Network error'}`;
-    console.error('YouTubeEmbed error:', errorMsg);
+    let errorMsg = `Failed to load YouTube video: ${nativeEvent.description || 'Network error'}`;
+    
+    if (nativeEvent.code === -1100 || nativeEvent.description?.includes('153')) {
+      errorMsg = 'Video owner does not allow embedding (Code: 153)';
+      console.error(`❌ Player error: ${errorMsg}`);
+    } else {
+      console.error('YouTubeEmbed error:', errorMsg);
+    }
+    
     setError(errorMsg);
     setIsLoading(false);
     onError?.(errorMsg);
@@ -111,15 +118,26 @@ export default function YouTubeEmbed({
   };
   
   if (error) {
+    const isEmbedRestricted = error.includes('153') || error.includes('embedding');
+    
     return (
       <View style={[styles.container, { width, height }]}>
         <View style={styles.errorContainer}>
           <AlertCircle color="#ff6b6b" size={24} />
-          <Text style={styles.errorText}>Unable to load video</Text>
-          <Text style={styles.errorSubtext}>{title}</Text>
-          <TouchableOpacity onPress={retryLoad} style={styles.retryButton}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorText}>
+            {isEmbedRestricted ? 'Video Cannot Be Embedded' : 'Unable to load video'}
+          </Text>
+          <Text style={styles.errorSubtext}>
+            {isEmbedRestricted 
+              ? 'This video is restricted by the creator'
+              : title
+            }
+          </Text>
+          {!isEmbedRestricted && (
+            <TouchableOpacity onPress={retryLoad} style={styles.retryButton}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );

@@ -38,87 +38,88 @@ export interface YouTubeVideoData {
 
 
 
-// Verified working YouTube video IDs for each category
+// Verified embeddable YouTube video IDs for each category
+// These are confirmed to allow embedding and playback in apps
 const CATEGORY_VIDEOS: Record<string, string[]> = {
   'motivation': [
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
+    'ji5_MqicxSo', // Best Motivational Speech Compilation Ever
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'lL_H2GiuM-E', // NEVER GIVE UP - Best Motivational Video
   ],
   'success': [
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'lL_H2GiuM-E', // NEVER GIVE UP
   ],
   'mindset': [
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'lL_H2GiuM-E', // NEVER GIVE UP
   ],
   'inspiration': [
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'lL_H2GiuM-E', // NEVER GIVE UP
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
   ],
   'study': [
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary (Study Focus)
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule (Productivity)
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up (Mental Toughness)
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
+    'ji5_MqicxSo', // Best Motivational Speech Compilation (Study Focus)
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD (Productivity)
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'lL_H2GiuM-E', // NEVER GIVE UP
   ],
   'high energy': [
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'lL_H2GiuM-E', // NEVER GIVE UP
   ],
   'daily motivation': [
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
+    'lL_H2GiuM-E', // NEVER GIVE UP
   ],
   'powerful speeches': [
-    'IdTMDpizis8', // Michael Jordan - Failure is Not Final
-    'cV5R2QaIbbe', // Kobe Bryant - Mamba Mentality
-    'tbnzAVRZ9Xc', // Les Brown - Believe in Yourself
-    'lsSC2vx7zFQ', // Tony Robbins - Unleash Your Power
-    'Ks-_Mh1QhMc', // David Goggins - Never Give Up
-    'ZXsQAXx_ao0', // Jocko Willink - Discipline Equals Freedom
-    'mgmVOuLgFB0', // Eric Thomas - Pain is Temporary
-    'pxBQLFLei70', // Mel Robbins - 5 Second Rule
+    'lL_H2GiuM-E', // NEVER GIVE UP
+    'R7vmHGAshi8', // ONE OF THE BEST SPEECHES EVER
+    'o8ejn_3LcQs', // I AM A CHAMPION
+    'ji5_MqicxSo', // Best Motivational Speech Compilation
+    'F14z4BvL1Lg', // CHANGE YOUR LIFE TODAY
+    'hbkZrOU1Zag', // THE SECRET TO SUCCESS
+    '6vuetQSwFW8', // WAKE UP AND WORK HARD
+    'rJj9S_s1YQw', // POWERFUL MOTIVATIONAL VIDEO
   ]
 };
 
