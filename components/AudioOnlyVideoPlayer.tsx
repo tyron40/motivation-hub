@@ -58,11 +58,14 @@ export default function AudioOnlyVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [bufferingCount, setBufferingCount] = useState(0);
 
   const webViewRef = useRef<WebView>(null);
 
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bufferingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerReadyRef = useRef(false);
+  const lastBufferTimeRef = useRef<number>(0);
 
   // ===============================
   //  FIX: YouTube Hidden Player HTML
@@ -218,6 +221,9 @@ export default function AudioOnlyVideoPlayer({
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: "ended" }));
         } else if (state === YT.PlayerState.PLAYING) {
           console.log('🎵 Video is playing');
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "playbackStarted"
+          }));
           if (timeUpdateInterval) {
             clearInterval(timeUpdateInterval);
           }
@@ -243,6 +249,9 @@ export default function AudioOnlyVideoPlayer({
           }
         } else if (state === YT.PlayerState.BUFFERING) {
           console.log('⏳ Video buffering...');
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "buffering"
+          }));
         } else if (state === YT.PlayerState.CUED) {
           console.log('📼 Video cued');
         }
@@ -336,13 +345,44 @@ export default function AudioOnlyVideoPlayer({
           console.log('▶️ Playing');
           setIsPlaying(true);
           setIsLoading(false);
+          setBufferingCount(0);
+          
+          if (bufferingTimeoutRef.current) {
+            clearTimeout(bufferingTimeoutRef.current);
+            bufferingTimeoutRef.current = null;
+          }
         }
         if (data.state === 2) {
           console.log('⏸️ Paused');
           setIsPlaying(false);
         }
         if (data.state === 3) {
-          console.log('⏳ Buffering');
+          console.log('⏳ Buffering...');
+          const now = Date.now();
+          lastBufferTimeRef.current = now;
+          
+          setBufferingCount(prev => {
+            const newCount = prev + 1;
+            console.log(`⏳ Buffering count: ${newCount}`);
+            return newCount;
+          });
+          
+          if (bufferingTimeoutRef.current) {
+            clearTimeout(bufferingTimeoutRef.current);
+          }
+          
+          bufferingTimeoutRef.current = setTimeout(() => {
+            console.error('❌ Video stuck in buffering - skipping');
+            const errorMsg = 'Video playback timeout - buffering too long';
+            setError(errorMsg);
+            setIsLoading(false);
+            onError?.(errorMsg);
+            
+            setTimeout(() => {
+              console.log('⏭️ Auto-skipping to next video due to buffering timeout');
+              onNext?.();
+            }, 1500);
+          }, 15000);
         }
       }
 
@@ -368,6 +408,11 @@ export default function AudioOnlyVideoPlayer({
         if (loadingTimeoutRef.current) {
           clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = null;
+        }
+        
+        if (bufferingTimeoutRef.current) {
+          clearTimeout(bufferingTimeoutRef.current);
+          bufferingTimeoutRef.current = null;
         }
 
         setTimeout(() => {
