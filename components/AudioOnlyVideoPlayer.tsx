@@ -58,7 +58,7 @@ export default function AudioOnlyVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
-  const [bufferingCount, setBufferingCount] = useState(0);
+  const [, setBufferingCount] = useState(0);
 
   const webViewRef = useRef<WebView>(null);
 

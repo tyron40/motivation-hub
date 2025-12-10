@@ -1,5 +1,4 @@
 import { Speech } from '@/types/speech';
-import { speechContent } from '@/mocks/speechContent';
 
 import { allYoutubeSpeeches, getSpeechesByCategory } from '@/mocks/youtube-speeches';
 
@@ -501,7 +500,7 @@ export const getBrowserSafeAudioUrl = async (originalUrl: string): Promise<strin
     // Validate URL format
     try {
       new URL(trimmedUrl);
-    } catch (urlError) {
+    } catch {
       console.warn('Invalid URL format:', trimmedUrl);
       return getSampleAudioUrl();
     }
