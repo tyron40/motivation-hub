@@ -69,15 +69,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           return;
         }
 
-        // Always skip RevenueCat configuration in development/sandbox
-        if (__DEV__) {
-          console.log('ℹ️ Development mode: Skipping RevenueCat configuration');
-          console.log('ℹ️ IAP features will be simulated locally');
-          console.log('ℹ️ Use production build for real IAP testing');
-          setIsConfigured(true);
-          return;
-        }
-
         await Purchases.configure({ apiKey, useAmazon: false });
         console.log('✅ RevenueCat configured successfully');
         
@@ -89,23 +80,33 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
         // Get available offerings
         const offerings = await Purchases.getOfferings();
-        if (offerings.current) {
+        if (offerings.current && offerings.current.availablePackages.length > 0) {
           setAvailablePackages(offerings.current.availablePackages);
           console.log('✅ Available packages:', offerings.current.availablePackages.length);
+          console.log('✅ Package IDs:', offerings.current.availablePackages.map(p => p.product.identifier));
+        } else {
+          console.warn('⚠️ No offerings found in RevenueCat');
+          console.log('ℹ️ Make sure:');
+          console.log('1. Products are created in App Store Connect');
+          console.log('2. Products are added to RevenueCat dashboard');
+          console.log('3. An offering is marked as "Current" in RevenueCat');
         }
 
         setIsConfigured(true);
       } catch (error: any) {
-        // Check if it's the Rork sandbox error
+        console.error('❌ Error configuring RevenueCat:', error);
+        console.error('Error message:', error?.message);
+        console.error('Error code:', error?.code);
+        console.error('Error stack:', error?.stack);
+        
         if (error?.message?.includes('native store is not available') || 
             error?.message?.includes('Invalid API key') ||
-            error?.message?.includes('Test Store API Key')) {
-          console.log('ℹ️ Running in sandbox - RevenueCat features disabled');
-          console.log('ℹ️ This is expected in Rork preview/Expo Go');
-          console.log('ℹ️ IAP will work in production builds');
-        } else {
-          console.error('❌ Error configuring RevenueCat:', error);
-          console.error('Error message:', error?.message);
+            error?.message?.includes('Test Store API Key') ||
+            error?.message?.includes('PURCHASES_ERROR') ||
+            error?.code === 'ERR_NO_RECEIPT_FOUND') {
+          console.log('ℹ️ Running in sandbox/simulator - RevenueCat features disabled');
+          console.log('ℹ️ This is expected in Rork preview/Expo Go/Simulator');
+          console.log('ℹ️ IAP will work on real device production builds');
         }
         
         setIsConfigured(true);
