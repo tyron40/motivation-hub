@@ -1,232 +1,12 @@
 import { Speech } from '@/types/speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  fetchContentByCategory as fetchYouTubeByCategory, 
+  searchYouTubeContent, 
+  fetchTrendingYouTubeContent 
+} from '@/services/youtubeDirectService';
 
-const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
 
-function sanitizeBaseUrl(input: string | undefined): string {
-  const unsafe = input ?? '';
-  const lowered = unsafe.toLowerCase();
-  const isBad = !unsafe ||
-    lowered.includes('rorktest.dev') ||
-    lowered.includes('localhost') ||
-    lowered.startsWith('http://') ||
-    lowered.startsWith('https://a-');
-
-  const finalUrl = isBad ? PRODUCTION_API_URL : unsafe;
-  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
-}
-
-const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-
-interface YouTubeVideo {
-  id: string;
-  title: string;
-  description: string;
-  thumbnail: string;
-  channelTitle: string;
-  channelId: string;
-  publishedAt: string;
-  duration: number;
-  viewCount: number;
-  category: string;
-}
-
-async function fetchYouTubeByCategory(category: string, limit: number): Promise<YouTubeVideo[]> {
-  try {
-    console.log(`📺 Fetching YouTube content via Vercel backend for: ${category}`);
-    console.log(`🔗 API URL: ${API_BASE}/api/youtube/category`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
-    const response = await fetch(`${API_BASE}/api/youtube/category`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      body: JSON.stringify({ category, limit }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Response content-type:', contentType);
-    console.log('📡 Response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ YouTube API error:', response.status, errorText.substring(0, 500));
-      throw new Error(`YouTube API error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
-    console.log('📥 Response length:', responseText.length);
-    console.log('📥 Response preview:', responseText.substring(0, 200));
-
-    if (!contentType?.includes('application/json')) {
-      console.error('❌ Response is not JSON, content-type:', contentType);
-      console.error('❌ Response body:', responseText.substring(0, 500));
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
-    }
-
-    let data: any;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('❌ Failed to parse response as JSON:', parseError);
-      console.error('❌ Response was:', responseText.substring(0, 500));
-      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-    }
-
-    console.log(`✅ Fetched ${data.videos?.length || 0} videos from backend`);
-    return data.videos || [];
-  } catch (error: any) {
-    console.error('❌ Error fetching YouTube content:', error);
-    console.error('❌ Error details:', {
-      name: error?.name,
-      message: error?.message,
-      stack: error?.stack?.substring(0, 200)
-    });
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timeout - server took too long to respond');
-    }
-    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check your internet connection and backend deployment.`);
-    }
-    throw error;
-  }
-}
-
-async function searchYouTubeContent(query: string, limit: number): Promise<YouTubeVideo[]> {
-  try {
-    console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
-    console.log(`🔗 API URL: ${API_BASE}/api/youtube/search`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
-    const response = await fetch(`${API_BASE}/api/youtube/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      body: JSON.stringify({ query, limit }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Response content-type:', contentType);
-    console.log('📡 Response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ YouTube search error:', response.status, errorText.substring(0, 500));
-      throw new Error(`YouTube search error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
-    console.log('📥 Response length:', responseText.length);
-    console.log('📥 Response preview:', responseText.substring(0, 200));
-
-    if (!contentType?.includes('application/json')) {
-      console.error('❌ Response is not JSON, content-type:', contentType);
-      console.error('❌ Response body:', responseText.substring(0, 500));
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
-    }
-
-    let data: any;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('❌ Failed to parse response as JSON:', parseError);
-      console.error('❌ Response was:', responseText.substring(0, 500));
-      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-    }
-
-    console.log(`✅ Found ${data.videos?.length || 0} videos from backend`);
-    return data.videos || [];
-  } catch (error: any) {
-    console.error('❌ Error searching YouTube:', error);
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timeout - server took too long to respond');
-    }
-    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
-    }
-    throw error;
-  }
-}
-
-async function fetchTrendingYouTubeContent(limit: number): Promise<YouTubeVideo[]> {
-  try {
-    console.log('📈 Fetching trending YouTube content via Vercel backend');
-    console.log(`🔗 API URL: ${API_BASE}/api/youtube/trending`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    
-    const response = await fetch(`${API_BASE}/api/youtube/trending`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      body: JSON.stringify({ limit }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Response content-type:', contentType);
-    console.log('📡 Response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ YouTube trending error:', response.status, errorText.substring(0, 500));
-      throw new Error(`YouTube trending error: ${response.status}`);
-    }
-
-    const responseText = await response.text();
-    console.log('📥 Response length:', responseText.length);
-    console.log('📥 Response preview:', responseText.substring(0, 200));
-
-    if (!contentType?.includes('application/json')) {
-      console.error('❌ Response is not JSON, content-type:', contentType);
-      console.error('❌ Response body:', responseText.substring(0, 500));
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}. Response: ${responseText.substring(0, 100)}`);
-    }
-
-    let data: any;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('❌ Failed to parse response as JSON:', parseError);
-      console.error('❌ Response was:', responseText.substring(0, 500));
-      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
-    }
-
-    console.log(`✅ Fetched ${data.videos?.length || 0} trending videos from backend`);
-    return data.videos || [];
-  } catch (error: any) {
-    console.error('❌ Error fetching trending content:', error);
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timeout - server took too long to respond');
-    }
-    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server. Please check your internet connection and try again.`);
-    }
-    throw error;
-  }
-}
 
 const CACHE_DURATION = 1000 * 60 * 60 * 24 * 7;
 const CACHE_PREFIX = 'content_cache_';
@@ -318,7 +98,7 @@ export async function fetchFreshContentByCategory(
       }
     }
     
-    console.log(`📺 Fetching fresh content for ${category} via Vercel backend`);
+    console.log(`📺 Fetching fresh content for ${category} via YouTube API directly`);
     
     const videos = await fetchYouTubeByCategory(category, limit);
     
@@ -345,7 +125,7 @@ export async function searchFreshContent(
   limit: number = 20
 ): Promise<Speech[]> {
   try {
-    console.log(`🔍 Searching YouTube via Vercel backend for: "${query}"`);
+    console.log(`🔍 Searching YouTube via YouTube API directly for: "${query}"`);
     
     const videos = await searchYouTubeContent(query, limit);
     
@@ -370,7 +150,7 @@ export async function fetchTrendingContent(
       }
     }
     
-    console.log('📈 Fetching trending content via Vercel backend');
+    console.log('📈 Fetching trending content via YouTube API directly');
     
     const videos = await fetchTrendingYouTubeContent(limit);
     
