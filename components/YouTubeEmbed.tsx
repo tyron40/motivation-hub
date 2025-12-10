@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import { Play, AlertCircle } from 'lucide-react-native';
 
 interface YouTubeEmbedProps {
@@ -46,9 +46,49 @@ export default function YouTubeEmbed({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPlayer, setShowPlayer] = useState(autoplay);
-  const webViewRef = useRef<WebView>(null);
+  const [playing, setPlaying] = useState(autoplay);
   
   const videoId = extractVideoId(url);
+  
+  const onStateChange = useCallback(
+    (state: string) => {
+      console.log(`🎬 YouTube state: ${state}`);
+      if (state === 'ended') {
+        console.log('✅ YouTube video playback ended');
+        setPlaying(false);
+      }
+    },
+    []
+  );
+
+  const onPlayerReady = useCallback(() => {
+    console.log(`✅ YouTube video ${videoId} ready`);
+    setIsLoading(false);
+    setError(null);
+    onReady?.();
+  }, [videoId, onReady]);
+
+  const onPlayerError = useCallback(
+    (playerError: string) => {
+      console.error(`❌ YouTube player error: ${playerError}`);
+      setError(`Unable to play video: ${playerError}`);
+      setIsLoading(false);
+      onError?.(playerError);
+    },
+    [onError]
+  );
+  
+  const handlePlayPress = useCallback(() => {
+    setShowPlayer(true);
+    setPlaying(true);
+  }, []);
+  
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setIsLoading(true);
+    setShowPlayer(true);
+    setPlaying(true);
+  }, []);
   
   if (!videoId) {
     return (
@@ -62,82 +102,16 @@ export default function YouTubeEmbed({
     );
   }
   
-  // Privacy-friendly embed URL with all necessary parameters
-  // Use youtube.com instead of youtube-nocookie.com for better mobile compatibility
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?${
-    new URLSearchParams({
-      autoplay: autoplay ? '1' : '0',
-      controls: '1',
-      modestbranding: '1',
-      rel: '0',
-      showinfo: '0',
-      playsinline: '1',
-      enablejsapi: '1',
-      fs: '1',
-      cc_load_policy: '0',
-      iv_load_policy: '3',
-      disablekb: '0',
-      ...(Platform.OS === 'web' && {
-        origin: typeof window !== 'undefined' ? window.location.origin : 'https://localhost'
-      })
-    }).toString()
-  }`;
-  
-  const handleWebViewLoad = () => {
-    console.log(`✅ YouTube video ${videoId} loaded successfully`);
-    setIsLoading(false);
-    setError(null);
-    onReady?.();
-  };
-  
-  const handleWebViewError = (syntheticEvent: any) => {
-    const { nativeEvent } = syntheticEvent;
-    let errorMsg = `Failed to load YouTube video: ${nativeEvent.description || 'Network error'}`;
-    
-    if (nativeEvent.code === -1100 || nativeEvent.description?.includes('153')) {
-      errorMsg = 'Video owner does not allow embedding (Code: 153)';
-      console.error(`❌ Player error: ${errorMsg}`);
-    } else {
-      console.error('YouTubeEmbed error:', errorMsg);
-    }
-    
-    setError(errorMsg);
-    setIsLoading(false);
-    onError?.(errorMsg);
-  };
-  
-  const handlePlayPress = () => {
-    setShowPlayer(true);
-  };
-  
-  const retryLoad = () => {
-    setError(null);
-    setIsLoading(true);
-    setShowPlayer(true);
-    webViewRef.current?.reload();
-  };
-  
   if (error) {
-    const isEmbedRestricted = error.includes('153') || error.includes('embedding');
-    
     return (
       <View style={[styles.container, { width, height }]}>
         <View style={styles.errorContainer}>
           <AlertCircle color="#ff6b6b" size={24} />
-          <Text style={styles.errorText}>
-            {isEmbedRestricted ? 'Video Cannot Be Embedded' : 'Unable to load video'}
-          </Text>
-          <Text style={styles.errorSubtext}>
-            {isEmbedRestricted 
-              ? 'This video is restricted by the creator'
-              : title
-            }
-          </Text>
-          {!isEmbedRestricted && (
-            <TouchableOpacity onPress={retryLoad} style={styles.retryButton}>
-              <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={styles.errorText}>Unable to load video</Text>
+          <Text style={styles.errorSubtext}>{title}</Text>
+          <TouchableOpacity onPress={retryLoad} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -161,26 +135,22 @@ export default function YouTubeEmbed({
   
   return (
     <View style={[styles.container, { width, height }]}>
-      <WebView
-        ref={webViewRef}
-        source={{ uri: embedUrl }}
-        style={styles.webView}
-        onLoad={handleWebViewLoad}
-        onError={handleWebViewError}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={false}
-        allowsFullscreenVideo={true}
-        startInLoadingState={false}
-        cacheEnabled={true}
-        incognito={false}
-        mixedContentMode="always"
-        bounces={false}
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={false}
-        userAgent={Platform.OS === 'web' ? undefined : 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15'}
+      <YoutubePlayer
+        height={typeof height === 'number' ? height : 220}
+        videoId={videoId}
+        play={playing}
+        onChangeState={onStateChange}
+        onReady={onPlayerReady}
+        onError={onPlayerError}
+        webViewProps={{
+          androidLayerType: 'hardware',
+        }}
+        initialPlayerParams={{
+          modestbranding: true,
+          showClosedCaptions: false,
+          rel: false,
+          controls: true,
+        }}
       />
       
       {isLoading && (
@@ -200,10 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     position: 'relative',
   },
-  webView: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+
   thumbnailContainer: {
     flex: 1,
     backgroundColor: '#1a1a1a',
