@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
-import { Play, Clock, Eye, ImageIcon } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Linking } from 'react-native';
+import { ExternalLink, Clock, Eye, ImageIcon } from 'lucide-react-native';
 
 interface VideoCardProps {
   id: string;
@@ -83,18 +83,18 @@ export default function VideoCard({
           <Text style={styles.durationText}>{String(duration || '0:00')}</Text>
         </View>
         
-        {onPlayAudio && (
-          <TouchableOpacity 
-            style={styles.playButton} 
-            onPress={(e) => {
-              e.stopPropagation();
-              onPlayAudio();
-            }}
-            activeOpacity={0.8}
-          >
-            <Play size={20} color="white" fill="white" />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          style={styles.playButton} 
+          onPress={(e) => {
+            e.stopPropagation();
+            const url = `https://www.youtube.com/watch?v=${id}`;
+            console.log('🔗 Opening video in YouTube:', url);
+            Linking.openURL(url);
+          }}
+          activeOpacity={0.8}
+        >
+          <ExternalLink size={20} color="white" />
+        </TouchableOpacity>
       </View>
       
       <View style={styles.content}>
@@ -111,7 +111,7 @@ export default function VideoCard({
           <Text style={styles.viewCount}>{String(viewCount || '0')} views</Text>
         </View>
         
-        <Text style={styles.youtubeAttribution}>Source: YouTube</Text>
+        <Text style={styles.youtubeAttribution}>Tap to view info or thumbnail to watch</Text>
       </View>
     </TouchableOpacity>
   );
