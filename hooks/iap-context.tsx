@@ -222,10 +222,10 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     try {
       console.log('📦 Processing customer info...');
       
-      // Check for active premium subscription
-      const hasPremium = customerInfo.entitlements.active['premium'] !== undefined;
+      // Check for active premium subscription (using 'Custom' entitlement from RevenueCat)
+      const hasPremium = customerInfo.entitlements.active['Custom'] !== undefined;
       const premiumExpiry = hasPremium 
-        ? new Date(customerInfo.entitlements.active['premium'].expirationDate || '').getTime()
+        ? new Date(customerInfo.entitlements.active['Custom'].expirationDate || '').getTime()
         : null;
       
       // Check for purchased credits (non-consumables stored as entitlements)
