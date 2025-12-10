@@ -1,4 +1,4 @@
-const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
+const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || 'AIzaSyDCCZSM3VQT8BcYEqX5Qs0X5Yn_YF6Kd0w';
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 30;
@@ -53,10 +53,10 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
     'student motivation',
   ],
   'high energy': [
-    'high energy motivation',
-    'pump up speech',
-    'workout motivation',
-    'intense motivation',
+    'high energy workout motivation',
+    'powerful pump up speech',
+    'intense workout motivation',
+    'best gym motivation',
     'energy boost speech',
   ],
   'daily motivation': [
@@ -104,15 +104,17 @@ export async function fetchYouTubeVideosDirect(
   }
 
   try {
-    console.log(`🔍 Fetching YouTube videos for: "${query}" (max: ${maxResults})`);
+    console.log(`🔍 Fetching embeddable YouTube videos for: "${query}" (max: ${maxResults})`);
     
     const allVideos: YouTubeVideo[] = [];
     let pageToken: string | undefined = undefined;
     const batchSize = 50;
-    const batches = Math.ceil(maxResults / batchSize);
+    const maxAttempts = 5;
+    let attempts = 0;
     
-    for (let i = 0; i < batches && allVideos.length < maxResults; i++) {
-      const currentBatchSize = Math.min(batchSize, maxResults - allVideos.length);
+    while (allVideos.length < maxResults && attempts < maxAttempts) {
+      attempts++;
+      const currentBatchSize = Math.min(batchSize, maxResults * 2);
       
       const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
       searchUrl.searchParams.set('part', 'snippet');
@@ -123,14 +125,13 @@ export async function fetchYouTubeVideosDirect(
       searchUrl.searchParams.set('videoDuration', 'any');
       searchUrl.searchParams.set('videoEmbeddable', 'true');
       searchUrl.searchParams.set('videoSyndicated', 'true');
-      searchUrl.searchParams.set('videoLicense', 'any');
       searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
       
       if (pageToken) {
         searchUrl.searchParams.set('pageToken', pageToken);
       }
 
-      console.log(`📡 Calling YouTube Search API (batch ${i + 1}/${batches})...`);
+      console.log(`📡 Calling YouTube Search API (attempt ${attempts}/${maxAttempts})...`);
       const searchResponse = await fetch(searchUrl.toString(), {
         headers: {
           'Accept': 'application/json',
@@ -140,30 +141,24 @@ export async function fetchYouTubeVideosDirect(
       if (!searchResponse.ok) {
         const errorText = await searchResponse.text();
         console.error('❌ YouTube Search API error:', searchResponse.status, errorText);
-        
-        if (allVideos.length > 0) {
-          console.log(`⚠️ Returning ${allVideos.length} videos fetched so far`);
-          break;
-        }
-        throw new Error(`YouTube API error: ${searchResponse.status}`);
+        break;
       }
 
       const searchData = await searchResponse.json();
       
       if (!searchData.items || searchData.items.length === 0) {
-        console.log(`⚠️ No more videos found (batch ${i + 1})`);
+        console.log(`⚠️ No more videos found (attempt ${attempts})`);
         break;
       }
 
       const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-      console.log(`✅ Found ${searchData.items.length} videos in batch ${i + 1}, fetching details...`);
+      console.log(`✅ Found ${searchData.items.length} potential videos, fetching details...`);
 
       const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
       detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
       detailsUrl.searchParams.set('id', videoIds);
       detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
-      console.log('📡 Calling YouTube Videos API...');
       const detailsResponse = await fetch(detailsUrl.toString(), {
         headers: {
           'Accept': 'application/json',
@@ -173,19 +168,14 @@ export async function fetchYouTubeVideosDirect(
       if (!detailsResponse.ok) {
         const errorText = await detailsResponse.text();
         console.error('❌ YouTube Videos API error:', detailsResponse.status, errorText);
-        
-        if (allVideos.length > 0) {
-          console.log(`⚠️ Returning ${allVideos.length} videos fetched so far`);
-          break;
-        }
-        throw new Error(`YouTube API error: ${detailsResponse.status}`);
+        break;
       }
 
       const detailsData = await detailsResponse.json();
 
       const batchVideos = detailsData.items
         .filter((item: any) => {
-          const isEmbeddable = item.status?.embeddable !== false;
+          const isEmbeddable = item.status?.embeddable === true;
           const isPublic = item.status?.privacyStatus === 'public';
           const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
           
@@ -201,7 +191,7 @@ export async function fetchYouTubeVideosDirect(
         .map((item: any) => ({
           id: item.id,
           title: item.snippet.title,
-          description: item.snippet.description,
+          description: item.snippet.description || '',
           thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
           channelTitle: item.snippet.channelTitle,
           channelId: item.snippet.channelId,
@@ -213,7 +203,11 @@ export async function fetchYouTubeVideosDirect(
         }));
       
       allVideos.push(...batchVideos);
-      console.log(`✅ Total embeddable videos fetched: ${allVideos.length}/${maxResults} (filtered ${detailsData.items.length - batchVideos.length} non-embeddable)`);
+      console.log(`✅ Total embeddable videos: ${allVideos.length}/${maxResults} (filtered ${detailsData.items.length - batchVideos.length} non-embeddable)`);
+      
+      if (allVideos.length >= maxResults) {
+        break;
+      }
       
       pageToken = searchData.nextPageToken;
       if (!pageToken) {
@@ -224,19 +218,21 @@ export async function fetchYouTubeVideosDirect(
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    REQUEST_CACHE.set(cacheKey, { data: allVideos, timestamp: Date.now() });
+    const finalVideos = allVideos.slice(0, maxResults);
+    
+    REQUEST_CACHE.set(cacheKey, { data: finalVideos, timestamp: Date.now() });
     
     if (REQUEST_CACHE.size > 50) {
       const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`✅ Successfully fetched ${allVideos.length} embeddable YouTube videos`);
+    console.log(`✅ Successfully fetched ${finalVideos.length} embeddable YouTube videos`);
     
-    if (allVideos.length === 0) {
+    if (finalVideos.length === 0) {
       console.warn(`⚠️ No embeddable videos found for query: "${query}"`);
     }
-    return allVideos;
+    return finalVideos;
   } catch (error) {
     console.error('❌ Error fetching YouTube videos:', error);
     return [];
@@ -250,7 +246,7 @@ export async function fetchContentByCategory(
   const categoryKey = category.toLowerCase();
   const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
   
-  const queryIndex = new Date().getDate() % searchQueries.length;
+  const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 8)) % searchQueries.length;
   const todayQuery = searchQueries[queryIndex];
   
   console.log(`📺 Fetching content for category: ${category}`);
@@ -278,7 +274,7 @@ export async function fetchTrendingYouTubeContent(
     'powerful motivation',
   ];
   
-  const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % trendingQueries.length;
+  const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 12)) % trendingQueries.length;
   const query = trendingQueries[queryIndex];
   
   console.log(`🔍 Using trending query: "${query}"`);
