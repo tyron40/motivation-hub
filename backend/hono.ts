@@ -396,7 +396,7 @@ Details: ${errorDetails}`;
     }
 
     const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
@@ -410,18 +410,34 @@ Details: ${errorDetails}`;
 
     const detailsData = await detailsResponse.json();
 
-    const videos = detailsData.items.map((item: any) => ({
-      id: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-      channelTitle: item.snippet.channelTitle,
-      channelId: item.snippet.channelId,
-      publishedAt: item.snippet.publishedAt,
-      duration: parseDuration(item.contentDetails.duration),
-      viewCount: parseInt(item.statistics.viewCount || '0'),
-      category: query,
-    }));
+    const videos = detailsData.items
+      .filter((item: any) => {
+        const isEmbeddable = item.status?.embeddable !== false;
+        const isPublic = item.status?.privacyStatus === 'public';
+        const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
+        
+        if (!isEmbeddable) {
+          console.log(`[YouTube] ⏭️ Skipping non-embeddable: ${item.snippet.title}`);
+        }
+        if (!isPublic) {
+          console.log(`[YouTube] ⏭️ Skipping non-public: ${item.snippet.title}`);
+        }
+        
+        return isEmbeddable && isPublic && hasValidDuration;
+      })
+      .map((item: any) => ({
+        id: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description,
+        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+        channelTitle: item.snippet.channelTitle,
+        channelId: item.snippet.channelId,
+        publishedAt: item.snippet.publishedAt,
+        duration: parseDuration(item.contentDetails.duration),
+        viewCount: parseInt(item.statistics.viewCount || '0'),
+        category: query,
+        embeddable: true,
+      }));
 
     REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
     
@@ -430,7 +446,11 @@ Details: ${errorDetails}`;
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`[YouTube] ✅ Successfully fetched and cached ${videos.length} videos`);
+    console.log(`[YouTube] ✅ Successfully fetched ${videos.length} embeddable videos (from ${detailsData.items.length} total)`);
+    
+    if (videos.length === 0 && detailsData.items.length > 0) {
+      console.warn(`[YouTube] ⚠️ All videos were filtered out - none were embeddable`);
+    }
     return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);

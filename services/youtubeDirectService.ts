@@ -186,10 +186,17 @@ export async function fetchYouTubeVideosDirect(
       const batchVideos = detailsData.items
         .filter((item: any) => {
           const isEmbeddable = item.status?.embeddable !== false;
+          const isPublic = item.status?.privacyStatus === 'public';
+          const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
+          
           if (!isEmbeddable) {
-            console.log(`⏭️ Skipping non-embeddable video: ${item.snippet.title}`);
+            console.log(`⏭️ Skipping non-embeddable: ${item.snippet.title}`);
           }
-          return isEmbeddable;
+          if (!isPublic) {
+            console.log(`⏭️ Skipping non-public: ${item.snippet.title}`);
+          }
+          
+          return isEmbeddable && isPublic && hasValidDuration;
         })
         .map((item: any) => ({
           id: item.id,
@@ -202,10 +209,11 @@ export async function fetchYouTubeVideosDirect(
           duration: parseDuration(item.contentDetails.duration),
           viewCount: parseInt(item.statistics.viewCount || '0'),
           category: query,
+          embeddable: true,
         }));
       
       allVideos.push(...batchVideos);
-      console.log(`✅ Total videos fetched: ${allVideos.length}/${maxResults}`);
+      console.log(`✅ Total embeddable videos fetched: ${allVideos.length}/${maxResults} (filtered ${detailsData.items.length - batchVideos.length} non-embeddable)`);
       
       pageToken = searchData.nextPageToken;
       if (!pageToken) {
@@ -223,7 +231,11 @@ export async function fetchYouTubeVideosDirect(
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`✅ Successfully fetched ${allVideos.length} YouTube videos`);
+    console.log(`✅ Successfully fetched ${allVideos.length} embeddable YouTube videos`);
+    
+    if (allVideos.length === 0) {
+      console.warn(`⚠️ No embeddable videos found for query: "${query}"`);
+    }
     return allVideos;
   } catch (error) {
     console.error('❌ Error fetching YouTube videos:', error);
