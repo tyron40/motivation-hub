@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useAdMob } from '@/hooks/admob-context';
 import { useTheme } from '@/hooks/theme-context';
@@ -7,9 +7,42 @@ interface AdBannerProps {
   style?: any;
 }
 
+const AD_UNIT_ID = __DEV__
+  ? 'ca-app-pub-3940256099942544/6300978111' // Test banner
+  : 'ca-app-pub-7788769813708919/4858914356'; // Home_Banner
+
 export function AdBanner({ style }: AdBannerProps) {
   const { canShowAds } = useAdMob();
   const { colors } = useTheme();
+  const [hasAdSDK, setHasAdSDK] = useState(false);
+  const [BannerAdComponent, setBannerAdComponent] = useState<any>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const loadAdSDK = async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
+        setBannerAdComponent(() => (
+          <BannerAd
+            unitId={AD_UNIT_ID}
+            size={BannerAdSize.BANNER}
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: false,
+            }}
+          />
+        ));
+        setHasAdSDK(true);
+        console.log('✅ Banner ad component loaded');
+      } catch {
+        console.log('ℹ️ Banner ad SDK not available (Expo Go). Will work in production.');
+        setHasAdSDK(false);
+      }
+    };
+
+    loadAdSDK();
+  }, []);
 
   if (!canShowAds) {
     return null;
@@ -21,6 +54,14 @@ export function AdBanner({ style }: AdBannerProps) {
         <Text style={[styles.text, { color: colors.textSecondary }]}>
           Ad Space (Banner ads show on mobile)
         </Text>
+      </View>
+    );
+  }
+
+  if (hasAdSDK && BannerAdComponent) {
+    return (
+      <View style={[styles.bannerContainer, style]}>
+        {BannerAdComponent}
       </View>
     );
   }
@@ -41,6 +82,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     marginVertical: 8,
+  },
+  bannerContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 8,
+    overflow: 'hidden',
   },
   text: {
     fontSize: 12,
