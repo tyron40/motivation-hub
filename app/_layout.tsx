@@ -14,6 +14,7 @@ import { ScriptureFavoritesProvider } from "@/hooks/scripture-favorites-context"
 import { ChatSessionsProvider } from "@/hooks/chat-sessions-context";
 import { IAPProvider } from "@/hooks/iap-context";
 import { ThemeProvider } from "@/hooks/theme-context";
+import { AdMobProvider } from "@/hooks/admob-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -125,7 +126,7 @@ function AudioPlayerWrapper() {
         clearTimeout(timeoutId);
       }
     };
-  }, [speechContext?.currentSpeech, speechContext?.handleAudioError]);
+  }, [speechContext]);
 
   // Safety checks after hooks
   if (!speechContext) {
@@ -311,7 +312,8 @@ export default function RootLayout() {
             <ThemeProvider>
               <AuthProvider>
                 <IAPProvider>
-                  <UserProfileProvider>
+                  <AdMobProvider>
+                    <UserProfileProvider>
                     <PlaylistProvider>
                       <ScriptureFavoritesProvider>
                         <ChatSessionsProvider>
@@ -321,7 +323,8 @@ export default function RootLayout() {
                         </ChatSessionsProvider>
                       </ScriptureFavoritesProvider>
                     </PlaylistProvider>
-                  </UserProfileProvider>
+                    </UserProfileProvider>
+                  </AdMobProvider>
                 </IAPProvider>
               </AuthProvider>
             </ThemeProvider>

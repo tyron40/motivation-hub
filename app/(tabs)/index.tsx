@@ -6,18 +6,18 @@ import {
   ScrollView, 
   FlatList,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
+import { EarnCreditsCard } from '@/components/EarnCreditsCard';
 import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
-import { ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
 
 export default function HomeScreen() {
@@ -25,9 +25,26 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
-  const [loadingYoutube, setLoadingYoutube] = React.useState(false);
   
   const styles = getStyles(colors);
+
+  React.useEffect(() => {
+    const loadYouTubeSpeeches = async () => {
+      try {
+        console.log('🔄 Loading YouTube speeches from Vercel backend...');
+        const videos = await getTrendingVideos(50);
+        console.log(`✅ Loaded ${videos.length} YouTube videos`);
+        
+        const speeches = videos.map(video => convertVideoToSpeech(video));
+        
+        setYoutubeSpeeches(speeches);
+      } catch (error) {
+        console.error('❌ Failed to load YouTube speeches:', error);
+      }
+    };
+    
+    loadYouTubeSpeeches();
+  }, []);
   
   if (!speechContext) {
     console.error('Speech context not available');
@@ -41,28 +58,7 @@ export default function HomeScreen() {
     );
   }
   
-  const { toggleFavorite, setCurrentSpeech, isLoading } = speechContext;
-
-  React.useEffect(() => {
-    const loadYouTubeSpeeches = async () => {
-      try {
-        setLoadingYoutube(true);
-        console.log('🔄 Loading YouTube speeches from Vercel backend...');
-        const videos = await getTrendingVideos(50);
-        console.log(`✅ Loaded ${videos.length} YouTube videos`);
-        
-        const speeches = videos.map(video => convertVideoToSpeech(video));
-        
-        setYoutubeSpeeches(speeches);
-      } catch (error) {
-        console.error('❌ Failed to load YouTube speeches:', error);
-      } finally {
-        setLoadingYoutube(false);
-      }
-    };
-    
-    loadYouTubeSpeeches();
-  }, []);
+  const { toggleFavorite, setCurrentSpeech } = speechContext;
 
   const handleSpeechPress = (speech: any) => {
     try {
@@ -136,6 +132,8 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          <EarnCreditsCard />
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Today&apos;s Featured</Text>
