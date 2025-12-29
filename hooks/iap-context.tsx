@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
 import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
-import { IAPProductId, ALL_VOICES } from '@/constants/iap';
+import { IAPProductId, ALL_VOICES, IAP_PRODUCT_IDS } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
 const isWeb = Platform.OS === 'web';
@@ -222,28 +222,64 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const processCustomerInfo = useCallback(async (customerInfo: CustomerInfo) => {
     try {
       console.log('📦 Processing customer info...');
+      console.log('📦 Active entitlements:', Object.keys(customerInfo.entitlements.active));
+      console.log('📦 All transactions:', customerInfo.allPurchasedProductIdentifiers);
       
-      // Check for active premium subscription (using 'Custom' entitlement from RevenueCat)
-      const hasPremium = customerInfo.entitlements.active['Custom'] !== undefined;
-      const premiumExpiry = hasPremium 
-        ? new Date(customerInfo.entitlements.active['Custom'].expirationDate || '').getTime()
+      // Check for active premium subscription (check common entitlement names)
+      const premiumEntitlement = customerInfo.entitlements.active['premium'] || 
+                                  customerInfo.entitlements.active['Premium'] ||
+                                  customerInfo.entitlements.active['pro'] ||
+                                  customerInfo.entitlements.active['Pro'];
+      
+      const hasPremium = premiumEntitlement !== undefined;
+      const premiumExpiry = hasPremium && premiumEntitlement.expirationDate
+        ? new Date(premiumEntitlement.expirationDate).getTime()
         : null;
       
-      // Check for purchased credits (non-consumables stored as entitlements)
-      let totalCredits = entitlements.credits;
+      // Check for credit purchases and add credits
+      let creditsToAdd = 0;
+      const purchasedProducts = customerInfo.allPurchasedProductIdentifiers;
       
-      // For credit purchases, we'll need to implement a custom solution
-      // since RevenueCat doesn't directly track consumables
-      // This would typically involve your backend tracking credit balance
+      console.log('📦 Purchased products:', purchasedProducts);
+      
+      // Check latest transaction for credits
+      const latestTransactions = customerInfo.nonSubscriptionTransactions;
+      if (latestTransactions.length > 0) {
+        const latestTransaction = latestTransactions[0];
+        console.log('📦 Latest transaction:', latestTransaction.productIdentifier);
+        
+        // Map product IDs to credit amounts
+        if (latestTransaction.productIdentifier === IAP_PRODUCT_IDS.CREDITS_100) {
+          creditsToAdd = 100;
+        } else if (latestTransaction.productIdentifier === IAP_PRODUCT_IDS.CREDITS_500) {
+          creditsToAdd = 500;
+        } else if (latestTransaction.productIdentifier === IAP_PRODUCT_IDS.CREDITS_1000) {
+          creditsToAdd = 1000;
+        }
+        
+        // Check if we've already processed this transaction
+        const lastProcessedTransaction = await AsyncStorage.getItem('last_processed_transaction');
+        if (lastProcessedTransaction !== latestTransaction.transactionIdentifier) {
+          console.log('✅ New credit purchase detected! Adding', creditsToAdd, 'credits');
+          await AsyncStorage.setItem('last_processed_transaction', latestTransaction.transactionIdentifier);
+        } else {
+          console.log('ℹ️ Transaction already processed');
+          creditsToAdd = 0; // Already processed
+        }
+      }
       
       const newEntitlements: Entitlements = {
-        credits: totalCredits,
+        credits: entitlements.credits + creditsToAdd,
         isPremium: hasPremium,
         premiumExpiresAt: premiumExpiry,
       };
       
       await saveEntitlements(newEntitlements);
       console.log('✅ Customer info processed:', newEntitlements);
+      
+      if (creditsToAdd > 0) {
+        Alert.alert('Credits Added!', `${creditsToAdd} AI credits have been added to your account.`);
+      }
     } catch (error) {
       console.error('❌ Error processing customer info:', error);
     }
