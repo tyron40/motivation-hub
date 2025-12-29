@@ -39,7 +39,8 @@ const voiceCharacters = [
 export default function VoiceCoachScreen() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
-  const { usageStats, useCredit } = useIAP();
+  const iapContext = useIAP();
+  const { usageStats } = iapContext;
   const [, setMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -109,9 +110,9 @@ export default function VoiceCoachScreen() {
         console.log(`✅ TTS audio received in ${ttsElapsed}ms`);
         
         // Deduct 1 credit for TTS
-        const creditUsed = await useCredit();
+        const creditUsed = await iapContext.useCredit();
         if (creditUsed) {
-          console.log('💳 1 credit used for TTS (Voice Generation). Remaining:', usageStats.credits - 1);
+          console.log('💳 1 credit used for TTS (Voice Generation). Remaining:', iapContext.usageStats.credits - 1);
         } else {
           console.warn('⚠️ Failed to deduct credit for TTS');
         }
@@ -177,7 +178,7 @@ export default function VoiceCoachScreen() {
       setCurrentStatus('Ready to listen (text mode)');
       console.log('Speech synthesis failed, continuing in text mode');
     }
-  }, [profile.preferredVoice, sound, usageStats.credits, useCredit]);
+  }, [profile.preferredVoice, sound, usageStats.credits, iapContext]);
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreetedRef.current) {
@@ -640,7 +641,6 @@ export default function VoiceCoachScreen() {
         console.log('⏳ Waiting for recording to initialize before stopping...');
         let waited = 0;
         while (isStartingRef.current && waited < 800) {
-          // eslint-disable-next-line no-await-in-loop
           await new Promise(resolve => setTimeout(resolve, 50));
           waited += 50;
         }
@@ -1111,9 +1111,9 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       }
       
       // Deduct 1 credit for chat message
-      const creditUsed = await useCredit();
+      const creditUsed = await iapContext.useCredit();
       if (creditUsed) {
-        console.log('💳 1 credit used for AI Chat Message. Remaining:', usageStats.credits - 1);
+        console.log('💳 1 credit used for AI Chat Message. Remaining:', iapContext.usageStats.credits - 1);
       } else {
         console.warn('⚠️ Failed to deduct credit for chat');
       }
