@@ -21,6 +21,7 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
+import PaywallModal from '@/components/PaywallModal';
 import { Audio } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -80,6 +81,7 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -269,8 +271,11 @@ export default function ChatScreen() {
       if (Platform.OS !== 'web') {
         Alert.alert(
           'No Credits',
-          'You need credits to use the AI chat feature. Please purchase credits to continue.',
-          [{ text: 'OK' }]
+          'You need credits to use the AI chat feature. Purchase credits to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+          ]
         );
       } else {
         console.error('You need credits to use the AI chat feature.');
@@ -299,8 +304,11 @@ export default function ChatScreen() {
         if (Platform.OS !== 'web') {
           Alert.alert(
             'No Credits',
-            'You need credits to use the AI chat feature. Please purchase credits to continue.',
-            [{ text: 'OK' }]
+            'You need credits to use the AI chat feature. Purchase credits to continue.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+            ]
           );
         } else {
           console.error('You need credits to use the AI chat feature.');
@@ -996,6 +1004,11 @@ export default function ChatScreen() {
         </KeyboardAvoidingView>
       </View>
     </LinearGradient>
+
+    <PaywallModal
+      visible={showPaywall}
+      onClose={() => setShowPaywall(false)}
+    />
     </>
   );
 }

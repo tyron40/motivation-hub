@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
-import { X, MessageCircle, Mic, Activity, FileText } from 'lucide-react-native';
+import { X, MessageCircle, Mic, Activity, FileText, ShoppingCart } from 'lucide-react-native';
 import { CREDIT_COSTS, CREDIT_PACKAGES, calculateEstimatedUsage } from '@/constants/credits';
+import PaywallModal from './PaywallModal';
 
 interface CreditsInfoModalProps {
   visible: boolean;
@@ -24,7 +25,10 @@ const iconMap = {
 } as const;
 
 export function CreditsInfoModal({ visible, onClose }: CreditsInfoModalProps) {
+  const [showPaywall, setShowPaywall] = useState(false);
+
   return (
+    <>
     <Modal
       visible={visible}
       animationType="slide"
@@ -173,10 +177,27 @@ export function CreditsInfoModal({ visible, onClose }: CreditsInfoModalProps) {
                 Mix and match features based on your needs!
               </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.purchaseButton}
+              onPress={() => {
+                onClose();
+                setShowPaywall(true);
+              }}
+            >
+              <ShoppingCart size={20} color="#fff" />
+              <Text style={styles.purchaseButtonText}>Purchase Credits Now</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </View>
     </Modal>
+
+    <PaywallModal
+      visible={showPaywall}
+      onClose={() => setShowPaywall(false)}
+    />
+    </>
   );
 }
 
@@ -426,5 +447,27 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     textAlign: 'center',
+  },
+  purchaseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    marginTop: 16,
+    marginBottom: 24,
+    gap: 12,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  purchaseButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

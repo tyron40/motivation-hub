@@ -19,6 +19,7 @@ import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
 import { supabase } from '@/lib/supabase';
 import { useIAP } from '@/hooks/iap-context';
 import { CreditsInfoModal } from '@/components/CreditsInfoModal';
+import PaywallModal from '@/components/PaywallModal';
 
 const voiceCharacters = [
   { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced voice' },
@@ -39,6 +40,7 @@ export default function SettingsScreen() {
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [tempName, setTempName] = useState(profile.name || '');
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
@@ -93,7 +95,7 @@ export default function SettingsScreen() {
           
           <TouchableOpacity 
             style={styles.settingItem}
-            onPress={() => setShowCreditsModal(true)}
+            onPress={() => setShowPaywall(true)}
           >
             <View style={styles.settingLeft}>
               <DollarSign size={20} color={colors.primary} />
@@ -506,6 +508,11 @@ export default function SettingsScreen() {
       <CreditsInfoModal 
         visible={showCreditsModal}
         onClose={() => setShowCreditsModal(false)}
+      />
+
+      <PaywallModal
+        visible={showPaywall}
+        onClose={() => setShowPaywall(false)}
       />
     </SafeAreaView>
   );
