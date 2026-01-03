@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 13.2.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "aab"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "your-apple-id@example.com",
+        "ascAppId": "6752318718",
+        "appleTeamId": "YOUR_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./path-to-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

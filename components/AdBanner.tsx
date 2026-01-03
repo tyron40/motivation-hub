@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useAdMob } from '@/hooks/admob-context';
 import { useTheme } from '@/hooks/theme-context';
+import { AD_UNIT_IDS } from '@/constants/admob';
 
 interface AdBannerProps {
   style?: any;
 }
-
-const AD_UNIT_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/6300978111' // Test banner
-  : 'ca-app-pub-7788769813708919/4858914356'; // Home_Banner
 
 export function AdBanner({ style }: AdBannerProps) {
   const { canShowAds } = useAdMob();
@@ -26,7 +23,7 @@ export function AdBanner({ style }: AdBannerProps) {
         const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
         setBannerAdComponent(() => (
           <BannerAd
-            unitId={AD_UNIT_ID}
+            unitId={AD_UNIT_IDS.banner}
             size={BannerAdSize.BANNER}
             requestOptions={{
               requestNonPersonalizedAdsOnly: false,

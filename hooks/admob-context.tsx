@@ -2,7 +2,10 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useIAP } from './iap-context';
+import { AD_UNIT_IDS, AD_CONFIG } from '@/constants/admob';
 
+// Dynamic imports for native platforms only
+// This prevents bundling errors on web while allowing native builds to work
 let RewardedAd: any = null;
 let InterstitialAd: any = null;
 let RewardedAdEventType: any = null;
@@ -18,25 +21,14 @@ if (Platform.OS !== 'web') {
     RewardedAdEventType = admobModule.RewardedAdEventType;
     InterstitialAdEventType = admobModule.AdEventType;
     mobileAds = admobModule.default;
-  } catch {
+    console.log('✅ AdMob SDK loaded successfully');
+  } catch (error) {
     console.log('📺 AdMob SDK not available - using simulation mode');
+    console.log('   This is normal in Expo Go. Real ads will work in production builds.');
   }
 }
 
-const REWARD_AMOUNT = 10;
-const INTERSTITIAL_COOLDOWN = 10 * 60 * 1000;
-
-export const AD_UNIT_IDS = {
-  rewarded: __DEV__ 
-    ? 'ca-app-pub-3940256099942544/5224354917'
-    : 'ca-app-pub-7788769813708919/3545832687',
-  interstitial: __DEV__
-    ? 'ca-app-pub-3940256099942544/1033173712'
-    : 'ca-app-pub-7788769813708919/4053276756',
-  banner: __DEV__
-    ? 'ca-app-pub-3940256099942544/6300978111'
-    : 'ca-app-pub-7788769813708919/4858914356',
-};
+const { REWARD_AMOUNT, INTERSTITIAL_COOLDOWN, requestOptions } = AD_CONFIG;
 
 
 
