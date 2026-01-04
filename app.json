@@ -2,7 +2,7 @@
   "expo": {
     "name": "Motivation Hub",
     "slug": "motivational-app",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "95",
+      "buildNumber": "114",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -53,7 +53,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.motivational-speech-app",
-      "versionCode": 95,
+      "versionCode": 114,
       "permissions": [
         "RECORD_AUDIO",
         "INTERNET",
