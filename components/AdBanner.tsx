@@ -45,29 +45,15 @@ export function AdBanner({ style }: AdBannerProps) {
     return null;
   }
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.card }, style]}>
-        <Text style={[styles.text, { color: colors.textSecondary }]}>
-          Ad Space (Banner ads show on mobile)
-        </Text>
-      </View>
-    );
+  // Don't show anything on web or if SDK not available
+  if (Platform.OS === 'web' || !hasAdSDK || !BannerAdComponent) {
+    return null;
   }
 
-  if (hasAdSDK && BannerAdComponent) {
-    return (
-      <View style={[styles.bannerContainer, style]}>
-        {BannerAdComponent}
-      </View>
-    );
-  }
-
+  // Only show real ads
   return (
-    <View style={[styles.container, { backgroundColor: colors.card }, style]}>
-      <Text style={[styles.text, { color: colors.textSecondary }]}>
-        📺 Banner Ad (Shows in production builds)
-      </Text>
+    <View style={[styles.bannerContainer, style]}>
+      {BannerAdComponent}
     </View>
   );
 }

@@ -180,63 +180,32 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    if (rewardedAdInstance && isRewardedAdLoaded) {
-      try {
-        console.log('📺 Showing real rewarded ad...');
-        setIsShowingAd(true);
-        await rewardedAdInstance.show();
-        return true;
-      } catch (error: any) {
-        console.error('❌ Error showing rewarded ad:', error);
-        setIsShowingAd(false);
-        
-        if (error?.code === 'ad-not-ready' || error?.message?.includes('not ready')) {
-          Alert.alert('Ad Not Ready', 'The ad is still loading. Please try again in a moment.');
-        } else {
-          Alert.alert('Error', 'Unable to show ad. Please try again later.');
-        }
-        return false;
-      }
-    } else {
-      console.log('📺 Real ad not available, using simulation mode...');
+    // Only show real ads - no simulation
+    if (!rewardedAdInstance || !isRewardedAdLoaded) {
+      console.log('⚠️ Rewarded ad not ready');
+      Alert.alert(
+        'Ad Not Ready',
+        'The ad is still loading. Please try again in a moment.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+
+    try {
+      console.log('📺 Showing rewarded ad...');
       setIsShowingAd(true);
-
-      try {
-        const confirmed = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            '🎬 Watch Ad to Earn Credits',
-            `Watch a 30-second ad to earn ${REWARD_AMOUNT} credits!\n\n💡 Note: This is simulated. Real ads will show in TestFlight/production builds.`,
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Simulate Ad', onPress: () => resolve(true) },
-            ]
-          );
-        });
-
-        if (!confirmed) {
-          console.log('ℹ️ User cancelled ad');
-          setIsShowingAd(false);
-          return false;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        console.log(`🎁 Simulating reward: ${REWARD_AMOUNT} credits`);
-        await addCredits(REWARD_AMOUNT);
-        
-        Alert.alert(
-          '🎉 Reward Earned!',
-          `You earned ${REWARD_AMOUNT} credits!`,
-          [{ text: 'Awesome!' }]
-        );
-
-        setIsShowingAd(false);
-        return true;
-      } catch (error) {
-        console.error('❌ Error in simulation:', error);
-        setIsShowingAd(false);
+      await rewardedAdInstance.show();
+      return true;
+    } catch (error: any) {
+      console.error('❌ Error showing rewarded ad:', error);
+      setIsShowingAd(false);
+      
+      if (error?.code === 'ad-not-ready' || error?.message?.includes('not ready')) {
+        Alert.alert('Ad Not Ready', 'The ad is still loading. Please try again in a moment.');
+      } else {
         Alert.alert('Error', 'Unable to show ad. Please try again later.');
-        return false;
       }
+      return false;
     }
   }, [canShowAds, isShowingAd, addCredits, rewardedAdInstance, isRewardedAdLoaded]);
 
@@ -259,33 +228,22 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    if (interstitialAdInstance && isInterstitialAdLoaded) {
-      try {
-        console.log('📺 Showing real interstitial ad...');
-        setIsShowingAd(true);
-        await interstitialAdInstance.show();
-        setLastInterstitialTime(now);
-        return true;
-      } catch (error: any) {
-        console.error('❌ Error showing interstitial ad:', error);
-        setIsShowingAd(false);
-        return false;
-      }
-    } else {
-      console.log('📺 Real ad not available, using simulation...');
-      setIsShowingAd(true);
+    // Only show real ads - no simulation
+    if (!interstitialAdInstance || !isInterstitialAdLoaded) {
+      console.log('⚠️ Interstitial ad not ready');
+      return false;
+    }
 
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        setLastInterstitialTime(now);
-        console.log('✅ Interstitial ad completed (simulated)');
-        return true;
-      } catch (error) {
-        console.error('❌ Error in simulation:', error);
-        return false;
-      } finally {
-        setIsShowingAd(false);
-      }
+    try {
+      console.log('📺 Showing interstitial ad...');
+      setIsShowingAd(true);
+      await interstitialAdInstance.show();
+      setLastInterstitialTime(now);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Error showing interstitial ad:', error);
+      setIsShowingAd(false);
+      return false;
     }
   }, [canShowAds, isShowingAd, lastInterstitialTime, interstitialAdInstance, isInterstitialAdLoaded]);
 
