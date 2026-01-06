@@ -36,7 +36,7 @@
       "ios": {
         "appleId": "your-apple-id@example.com",
         "ascAppId": "6752318718",
-        "appleTeamId": "YOUR_TEAM_ID"
+        "appleTeamId": "SKYPA87B9L"
       },
       "android": {
         "serviceAccountKeyPath": "./path-to-service-account.json",
