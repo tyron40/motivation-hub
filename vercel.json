@@ -3,6 +3,10 @@
   "public": true,
   "rewrites": [
     {
+      "source": "/app-ads.txt",
+      "destination": "/public/app-ads.txt"
+    },
+    {
       "source": "/api/health",
       "destination": "/api/index"
     },
