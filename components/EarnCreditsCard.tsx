@@ -1,13 +1,23 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { useAdMob } from '@/hooks/admob-context';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useIAP } from '@/hooks/iap-context';
 import { Tv, Gift, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
+let useAdMob: any = null;
+if (Platform.OS !== 'web') {
+  useAdMob = require('@/hooks/admob-context').useAdMob;
+}
+
 export function EarnCreditsCard() {
-  const { showRewardedAd, rewardAmount, isShowingAd, canShowAds } = useAdMob();
+  const admobContext = Platform.OS !== 'web' && useAdMob ? useAdMob() : {
+    showRewardedAd: async () => false,
+    rewardAmount: 50,
+    isShowingAd: false,
+    canShowAds: false,
+  };
+  const { showRewardedAd, rewardAmount, isShowingAd, canShowAds } = admobContext;
   const { usageStats } = useIAP();
   const { colors } = useTheme();
 
