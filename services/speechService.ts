@@ -1,6 +1,6 @@
 import { Speech } from '@/types/speech';
-
 import { allYoutubeSpeeches, getSpeechesByCategory } from '@/mocks/youtube-speeches';
+import { getVideosByCategory as getYouTubeVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 
 export const testPodcastAPI = async (): Promise<boolean> => {
   console.log('✅ Using embedded speeches (no API needed)');
@@ -123,11 +123,8 @@ export const fetchYouTubeSpeechesByCategory = async (category: string, limit: nu
   try {
     console.log(`📺 Fetching YouTube speeches for category: ${category}`);
     
-    // Import YouTube service
-    const { getVideosByCategory, convertVideoToSpeech } = await import('@/services/youtubeService');
-    
     // Fetch YouTube videos for the category
-    const videos = await getVideosByCategory(category, limit);
+    const videos = await getYouTubeVideosByCategory(category, limit);
     
     if (videos.length === 0) {
       console.log(`⚠️ No YouTube videos found for category: ${category}`);
@@ -204,9 +201,6 @@ export const fetchYouTubeSpeeches = async (): Promise<Speech[]> => {
   console.log('📺 Fetching YouTube motivational speeches...');
   
   try {
-    // Import YouTube service
-    const { getTrendingVideos, convertVideoToSpeech } = await import('@/services/youtubeService');
-    
     // Get trending motivational videos from YouTube
     const videos = await getTrendingVideos(20);
     
