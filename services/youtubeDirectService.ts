@@ -1,4 +1,5 @@
 const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || 'AIzaSyDCCZSM3VQT8BcYEqX5Qs0X5Yn_YF6Kd0w';
+const MOTIVATION_CHANNEL_ID = 'UCHmQDfB84rZecCY_ERM4eYQ';
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 30;
@@ -239,20 +240,107 @@ export async function fetchYouTubeVideosDirect(
   }
 }
 
+export async function fetchChannelVideos(
+  channelId: string = MOTIVATION_CHANNEL_ID,
+  limit: number = 50
+): Promise<YouTubeVideo[]> {
+  if (!YOUTUBE_API_KEY) {
+    console.warn('⚠️ YouTube API key not configured');
+    return [];
+  }
+
+  const cacheKey = `channel-${channelId}-${limit}`;
+  const cached = REQUEST_CACHE.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`✅ Using cached channel data for: ${channelId}`);
+    return cached.data;
+  }
+
+  try {
+    console.log(`📺 Fetching videos from channel: ${channelId}`);
+    
+    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+    searchUrl.searchParams.set('part', 'snippet');
+    searchUrl.searchParams.set('channelId', channelId);
+    searchUrl.searchParams.set('type', 'video');
+    searchUrl.searchParams.set('maxResults', Math.min(limit, 50).toString());
+    searchUrl.searchParams.set('order', 'date');
+    searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+    console.log(`📡 Calling YouTube Search API for channel...`);
+    const searchResponse = await fetch(searchUrl.toString(), {
+      headers: { 'Accept': 'application/json' },
+    });
+    
+    if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      console.error('❌ YouTube Search API error:', searchResponse.status, errorText);
+      return [];
+    }
+
+    const searchData = await searchResponse.json();
+    
+    if (!searchData.items || searchData.items.length === 0) {
+      console.log(`⚠️ No videos found in channel`);
+      return [];
+    }
+
+    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    console.log(`✅ Found ${searchData.items.length} videos, fetching details...`);
+
+    const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
+    detailsUrl.searchParams.set('id', videoIds);
+    detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
+
+    const detailsResponse = await fetch(detailsUrl.toString(), {
+      headers: { 'Accept': 'application/json' },
+    });
+    
+    if (!detailsResponse.ok) {
+      const errorText = await detailsResponse.text();
+      console.error('❌ YouTube Videos API error:', detailsResponse.status, errorText);
+      return [];
+    }
+
+    const detailsData = await detailsResponse.json();
+
+    const videos = detailsData.items
+      .filter((item: any) => {
+        const isPublic = item.status?.privacyStatus === 'public';
+        const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
+        return isPublic && hasValidDuration;
+      })
+      .map((item: any) => ({
+        id: item.id,
+        title: item.snippet.title,
+        description: item.snippet.description || '',
+        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+        channelTitle: item.snippet.channelTitle,
+        channelId: item.snippet.channelId,
+        publishedAt: item.snippet.publishedAt,
+        duration: parseDuration(item.contentDetails.duration),
+        viewCount: parseInt(item.statistics.viewCount || '0'),
+        category: 'Motivation',
+      }));
+    
+    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
+    
+    console.log(`✅ Successfully fetched ${videos.length} videos from channel`);
+    return videos;
+  } catch (error) {
+    console.error('❌ Error fetching channel videos:', error);
+    return [];
+  }
+}
+
 export async function fetchContentByCategory(
   category: string,
   limit: number = 100
 ): Promise<YouTubeVideo[]> {
-  const categoryKey = category.toLowerCase();
-  const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
-  
-  const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 8)) % searchQueries.length;
-  const todayQuery = searchQueries[queryIndex];
-  
-  console.log(`📺 Fetching content for category: ${category}`);
-  console.log(`🔍 Using search query: "${todayQuery}" (rotates daily)`);
-  
-  return await fetchYouTubeVideosDirect(todayQuery, limit);
+  console.log(`📺 Fetching content from Motivation Fueled channel`);
+  return await fetchChannelVideos(MOTIVATION_CHANNEL_ID, limit);
 }
 
 export async function searchYouTubeContent(
@@ -266,17 +354,6 @@ export async function searchYouTubeContent(
 export async function fetchTrendingYouTubeContent(
   limit: number = 100
 ): Promise<YouTubeVideo[]> {
-  console.log('📈 Fetching trending motivational content');
-  
-  const trendingQueries = [
-    'motivational speech 2024',
-    'best motivational speech',
-    'powerful motivation',
-  ];
-  
-  const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 12)) % trendingQueries.length;
-  const query = trendingQueries[queryIndex];
-  
-  console.log(`🔍 Using trending query: "${query}"`);
-  return await fetchYouTubeVideosDirect(query, limit);
+  console.log('📈 Fetching content from Motivation Fueled channel');
+  return await fetchChannelVideos(MOTIVATION_CHANNEL_ID, limit);
 }
