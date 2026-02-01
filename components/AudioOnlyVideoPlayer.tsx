@@ -8,8 +8,6 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Linking,
-  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import YoutubePlayer from 'react-native-youtube-iframe';
@@ -72,7 +70,6 @@ export default function AudioOnlyVideoPlayer({
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
   const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     return () => {
@@ -178,6 +175,30 @@ export default function AudioOnlyVideoPlayer({
     setPlayerReady(false);
   }, []);
 
+  const startProgressTracking = useCallback(() => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+    
+    progressInterval.current = setInterval(async () => {
+      if (playerRef.current && !isSeeking) {
+        try {
+          const time = await playerRef.current.getCurrentTime();
+          setCurrentTime(time);
+        } catch (err) {
+          console.error('Error getting current time:', err);
+        }
+      }
+    }, 500);
+  }, [isSeeking]);
+
+  const stopProgressTracking = useCallback(() => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+  }, []);
+
   const onStateChange = useCallback((state: string) => {
     console.log('🎬 Player state:', state);
     
@@ -193,31 +214,7 @@ export default function AudioOnlyVideoPlayer({
         setCurrentTime(0);
       }
     }
-  }, []);
-
-  const startProgressTracking = () => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-    }
-    
-    progressInterval.current = setInterval(async () => {
-      if (playerRef.current && !isSeeking) {
-        try {
-          const time = await playerRef.current.getCurrentTime();
-          setCurrentTime(time);
-        } catch (err) {
-          console.error('Error getting current time:', err);
-        }
-      }
-    }, 500);
-  };
-
-  const stopProgressTracking = () => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-      progressInterval.current = null;
-    }
-  };
+  }, [startProgressTracking, stopProgressTracking]);
 
   useEffect(() => {
     if (isPlaying) {
