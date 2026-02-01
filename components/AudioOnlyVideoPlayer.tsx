@@ -338,26 +338,28 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
-      <View style={styles.hiddenPlayer}>
-        <YoutubePlayer
-          ref={playerRef}
-          videoId={videoId}
-          height={1}
-          width={1}
-          play={isPlaying}
-          onReady={onPlayerReady}
-          onError={onPlayerError}
-          onChangeState={onStateChange}
-          webViewStyle={{ opacity: 0 }}
-        />
+      <View style={styles.artworkContainer}>
+        <View style={styles.hiddenPlayerWrapper}>
+          <YoutubePlayer
+            ref={playerRef}
+            videoId={videoId}
+            height={300}
+            width={300}
+            play={isPlaying}
+            onReady={onPlayerReady}
+            onError={onPlayerError}
+            onChangeState={onStateChange}
+            webViewStyle={{ opacity: 0 }}
+          />
+        </View>
+        
+        <Animated.View style={[styles.thumbnailOverlay, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
+          <Image 
+            source={{ uri: metadata.thumbnail || thumbnail }} 
+            style={styles.artwork} 
+          />
+        </Animated.View>
       </View>
-
-      <Animated.View style={[styles.artworkContainer, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
-        <Image 
-          source={{ uri: metadata.thumbnail || thumbnail }} 
-          style={styles.artwork} 
-        />
-      </Animated.View>
 
       <View style={styles.infoSection}>
         <Text style={styles.title} numberOfLines={2}>{metadata.title}</Text>
@@ -438,6 +440,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
+    position: 'relative',
+  },
+
+  hiddenPlayerWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0,
+    zIndex: 1,
+  },
+
+  thumbnailOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
   },
 
   artwork: {
@@ -565,12 +589,5 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  hiddenPlayer: {
-    position: 'absolute',
-    top: -9999,
-    left: -9999,
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
+
 });
