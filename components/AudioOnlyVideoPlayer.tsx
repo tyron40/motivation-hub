@@ -336,7 +336,7 @@ export default function AudioOnlyVideoPlayer({
           videoId={videoId}
           height={1}
           width={1}
-          play={autoplay}
+          play={isPlaying}
           onReady={onPlayerReady}
           onError={onPlayerError}
           onChangeState={onStateChange}
