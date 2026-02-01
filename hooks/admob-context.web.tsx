@@ -1,12 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo } from 'react';
-import { AD_CONFIG } from '@/constants/admob';
-
-const { REWARD_AMOUNT } = AD_CONFIG;
+import { useMemo, useCallback } from 'react';
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
-  const [isShowingAd] = useState(false);
-
   const showRewardedAd = useCallback(async () => {
     console.log('📺 AdMob not available on web');
     return false;
@@ -25,9 +20,9 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       isInterstitialAdLoaded: false,
       isLoadingRewardedAd: false,
       canShowAds: false,
-      rewardAmount: REWARD_AMOUNT,
-      isShowingAd,
+      rewardAmount: 0,
+      isShowingAd: false,
     }),
-    [showRewardedAd, showInterstitialAd, isShowingAd]
+    [showRewardedAd, showInterstitialAd]
   );
 });
