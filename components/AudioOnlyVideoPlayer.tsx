@@ -20,7 +20,6 @@ import {
   SkipBack,
   RotateCcw,
   RotateCw,
-  ExternalLink,
 } from 'lucide-react-native';
 
 // Props
@@ -240,8 +239,7 @@ export default function AudioOnlyVideoPlayer({
 
   const handlePlayPause = async () => {
     if (!playerReady || !playerRef.current) {
-      console.log('⚠️ Player not ready, opening YouTube');
-      openInYouTube();
+      console.log('⚠️ Player not ready yet');
       return;
     }
 
@@ -300,11 +298,7 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
-  const openInYouTube = () => {
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log('🔗 Opening in YouTube:', url);
-    Linking.openURL(url);
-  };
+
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -328,10 +322,7 @@ export default function AudioOnlyVideoPlayer({
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Cannot load audio</Text>
           <Text style={styles.errorSub}>{error || 'Audio not found'}</Text>
-          <TouchableOpacity style={styles.linkButton} onPress={openInYouTube}>
-            <ExternalLink size={18} color="#667eea" />
-            <Text style={styles.linkButtonText}>Open in YouTube</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorHint}>Please try again or select another track</Text>
         </View>
       </View>
     );
@@ -412,11 +403,6 @@ export default function AudioOnlyVideoPlayer({
           <SkipForward size={28} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.youtubeLink} onPress={openInYouTube}>
-        <ExternalLink size={16} color="rgba(255,255,255,0.6)" />
-        <Text style={styles.youtubeLinkText}>Listen on YouTube</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -537,19 +523,6 @@ const styles = StyleSheet.create({
     bottom: 12,
   },
 
-  youtubeLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-
-  youtubeLinkText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-  },
-
   loadingText: {
     textAlign: 'center',
     color: 'rgba(255,255,255,0.7)',
@@ -574,25 +547,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
-    marginBottom: 20,
+    marginBottom: 8,
   },
 
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(102,126,234,0.4)',
-    backgroundColor: 'rgba(102,126,234,0.1)',
-  },
-
-  linkButtonText: {
-    color: '#667eea',
-    fontWeight: '600',
-    fontSize: 14,
+  errorHint: {
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 
   hiddenPlayer: {
