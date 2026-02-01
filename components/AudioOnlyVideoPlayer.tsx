@@ -373,8 +373,9 @@ export default function AudioOnlyVideoPlayer({
                   <!DOCTYPE html>
                   <html>
                     <head>
+                      <meta name="viewport" content="width=device-width, initial-scale=1">
                       <style>
-                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; }
+                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
                         #player { width: 100%; height: 100%; }
                       </style>
                     </head>
@@ -382,12 +383,26 @@ export default function AudioOnlyVideoPlayer({
                       <div id="player"></div>
                       <script>
                         var player;
+                        var isReady = false;
                         var tag = document.createElement('script');
                         tag.src = "https://www.youtube.com/iframe_api";
                         var firstScriptTag = document.getElementsByTagName('script')[0];
                         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
+                        function postMsg(data) {
+                          try {
+                            if (window.ReactNativeWebView) {
+                              window.ReactNativeWebView.postMessage(JSON.stringify(data));
+                            } else {
+                              window.parent.postMessage(data, '*');
+                            }
+                          } catch(e) {
+                            console.error('postMsg error:', e);
+                          }
+                        }
+
                         function onYouTubeIframeAPIReady() {
+                          console.log('YouTube API Ready');
                           player = new YT.Player('player', {
                             videoId: '${videoId}',
                             playerVars: {
@@ -396,69 +411,110 @@ export default function AudioOnlyVideoPlayer({
                               disablekb: 1,
                               fs: 0,
                               modestbranding: 1,
-                              playsinline: 1
+                              playsinline: 1,
+                              rel: 0
                             },
                             events: {
                               onReady: function(event) {
-                                window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'ready'}));
+                                console.log('Player ready');
+                                isReady = true;
+                                postMsg({type: 'ready'});
+                                
                                 setInterval(function() {
-                                  if (player && player.getCurrentTime) {
+                                  if (isReady && player && player.getCurrentTime) {
                                     try {
                                       var time = player.getCurrentTime();
                                       var duration = player.getDuration();
                                       var state = player.getPlayerState();
-                                      window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                      postMsg({
                                         type: 'progress',
                                         currentTime: time,
                                         duration: duration,
                                         state: state
-                                      }));
-                                    } catch(e) {}
+                                      });
+                                    } catch(e) {
+                                      console.error('Progress error:', e);
+                                    }
                                   }
                                 }, 500);
                               },
                               onStateChange: function(event) {
+                                console.log('State change:', event.data);
                                 var states = {'-1': 'unstarted', '0': 'ended', '1': 'playing', '2': 'paused', '3': 'buffering', '5': 'cued'};
-                                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                postMsg({
                                   type: 'stateChange',
                                   state: states[event.data] || 'unknown'
-                                }));
+                                });
                               },
                               onError: function(event) {
-                                window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'error', error: event.data}));
+                                console.error('Player error:', event.data);
+                                postMsg({type: 'error', error: event.data});
                               }
                             }
                           });
                         }
 
-                        window.playVideo = function() { player?.playVideo(); };
-                        window.pauseVideo = function() { player?.pauseVideo(); };
-                        window.seekTo = function(seconds) { player?.seekTo(seconds, true); };
+                        window.playVideo = function() { 
+                          if (player && isReady) {
+                            player.playVideo(); 
+                            console.log('Play video called');
+                          }
+                        };
+                        window.pauseVideo = function() { 
+                          if (player && isReady) {
+                            player.pauseVideo(); 
+                            console.log('Pause video called');
+                          }
+                        };
+                        window.seekTo = function(seconds) { 
+                          if (player && isReady) {
+                            player.seekTo(seconds, true); 
+                            console.log('Seek to:', seconds);
+                          }
+                        };
                       </script>
                     </body>
                   </html>
                 `
               }}
-              style={{ width: 300, height: 300, opacity: 0 }}
+              style={{ width: 300, height: 300 }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              mediaPlaybackRequiresUserAction={false}
+              allowsInlineMediaPlayback={true}
+              scalesPageToFit={true}
               onMessage={(event) => {
                 try {
-                  const data = JSON.parse(event.nativeEvent.data);
+                  const message = event.nativeEvent.data;
+                  let data;
+                  
+                  if (typeof message === 'string') {
+                    data = JSON.parse(message);
+                  } else {
+                    data = message;
+                  }
+                  
+                  console.log('WebView message:', data);
+                  
                   if (data.type === 'ready') {
+                    console.log('✅ Player is ready');
                     onPlayerReady();
                   } else if (data.type === 'stateChange') {
+                    console.log('State changed to:', data.state);
                     onStateChange(data.state);
                   } else if (data.type === 'progress') {
-                    if (!isSeeking && data.currentTime) {
+                    if (!isSeeking && data.currentTime !== undefined) {
                       setCurrentTime(data.currentTime);
                     }
                     if (data.duration && duration === 0) {
                       setDuration(data.duration);
                     }
                   } else if (data.type === 'error') {
-                    onPlayerError('Player error');
+                    console.error('Player error:', data.error);
+                    onPlayerError('Player error: ' + data.error);
                   }
                 } catch (e) {
-                  console.error('Error parsing message:', e);
+                  console.error('Error parsing message:', e, event.nativeEvent.data);
                 }
               }}
             />
