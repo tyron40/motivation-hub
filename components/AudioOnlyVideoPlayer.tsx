@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import {
   Play,
   Pause,
@@ -249,12 +251,24 @@ export default function AudioOnlyVideoPlayer({
     }
 
     try {
-      if (isPlaying) {
-        console.log('⏸️ Pausing video');
-        await playerRef.current.pauseVideo();
+      if (Platform.OS === 'web') {
+        if (isPlaying) {
+          console.log('⏸️ Pausing video');
+          playerRef.current.injectJavaScript('window.pauseVideo();');
+          setIsPlaying(false);
+        } else {
+          console.log('▶️ Playing video');
+          playerRef.current.injectJavaScript('window.playVideo();');
+          setIsPlaying(true);
+        }
       } else {
-        console.log('▶️ Playing video');
-        await playerRef.current.playVideo();
+        if (isPlaying) {
+          console.log('⏸️ Pausing video');
+          await playerRef.current.pauseVideo();
+        } else {
+          console.log('▶️ Playing video');
+          await playerRef.current.playVideo();
+        }
       }
     } catch (err) {
       console.error('Error toggling playback:', err);
@@ -266,8 +280,13 @@ export default function AudioOnlyVideoPlayer({
     
     try {
       const newPosition = Math.min(currentTime + 15, duration);
-      await playerRef.current.seekTo(newPosition, true);
-      setCurrentTime(newPosition);
+      if (Platform.OS === 'web') {
+        playerRef.current.injectJavaScript(`window.seekTo(${newPosition});`);
+        setCurrentTime(newPosition);
+      } else {
+        await playerRef.current.seekTo(newPosition, true);
+        setCurrentTime(newPosition);
+      }
     } catch (err) {
       console.error('Error skipping forward:', err);
     }
@@ -278,8 +297,13 @@ export default function AudioOnlyVideoPlayer({
     
     try {
       const newPosition = Math.max(currentTime - 15, 0);
-      await playerRef.current.seekTo(newPosition, true);
-      setCurrentTime(newPosition);
+      if (Platform.OS === 'web') {
+        playerRef.current.injectJavaScript(`window.seekTo(${newPosition});`);
+        setCurrentTime(newPosition);
+      } else {
+        await playerRef.current.seekTo(newPosition, true);
+        setCurrentTime(newPosition);
+      }
     } catch (err) {
       console.error('Error skipping backward:', err);
     }
@@ -295,7 +319,11 @@ export default function AudioOnlyVideoPlayer({
     if (!playerReady || !playerRef.current) return;
     
     try {
-      await playerRef.current.seekTo(value, true);
+      if (Platform.OS === 'web') {
+        playerRef.current.injectJavaScript(`window.seekTo(${value});`);
+      } else {
+        await playerRef.current.seekTo(value, true);
+      }
       setIsSeeking(false);
     } catch (err) {
       console.error('Error seeking:', err);
@@ -336,19 +364,120 @@ export default function AudioOnlyVideoPlayer({
   return (
     <View style={styles.container}>
       <View style={styles.artworkContainer}>
-        <View style={styles.hiddenPlayerWrapper}>
-          <YoutubePlayer
-            ref={playerRef}
-            videoId={videoId}
-            height={300}
-            width={300}
-            play={isPlaying}
-            onReady={onPlayerReady}
-            onError={onPlayerError}
-            onChangeState={onStateChange}
-            webViewStyle={{ opacity: 0 }}
-          />
-        </View>
+        {Platform.OS === 'web' ? (
+          <View style={styles.hiddenPlayerWrapper}>
+            <WebView
+              ref={playerRef}
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <style>
+                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; }
+                        #player { width: 100%; height: 100%; }
+                      </style>
+                    </head>
+                    <body>
+                      <div id="player"></div>
+                      <script>
+                        var player;
+                        var tag = document.createElement('script');
+                        tag.src = "https://www.youtube.com/iframe_api";
+                        var firstScriptTag = document.getElementsByTagName('script')[0];
+                        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+                        function onYouTubeIframeAPIReady() {
+                          player = new YT.Player('player', {
+                            videoId: '${videoId}',
+                            playerVars: {
+                              autoplay: ${autoplay ? 1 : 0},
+                              controls: 0,
+                              disablekb: 1,
+                              fs: 0,
+                              modestbranding: 1,
+                              playsinline: 1
+                            },
+                            events: {
+                              onReady: function(event) {
+                                window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'ready'}));
+                                setInterval(function() {
+                                  if (player && player.getCurrentTime) {
+                                    try {
+                                      var time = player.getCurrentTime();
+                                      var duration = player.getDuration();
+                                      var state = player.getPlayerState();
+                                      window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                        type: 'progress',
+                                        currentTime: time,
+                                        duration: duration,
+                                        state: state
+                                      }));
+                                    } catch(e) {}
+                                  }
+                                }, 500);
+                              },
+                              onStateChange: function(event) {
+                                var states = {'-1': 'unstarted', '0': 'ended', '1': 'playing', '2': 'paused', '3': 'buffering', '5': 'cued'};
+                                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                                  type: 'stateChange',
+                                  state: states[event.data] || 'unknown'
+                                }));
+                              },
+                              onError: function(event) {
+                                window.ReactNativeWebView?.postMessage(JSON.stringify({type: 'error', error: event.data}));
+                              }
+                            }
+                          });
+                        }
+
+                        window.playVideo = function() { player?.playVideo(); };
+                        window.pauseVideo = function() { player?.pauseVideo(); };
+                        window.seekTo = function(seconds) { player?.seekTo(seconds, true); };
+                      </script>
+                    </body>
+                  </html>
+                `
+              }}
+              style={{ width: 300, height: 300, opacity: 0 }}
+              onMessage={(event) => {
+                try {
+                  const data = JSON.parse(event.nativeEvent.data);
+                  if (data.type === 'ready') {
+                    onPlayerReady();
+                  } else if (data.type === 'stateChange') {
+                    onStateChange(data.state);
+                  } else if (data.type === 'progress') {
+                    if (!isSeeking && data.currentTime) {
+                      setCurrentTime(data.currentTime);
+                    }
+                    if (data.duration && duration === 0) {
+                      setDuration(data.duration);
+                    }
+                  } else if (data.type === 'error') {
+                    onPlayerError('Player error');
+                  }
+                } catch (e) {
+                  console.error('Error parsing message:', e);
+                }
+              }}
+            />
+          </View>
+        ) : (
+          <View style={styles.hiddenPlayerWrapper}>
+            <YoutubePlayer
+              ref={playerRef}
+              videoId={videoId}
+              height={300}
+              width={300}
+              play={isPlaying}
+              onReady={onPlayerReady}
+              onError={onPlayerError}
+              onChangeState={onStateChange}
+              webViewStyle={{ opacity: 0 }}
+            />
+          </View>
+        )}
         
         <Animated.View style={[styles.thumbnailOverlay, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
           <Image 
