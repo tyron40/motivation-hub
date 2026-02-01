@@ -9,8 +9,10 @@ import {
   Animated,
   Dimensions,
   Linking,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import {
   Play,
   Pause,
@@ -19,6 +21,7 @@ import {
   RotateCcw,
   RotateCw,
   ExternalLink,
+  Volume2,
 } from 'lucide-react-native';
 
 // Props
@@ -64,10 +67,38 @@ export default function AudioOnlyVideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [canPlayDirectly, setCanPlayDirectly] = useState(false);
   
+  const sound = useRef<Audio.Sound | null>(null);
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
+        });
+      } catch (err) {
+        console.error('Error setting audio mode:', err);
+      }
+    };
+    setupAudio();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (sound.current) {
+        console.log('🧹 Cleaning up audio');
+        sound.current.unloadAsync();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const fetchVideoMetadata = async () => {
@@ -109,18 +140,24 @@ export default function AudioOnlyVideoPlayer({
           return hours * 3600 + minutes * 60 + seconds;
         };
 
+        const videoDuration = parseDuration(video.contentDetails.duration);
+        setDuration(videoDuration);
+
         setMetadata({
           id: video.id,
           title: video.snippet.title,
           description: video.snippet.description || '',
           thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
           channelTitle: video.snippet.channelTitle,
-          duration: parseDuration(video.contentDetails.duration),
+          duration: videoDuration,
           viewCount: parseInt(video.statistics.viewCount || '0'),
           publishedAt: video.snippet.publishedAt,
         });
 
         console.log(`✅ Audio metadata fetched:`, video.snippet.title);
+        
+        await loadAudio(videoId);
+        
         setIsLoading(false);
       } catch (err: any) {
         console.error('❌ Error fetching audio metadata:', err);
@@ -134,6 +171,74 @@ export default function AudioOnlyVideoPlayer({
       fetchVideoMetadata();
     }
   }, [videoId, onError]);
+
+  const loadAudio = async (videoId: string) => {
+    try {
+      console.log('🎵 Attempting to load audio for video:', videoId);
+      
+      if (sound.current) {
+        await sound.current.unloadAsync();
+      }
+
+      const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+      if (backendUrl) {
+        try {
+          const audioResponse = await fetch(`${backendUrl}/youtube/audio/${videoId}`);
+          if (audioResponse.ok) {
+            const audioData = await audioResponse.json();
+            if (audioData.audioUrl) {
+              console.log('✅ Got audio URL from backend:', audioData.audioUrl);
+              setAudioUrl(audioData.audioUrl);
+              
+              const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri: audioData.audioUrl },
+                { shouldPlay: autoplay, progressUpdateIntervalMillis: 500 },
+                onPlaybackStatusUpdate
+              );
+              sound.current = newSound;
+              setCanPlayDirectly(true);
+              
+              if (autoplay) {
+                setIsPlaying(true);
+              }
+              return;
+            }
+          }
+        } catch (backendError) {
+          console.log('⚠️ Backend audio extraction not available:', backendError);
+        }
+      }
+      
+      console.log('⚠️ Direct audio playback not available for this video');
+      setCanPlayDirectly(false);
+    } catch (err) {
+      console.error('❌ Error loading audio:', err);
+      setCanPlayDirectly(false);
+    }
+  };
+
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) {
+      if (status.error) {
+        console.error('Playback error:', status.error);
+        setError(`Playback error: ${status.error}`);
+      }
+      return;
+    }
+
+    setIsPlaying(status.isPlaying);
+    setCurrentTime(status.positionMillis / 1000);
+    
+    if (status.durationMillis) {
+      setDuration(status.durationMillis / 1000);
+    }
+
+    if (status.didJustFinish) {
+      console.log('🏁 Audio finished');
+      setCurrentTime(0);
+      setIsPlaying(false);
+    }
+  };
 
   useEffect(() => {
     if (isPlaying) {
@@ -149,20 +254,7 @@ export default function AudioOnlyVideoPlayer({
     }
   }, [isPlaying, rotateAnim]);
 
-  useEffect(() => {
-    if (metadata && isPlaying && !isSeeking) {
-      const interval = setInterval(() => {
-        setCurrentTime(prev => {
-          if (prev >= metadata.duration) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isPlaying, metadata, isSeeking]);
+
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -174,22 +266,62 @@ export default function AudioOnlyVideoPlayer({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
+  const handlePlayPause = async () => {
+    if (!canPlayDirectly) {
+      console.log('⚠️ Direct playback not available, opening YouTube');
+      openInYouTube();
+      return;
+    }
 
-  const handleSkipForward = () => {
-    if (metadata) {
-      setCurrentTime(Math.min(currentTime + 15, metadata.duration));
+    try {
+      if (!sound.current) {
+        console.log('⚠️ No audio loaded');
+        return;
+      }
+
+      if (isPlaying) {
+        console.log('⏸️ Pausing audio');
+        await sound.current.pauseAsync();
+      } else {
+        console.log('▶️ Playing audio');
+        await sound.current.playAsync();
+      }
+    } catch (err) {
+      console.error('Error toggling playback:', err);
     }
   };
 
-  const handleSkipBackward = () => {
-    setCurrentTime(Math.max(currentTime - 15, 0));
+  const handleSkipForward = async () => {
+    if (!canPlayDirectly || !sound.current) return;
+    
+    try {
+      const newPosition = Math.min(currentTime + 15, duration);
+      await sound.current.setPositionAsync(newPosition * 1000);
+    } catch (err) {
+      console.error('Error skipping forward:', err);
+    }
   };
 
-  const handleSliderChange = (value: number) => {
-    setCurrentTime(value);
+  const handleSkipBackward = async () => {
+    if (!canPlayDirectly || !sound.current) return;
+    
+    try {
+      const newPosition = Math.max(currentTime - 15, 0);
+      await sound.current.setPositionAsync(newPosition * 1000);
+    } catch (err) {
+      console.error('Error skipping backward:', err);
+    }
+  };
+
+  const handleSliderChange = async (value: number) => {
+    if (!canPlayDirectly || !sound.current) return;
+    
+    try {
+      await sound.current.setPositionAsync(value * 1000);
+      setCurrentTime(value);
+    } catch (err) {
+      console.error('Error seeking:', err);
+    }
   };
 
   const openInYouTube = () => {
@@ -243,25 +375,32 @@ export default function AudioOnlyVideoPlayer({
         <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
       </View>
 
+      {!canPlayDirectly && (
+        <View style={styles.warningBanner}>
+          <Volume2 size={16} color="#f59e0b" />
+          <Text style={styles.warningText}>Audio extraction not available. Tap play to open in YouTube.</Text>
+        </View>
+      )}
+
       <View style={styles.progressSection}>
         <Slider
           style={styles.slider}
           minimumValue={0}
-          maximumValue={metadata.duration}
+          maximumValue={duration}
           value={currentTime}
           onValueChange={handleSliderChange}
           onSlidingStart={() => setIsSeeking(true)}
           onSlidingComplete={(value) => {
             setIsSeeking(false);
-            setCurrentTime(value);
           }}
           minimumTrackTintColor="#667eea"
           maximumTrackTintColor="rgba(255,255,255,0.2)"
           thumbTintColor="#FFFFFF"
+          disabled={!canPlayDirectly}
         />
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>{formatDuration(currentTime)}</Text>
-          <Text style={styles.timeText}>{formatDuration(metadata.duration)}</Text>
+          <Text style={styles.timeText}>{formatDuration(duration)}</Text>
         </View>
       </View>
 
@@ -473,5 +612,25 @@ const styles = StyleSheet.create({
     color: '#667eea',
     fontWeight: '600',
     fontSize: 14,
+  },
+
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+
+  warningText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
