@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { Audio, AVPlaybackStatus } from 'expo-av';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import {
   Play,
   Pause,
@@ -21,7 +21,6 @@ import {
   RotateCcw,
   RotateCw,
   ExternalLink,
-  Volume2,
 } from 'lucide-react-native';
 
 // Props
@@ -69,33 +68,17 @@ export default function AudioOnlyVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [canPlayDirectly, setCanPlayDirectly] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
   
-  const sound = useRef<Audio.Sound | null>(null);
+  const playerRef = useRef<any>(null);
+  const progressInterval = useRef<any>(null);
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const setupAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
-      } catch (err) {
-        console.error('Error setting audio mode:', err);
-      }
-    };
-    setupAudio();
-  }, []);
-
-  useEffect(() => {
     return () => {
-      if (sound.current) {
-        console.log('🧹 Cleaning up audio');
-        sound.current.unloadAsync();
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
       }
     };
   }, []);
@@ -155,9 +138,6 @@ export default function AudioOnlyVideoPlayer({
         });
 
         console.log(`✅ Audio metadata fetched:`, video.snippet.title);
-        
-        await loadAudio(videoId);
-        
         setIsLoading(false);
       } catch (err: any) {
         console.error('❌ Error fetching audio metadata:', err);
@@ -172,71 +152,63 @@ export default function AudioOnlyVideoPlayer({
     }
   }, [videoId, onError]);
 
-  const loadAudio = async (videoId: string) => {
-    try {
-      console.log('🎵 Attempting to load audio for video:', videoId);
-      
-      if (sound.current) {
-        await sound.current.unloadAsync();
-      }
+  const onPlayerReady = useCallback(() => {
+    console.log('✅ YouTube player ready');
+    setPlayerReady(true);
+    setError(null);
+    
+    if (playerRef.current) {
+      playerRef.current.getDuration().then((dur: number) => {
+        console.log('📊 Video duration:', dur);
+        setDuration(dur);
+      });
+    }
+  }, []);
 
-      const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-      if (backendUrl) {
+  const onPlayerError = useCallback((errorMsg: string) => {
+    console.error('❌ YouTube player error:', errorMsg);
+    setError('Failed to load video');
+    setPlayerReady(false);
+  }, []);
+
+  const onStateChange = useCallback((state: string) => {
+    console.log('🎬 Player state:', state);
+    
+    if (state === 'playing') {
+      setIsPlaying(true);
+      startProgressTracking();
+    } else if (state === 'paused' || state === 'ended') {
+      setIsPlaying(false);
+      stopProgressTracking();
+      
+      if (state === 'ended') {
+        console.log('🏁 Video ended');
+        setCurrentTime(0);
+      }
+    }
+  }, []);
+
+  const startProgressTracking = () => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+    
+    progressInterval.current = setInterval(async () => {
+      if (playerRef.current && !isSeeking) {
         try {
-          const audioResponse = await fetch(`${backendUrl}/youtube/audio/${videoId}`);
-          if (audioResponse.ok) {
-            const audioData = await audioResponse.json();
-            if (audioData.audioUrl) {
-              console.log('✅ Got audio URL from backend:', audioData.audioUrl);
-              setAudioUrl(audioData.audioUrl);
-              
-              const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: audioData.audioUrl },
-                { shouldPlay: autoplay, progressUpdateIntervalMillis: 500 },
-                onPlaybackStatusUpdate
-              );
-              sound.current = newSound;
-              setCanPlayDirectly(true);
-              
-              if (autoplay) {
-                setIsPlaying(true);
-              }
-              return;
-            }
-          }
-        } catch (backendError) {
-          console.log('⚠️ Backend audio extraction not available:', backendError);
+          const time = await playerRef.current.getCurrentTime();
+          setCurrentTime(time);
+        } catch (err) {
+          console.error('Error getting current time:', err);
         }
       }
-      
-      console.log('⚠️ Direct audio playback not available for this video');
-      setCanPlayDirectly(false);
-    } catch (err) {
-      console.error('❌ Error loading audio:', err);
-      setCanPlayDirectly(false);
-    }
+    }, 500);
   };
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) {
-      if (status.error) {
-        console.error('Playback error:', status.error);
-        setError(`Playback error: ${status.error}`);
-      }
-      return;
-    }
-
-    setIsPlaying(status.isPlaying);
-    setCurrentTime(status.positionMillis / 1000);
-    
-    if (status.durationMillis) {
-      setDuration(status.durationMillis / 1000);
-    }
-
-    if (status.didJustFinish) {
-      console.log('🏁 Audio finished');
-      setCurrentTime(0);
-      setIsPlaying(false);
+  const stopProgressTracking = () => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
     }
   };
 
@@ -267,24 +239,19 @@ export default function AudioOnlyVideoPlayer({
   };
 
   const handlePlayPause = async () => {
-    if (!canPlayDirectly) {
-      console.log('⚠️ Direct playback not available, opening YouTube');
+    if (!playerReady || !playerRef.current) {
+      console.log('⚠️ Player not ready, opening YouTube');
       openInYouTube();
       return;
     }
 
     try {
-      if (!sound.current) {
-        console.log('⚠️ No audio loaded');
-        return;
-      }
-
       if (isPlaying) {
-        console.log('⏸️ Pausing audio');
-        await sound.current.pauseAsync();
+        console.log('⏸️ Pausing video');
+        await playerRef.current.pauseVideo();
       } else {
-        console.log('▶️ Playing audio');
-        await sound.current.playAsync();
+        console.log('▶️ Playing video');
+        await playerRef.current.playVideo();
       }
     } catch (err) {
       console.error('Error toggling playback:', err);
@@ -292,35 +259,44 @@ export default function AudioOnlyVideoPlayer({
   };
 
   const handleSkipForward = async () => {
-    if (!canPlayDirectly || !sound.current) return;
+    if (!playerReady || !playerRef.current) return;
     
     try {
       const newPosition = Math.min(currentTime + 15, duration);
-      await sound.current.setPositionAsync(newPosition * 1000);
+      await playerRef.current.seekTo(newPosition, true);
+      setCurrentTime(newPosition);
     } catch (err) {
       console.error('Error skipping forward:', err);
     }
   };
 
   const handleSkipBackward = async () => {
-    if (!canPlayDirectly || !sound.current) return;
+    if (!playerReady || !playerRef.current) return;
     
     try {
       const newPosition = Math.max(currentTime - 15, 0);
-      await sound.current.setPositionAsync(newPosition * 1000);
+      await playerRef.current.seekTo(newPosition, true);
+      setCurrentTime(newPosition);
     } catch (err) {
       console.error('Error skipping backward:', err);
     }
   };
 
   const handleSliderChange = async (value: number) => {
-    if (!canPlayDirectly || !sound.current) return;
+    if (!playerReady || !playerRef.current) return;
+    
+    setCurrentTime(value);
+  };
+
+  const handleSliderComplete = async (value: number) => {
+    if (!playerReady || !playerRef.current) return;
     
     try {
-      await sound.current.setPositionAsync(value * 1000);
-      setCurrentTime(value);
+      await playerRef.current.seekTo(value, true);
+      setIsSeeking(false);
     } catch (err) {
       console.error('Error seeking:', err);
+      setIsSeeking(false);
     }
   };
 
@@ -363,6 +339,20 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
+      <View style={styles.hiddenPlayer}>
+        <YoutubePlayer
+          ref={playerRef}
+          videoId={videoId}
+          height={1}
+          width={1}
+          play={autoplay}
+          onReady={onPlayerReady}
+          onError={onPlayerError}
+          onChangeState={onStateChange}
+          webViewStyle={{ opacity: 0 }}
+        />
+      </View>
+
       <Animated.View style={[styles.artworkContainer, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
         <Image 
           source={{ uri: metadata.thumbnail || thumbnail }} 
@@ -375,13 +365,6 @@ export default function AudioOnlyVideoPlayer({
         <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
       </View>
 
-      {!canPlayDirectly && (
-        <View style={styles.warningBanner}>
-          <Volume2 size={16} color="#f59e0b" />
-          <Text style={styles.warningText}>Audio extraction not available. Tap play to open in YouTube.</Text>
-        </View>
-      )}
-
       <View style={styles.progressSection}>
         <Slider
           style={styles.slider}
@@ -390,13 +373,11 @@ export default function AudioOnlyVideoPlayer({
           value={currentTime}
           onValueChange={handleSliderChange}
           onSlidingStart={() => setIsSeeking(true)}
-          onSlidingComplete={(value) => {
-            setIsSeeking(false);
-          }}
+          onSlidingComplete={handleSliderComplete}
           minimumTrackTintColor="#667eea"
           maximumTrackTintColor="rgba(255,255,255,0.2)"
           thumbTintColor="#FFFFFF"
-          disabled={!canPlayDirectly}
+          disabled={!playerReady}
         />
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>{formatDuration(currentTime)}</Text>
@@ -614,23 +595,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
-
-  warningText: {
-    flex: 1,
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    lineHeight: 18,
+  hiddenPlayer: {
+    position: 'absolute',
+    top: -9999,
+    left: -9999,
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
 });
