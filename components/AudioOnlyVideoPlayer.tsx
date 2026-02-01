@@ -161,8 +161,16 @@ export default function AudioOnlyVideoPlayer({
         console.log('📊 Video duration:', dur);
         setDuration(dur);
       });
+      
+      if (autoplay) {
+        console.log('🔊 Autoplay enabled - starting playback');
+        setTimeout(() => {
+          playerRef.current?.playVideo();
+          setIsPlaying(true);
+        }, 300);
+      }
     }
-  }, []);
+  }, [autoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('❌ YouTube player error:', errorMsg);
