@@ -249,7 +249,7 @@ export default function AudioOnlyVideoPlayer({
       return;
     }
 
-    if (!playerReady) {
+    if (!playerReady || !playerRef.current) {
       console.log('⚠️ Player not ready yet');
       return;
     }
@@ -257,10 +257,10 @@ export default function AudioOnlyVideoPlayer({
     try {
       if (isPlaying) {
         console.log('⏸️ Pausing video');
-        setIsPlaying(false);
+        await playerRef.current.pauseVideo();
       } else {
         console.log('▶️ Playing video');
-        setIsPlaying(true);
+        await playerRef.current.playVideo();
       }
     } catch (err) {
       console.error('Error toggling playback:', err);
@@ -347,7 +347,7 @@ export default function AudioOnlyVideoPlayer({
             videoId={videoId}
             height={width * 0.75}
             width={width * 0.75}
-            play={isPlaying}
+            play={false}
             onReady={onPlayerReady}
             onError={onPlayerError}
             onChangeState={onStateChange}
@@ -357,6 +357,7 @@ export default function AudioOnlyVideoPlayer({
               modestbranding: true,
               rel: false,
               playsinline: true,
+              preventFullScreen: true,
             }}
           />
         </View>
