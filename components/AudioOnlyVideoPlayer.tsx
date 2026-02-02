@@ -243,12 +243,6 @@ export default function AudioOnlyVideoPlayer({
   }, [videoId]);
 
   const handlePlayPause = async () => {
-    if (!playerReady || !playerRef.current) {
-      console.log('⚠️ Player not ready, opening in YouTube app');
-      openInYouTube();
-      return;
-    }
-
     if (playerError) {
       console.log('⚠️ Player error, opening in YouTube app');
       openInYouTube();
@@ -265,7 +259,6 @@ export default function AudioOnlyVideoPlayer({
       }
     } catch (err) {
       console.error('Error toggling playback:', err);
-      openInYouTube();
     }
   };
 
