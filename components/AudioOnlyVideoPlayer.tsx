@@ -493,7 +493,7 @@ export default function AudioOnlyVideoPlayer({
                   </html>
                 `
               }}
-              style={{ width: 300, height: 300 }}
+              style={{ width: 1, height: 1 }}
               javaScriptEnabled={true}
               domStorageEnabled={true}
               mediaPlaybackRequiresUserAction={false}
@@ -559,8 +559,8 @@ export default function AudioOnlyVideoPlayer({
             <YoutubePlayer
               ref={playerRef}
               videoId={videoId}
-              height={300}
-              width={300}
+              height={1}
+              width={1}
               play={isPlaying}
               onReady={onPlayerReady}
               onError={onPlayerError}
@@ -662,23 +662,17 @@ const styles = StyleSheet.create({
 
   hiddenPlayerWrapper: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
+    top: -9999,
+    left: -9999,
+    width: 1,
+    height: 1,
     opacity: 0,
-    zIndex: 1,
+    zIndex: -1,
   },
 
   thumbnailOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2,
+    width: '100%',
+    height: '100%',
   },
 
   artwork: {
