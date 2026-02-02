@@ -242,29 +242,20 @@ export default function AudioOnlyVideoPlayer({
     });
   }, [videoId]);
 
-  const handlePlayPause = async () => {
+  const handlePlayPause = () => {
     if (playerError) {
       console.log('⚠️ Player error, opening in YouTube app');
       openInYouTube();
       return;
     }
 
-    if (!playerReady || !playerRef.current) {
+    if (!playerReady) {
       console.log('⚠️ Player not ready yet');
       return;
     }
 
-    try {
-      if (isPlaying) {
-        console.log('⏸️ Pausing video');
-        await playerRef.current.pauseVideo();
-      } else {
-        console.log('▶️ Playing video');
-        await playerRef.current.playVideo();
-      }
-    } catch (err) {
-      console.error('Error toggling playback:', err);
-    }
+    console.log(isPlaying ? '⏸️ Pausing video' : '▶️ Playing video');
+    setIsPlaying(!isPlaying);
   };
 
   const handleSkipForward = async () => {
@@ -347,7 +338,7 @@ export default function AudioOnlyVideoPlayer({
             videoId={videoId}
             height={width * 0.75}
             width={width * 0.75}
-            play={false}
+            play={isPlaying}
             onReady={onPlayerReady}
             onError={onPlayerError}
             onChangeState={onStateChange}
