@@ -249,6 +249,11 @@ export default function AudioOnlyVideoPlayer({
       return;
     }
 
+    if (!playerReady) {
+      console.log('⚠️ Player not ready yet');
+      return;
+    }
+
     try {
       if (isPlaying) {
         console.log('⏸️ Pausing video');
@@ -335,32 +340,39 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
-      <View style={styles.hiddenPlayerWrapper}>
-        <YoutubePlayer
-          ref={playerRef}
-          videoId={videoId}
-          height={1}
-          width={1}
-          play={isPlaying}
-          onReady={onPlayerReady}
-          onError={onPlayerError}
-          onChangeState={onStateChange}
-          webViewStyle={{ opacity: 0 }}
-          initialPlayerParams={{
-            controls: false,
-            modestbranding: true,
-            rel: false,
-          }}
-        />
-      </View>
-
       <View style={styles.artworkContainer}>
+        <View style={styles.ytWrapper}>
+          <YoutubePlayer
+            ref={playerRef}
+            videoId={videoId}
+            height={width * 0.75}
+            width={width * 0.75}
+            play={isPlaying}
+            onReady={onPlayerReady}
+            onError={onPlayerError}
+            onChangeState={onStateChange}
+            webViewStyle={{ opacity: 0.01 }}
+            initialPlayerParams={{
+              controls: false,
+              modestbranding: true,
+              rel: false,
+              playsinline: true,
+            }}
+          />
+        </View>
+
         <Animated.View style={[styles.thumbnailOverlay, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
           <Image 
             source={{ uri: metadata.thumbnail || thumbnail }} 
             style={styles.artwork} 
           />
         </Animated.View>
+
+        {!isPlaying && (
+          <View style={styles.playOverlayIcon}>
+            <Play size={60} color="#FFFFFF" fill="rgba(0,0,0,0.6)" />
+          </View>
+        )}
       </View>
 
       <View style={styles.infoSection}>
@@ -434,16 +446,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  hiddenPlayerWrapper: {
-    position: 'absolute',
-    top: -9999,
-    left: -9999,
-    width: 1,
-    height: 1,
-    opacity: 0,
-    zIndex: -1,
-  },
-
   artworkContainer: {
     width: width * 0.75,
     height: width * 0.75,
@@ -458,11 +460,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
+    position: 'relative',
+  },
+
+  ytWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.01,
   },
 
   thumbnailOverlay: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  playOverlayIcon: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   artwork: {
