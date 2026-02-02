@@ -68,6 +68,7 @@ export default function AudioOnlyVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
+  const webReadyTimeout = useRef<any>(null);
   
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
@@ -77,6 +78,9 @@ export default function AudioOnlyVideoPlayer({
     return () => {
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
+      }
+      if (webReadyTimeout.current) {
+        clearTimeout(webReadyTimeout.current);
       }
     };
   }, []);
@@ -155,7 +159,7 @@ export default function AudioOnlyVideoPlayer({
     setPlayerReady(true);
     setError(null);
     
-    if (playerRef.current) {
+    if (Platform.OS !== 'web' && playerRef.current) {
       playerRef.current.getDuration().then((dur: number) => {
         console.log('📊 Video duration:', dur);
         setDuration(dur);
@@ -391,10 +395,13 @@ export default function AudioOnlyVideoPlayer({
 
                         function postMsg(data) {
                           try {
+                            console.log('Posting message:', data);
                             if (window.ReactNativeWebView) {
                               window.ReactNativeWebView.postMessage(JSON.stringify(data));
+                            } else if (window.parent !== window) {
+                              window.parent.postMessage(JSON.stringify(data), '*');
                             } else {
-                              window.parent.postMessage(data, '*');
+                              console.warn('No message channel available');
                             }
                           } catch(e) {
                             console.error('postMsg error:', e);
@@ -455,21 +462,30 @@ export default function AudioOnlyVideoPlayer({
                         }
 
                         window.playVideo = function() { 
-                          if (player && isReady) {
+                          console.log('playVideo called, isReady:', isReady);
+                          if (player && player.playVideo) {
                             player.playVideo(); 
-                            console.log('Play video called');
+                            console.log('Playing video');
+                          } else {
+                            console.error('Player not available', player);
                           }
                         };
                         window.pauseVideo = function() { 
-                          if (player && isReady) {
+                          console.log('pauseVideo called, isReady:', isReady);
+                          if (player && player.pauseVideo) {
                             player.pauseVideo(); 
-                            console.log('Pause video called');
+                            console.log('Pausing video');
+                          } else {
+                            console.error('Player not available', player);
                           }
                         };
                         window.seekTo = function(seconds) { 
-                          if (player && isReady) {
+                          console.log('seekTo called:', seconds);
+                          if (player && player.seekTo) {
                             player.seekTo(seconds, true); 
-                            console.log('Seek to:', seconds);
+                            console.log('Seeking to:', seconds);
+                          } else {
+                            console.error('Player not available', player);
                           }
                         };
                       </script>
@@ -483,6 +499,17 @@ export default function AudioOnlyVideoPlayer({
               mediaPlaybackRequiresUserAction={false}
               allowsInlineMediaPlayback={true}
               scalesPageToFit={true}
+              onLoad={() => {
+                console.log('WebView loaded, waiting for YouTube API...');
+                if (webReadyTimeout.current) {
+                  clearTimeout(webReadyTimeout.current);
+                }
+                webReadyTimeout.current = setTimeout(() => {
+                  console.log('⏱️ Timeout: Manually setting player ready');
+                  setPlayerReady(true);
+                  setError(null);
+                }, 5000);
+              }}
               onMessage={(event) => {
                 try {
                   const message = event.nativeEvent.data;
@@ -497,7 +524,10 @@ export default function AudioOnlyVideoPlayer({
                   console.log('WebView message:', data);
                   
                   if (data.type === 'ready') {
-                    console.log('✅ Player is ready');
+                    console.log('✅ Player is ready via message');
+                    if (webReadyTimeout.current) {
+                      clearTimeout(webReadyTimeout.current);
+                    }
                     onPlayerReady();
                   } else if (data.type === 'stateChange') {
                     console.log('State changed to:', data.state);
@@ -508,6 +538,11 @@ export default function AudioOnlyVideoPlayer({
                     }
                     if (data.duration && duration === 0) {
                       setDuration(data.duration);
+                    }
+                    if (data.state === 1 && !isPlaying) {
+                      setIsPlaying(true);
+                    } else if (data.state === 2 && isPlaying) {
+                      setIsPlaying(false);
                     }
                   } else if (data.type === 'error') {
                     console.error('Player error:', data.error);
