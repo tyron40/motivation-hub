@@ -8,11 +8,10 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  Platform,
+  Linking,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import YoutubePlayer from 'react-native-youtube-iframe';
-import { WebView } from 'react-native-webview';
 import {
   Play,
   Pause,
@@ -22,7 +21,6 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 
-// Props
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
   title: string;
@@ -46,10 +44,6 @@ interface VideoMetadata {
   publishedAt: string;
 }
 
-// =========================
-//     COMPONENT START
-// =========================
-
 export default function AudioOnlyVideoPlayer({
   videoId,
   title,
@@ -68,7 +62,7 @@ export default function AudioOnlyVideoPlayer({
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
-  const webReadyTimeout = useRef<any>(null);
+  const [playerError, setPlayerError] = useState(false);
   
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
@@ -78,9 +72,6 @@ export default function AudioOnlyVideoPlayer({
     return () => {
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
-      }
-      if (webReadyTimeout.current) {
-        clearTimeout(webReadyTimeout.current);
       }
     };
   }, []);
@@ -154,40 +145,13 @@ export default function AudioOnlyVideoPlayer({
     }
   }, [videoId, onError]);
 
-  const onPlayerReady = useCallback(() => {
-    console.log('✅ YouTube player ready');
-    setPlayerReady(true);
-    setError(null);
-    
-    if (Platform.OS !== 'web' && playerRef.current) {
-      playerRef.current.getDuration().then((dur: number) => {
-        console.log('📊 Video duration:', dur);
-        setDuration(dur);
-      });
-      
-      if (autoplay) {
-        console.log('🔊 Autoplay enabled - starting playback');
-        setTimeout(() => {
-          playerRef.current?.playVideo();
-          setIsPlaying(true);
-        }, 300);
-      }
-    }
-  }, [autoplay]);
-
-  const onPlayerError = useCallback((errorMsg: string) => {
-    console.error('❌ YouTube player error:', errorMsg);
-    setError('Failed to load video');
-    setPlayerReady(false);
-  }, []);
-
   const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
     }
     
     progressInterval.current = setInterval(async () => {
-      if (playerRef.current && !isSeeking) {
+      if (playerRef.current && !isSeeking && playerReady) {
         try {
           const time = await playerRef.current.getCurrentTime();
           setCurrentTime(time);
@@ -196,7 +160,7 @@ export default function AudioOnlyVideoPlayer({
         }
       }
     }, 500);
-  }, [isSeeking]);
+  }, [isSeeking, playerReady]);
 
   const stopProgressTracking = useCallback(() => {
     if (progressInterval.current) {
@@ -205,20 +169,44 @@ export default function AudioOnlyVideoPlayer({
     }
   }, []);
 
+  const onPlayerReady = useCallback(() => {
+    console.log('✅ YouTube player ready');
+    setPlayerReady(true);
+    setPlayerError(false);
+    setError(null);
+    
+    if (playerRef.current) {
+      playerRef.current.getDuration().then((dur: number) => {
+        console.log('📊 Video duration:', dur);
+        if (dur > 0) {
+          setDuration(dur);
+        }
+      }).catch((err: any) => {
+        console.error('Error getting duration:', err);
+      });
+    }
+  }, []);
+
+  const onPlayerError = useCallback((errorMsg: string) => {
+    console.error('❌ YouTube player error:', errorMsg);
+    setPlayerError(true);
+    setPlayerReady(false);
+  }, []);
+
   const onStateChange = useCallback((state: string) => {
     console.log('🎬 Player state:', state);
     
     if (state === 'playing') {
       setIsPlaying(true);
       startProgressTracking();
-    } else if (state === 'paused' || state === 'ended') {
+    } else if (state === 'paused') {
       setIsPlaying(false);
       stopProgressTracking();
-      
-      if (state === 'ended') {
-        console.log('🏁 Video ended');
-        setCurrentTime(0);
-      }
+    } else if (state === 'ended') {
+      setIsPlaying(false);
+      stopProgressTracking();
+      setCurrentTime(0);
+      console.log('🏁 Video ended');
     }
   }, [startProgressTracking, stopProgressTracking]);
 
@@ -236,8 +224,6 @@ export default function AudioOnlyVideoPlayer({
     }
   }, [isPlaying, rotateAnim]);
 
-
-
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -248,34 +234,38 @@ export default function AudioOnlyVideoPlayer({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const openInYouTube = useCallback(() => {
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log('🔗 Opening in YouTube app:', youtubeUrl);
+    Linking.openURL(youtubeUrl).catch((err) => {
+      console.error('Error opening YouTube:', err);
+    });
+  }, [videoId]);
+
   const handlePlayPause = async () => {
     if (!playerReady || !playerRef.current) {
-      console.log('⚠️ Player not ready yet');
+      console.log('⚠️ Player not ready, opening in YouTube app');
+      openInYouTube();
+      return;
+    }
+
+    if (playerError) {
+      console.log('⚠️ Player error, opening in YouTube app');
+      openInYouTube();
       return;
     }
 
     try {
-      if (Platform.OS === 'web') {
-        if (isPlaying) {
-          console.log('⏸️ Pausing video');
-          playerRef.current.injectJavaScript('window.pauseVideo();');
-          setIsPlaying(false);
-        } else {
-          console.log('▶️ Playing video');
-          playerRef.current.injectJavaScript('window.playVideo();');
-          setIsPlaying(true);
-        }
+      if (isPlaying) {
+        console.log('⏸️ Pausing video');
+        setIsPlaying(false);
       } else {
-        if (isPlaying) {
-          console.log('⏸️ Pausing video');
-          await playerRef.current.pauseVideo();
-        } else {
-          console.log('▶️ Playing video');
-          await playerRef.current.playVideo();
-        }
+        console.log('▶️ Playing video');
+        setIsPlaying(true);
       }
     } catch (err) {
       console.error('Error toggling playback:', err);
+      openInYouTube();
     }
   };
 
@@ -284,13 +274,8 @@ export default function AudioOnlyVideoPlayer({
     
     try {
       const newPosition = Math.min(currentTime + 15, duration);
-      if (Platform.OS === 'web') {
-        playerRef.current.injectJavaScript(`window.seekTo(${newPosition});`);
-        setCurrentTime(newPosition);
-      } else {
-        await playerRef.current.seekTo(newPosition, true);
-        setCurrentTime(newPosition);
-      }
+      await playerRef.current.seekTo(newPosition, true);
+      setCurrentTime(newPosition);
     } catch (err) {
       console.error('Error skipping forward:', err);
     }
@@ -301,13 +286,8 @@ export default function AudioOnlyVideoPlayer({
     
     try {
       const newPosition = Math.max(currentTime - 15, 0);
-      if (Platform.OS === 'web') {
-        playerRef.current.injectJavaScript(`window.seekTo(${newPosition});`);
-        setCurrentTime(newPosition);
-      } else {
-        await playerRef.current.seekTo(newPosition, true);
-        setCurrentTime(newPosition);
-      }
+      await playerRef.current.seekTo(newPosition, true);
+      setCurrentTime(newPosition);
     } catch (err) {
       console.error('Error skipping backward:', err);
     }
@@ -315,7 +295,6 @@ export default function AudioOnlyVideoPlayer({
 
   const handleSliderChange = async (value: number) => {
     if (!playerReady || !playerRef.current) return;
-    
     setCurrentTime(value);
   };
 
@@ -323,19 +302,13 @@ export default function AudioOnlyVideoPlayer({
     if (!playerReady || !playerRef.current) return;
     
     try {
-      if (Platform.OS === 'web') {
-        playerRef.current.injectJavaScript(`window.seekTo(${value});`);
-      } else {
-        await playerRef.current.seekTo(value, true);
-      }
+      await playerRef.current.seekTo(value, true);
       setIsSeeking(false);
     } catch (err) {
       console.error('Error seeking:', err);
       setIsSeeking(false);
     }
   };
-
-
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -359,7 +332,9 @@ export default function AudioOnlyVideoPlayer({
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Cannot load audio</Text>
           <Text style={styles.errorSub}>{error || 'Audio not found'}</Text>
-          <Text style={styles.errorHint}>Please try again or select another track</Text>
+          <TouchableOpacity onPress={openInYouTube} style={styles.openButton}>
+            <Text style={styles.openButtonText}>Open in YouTube</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -367,209 +342,26 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
+      <View style={styles.hiddenPlayerWrapper}>
+        <YoutubePlayer
+          ref={playerRef}
+          videoId={videoId}
+          height={1}
+          width={1}
+          play={isPlaying}
+          onReady={onPlayerReady}
+          onError={onPlayerError}
+          onChangeState={onStateChange}
+          webViewStyle={{ opacity: 0 }}
+          initialPlayerParams={{
+            controls: false,
+            modestbranding: true,
+            rel: false,
+          }}
+        />
+      </View>
+
       <View style={styles.artworkContainer}>
-        {Platform.OS === 'web' ? (
-          <View style={styles.hiddenPlayerWrapper}>
-            <WebView
-              ref={playerRef}
-              source={{
-                html: `
-                  <!DOCTYPE html>
-                  <html>
-                    <head>
-                      <meta name="viewport" content="width=device-width, initial-scale=1">
-                      <style>
-                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
-                        #player { width: 100%; height: 100%; }
-                      </style>
-                    </head>
-                    <body>
-                      <div id="player"></div>
-                      <script>
-                        var player;
-                        var isReady = false;
-                        var tag = document.createElement('script');
-                        tag.src = "https://www.youtube.com/iframe_api";
-                        var firstScriptTag = document.getElementsByTagName('script')[0];
-                        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-                        function postMsg(data) {
-                          try {
-                            console.log('Posting message:', data);
-                            if (window.ReactNativeWebView) {
-                              window.ReactNativeWebView.postMessage(JSON.stringify(data));
-                            } else if (window.parent !== window) {
-                              window.parent.postMessage(JSON.stringify(data), '*');
-                            } else {
-                              console.warn('No message channel available');
-                            }
-                          } catch(e) {
-                            console.error('postMsg error:', e);
-                          }
-                        }
-
-                        function onYouTubeIframeAPIReady() {
-                          console.log('YouTube API Ready');
-                          player = new YT.Player('player', {
-                            videoId: '${videoId}',
-                            playerVars: {
-                              autoplay: ${autoplay ? 1 : 0},
-                              controls: 0,
-                              disablekb: 1,
-                              fs: 0,
-                              modestbranding: 1,
-                              playsinline: 1,
-                              rel: 0
-                            },
-                            events: {
-                              onReady: function(event) {
-                                console.log('Player ready');
-                                isReady = true;
-                                postMsg({type: 'ready'});
-                                
-                                setInterval(function() {
-                                  if (isReady && player && player.getCurrentTime) {
-                                    try {
-                                      var time = player.getCurrentTime();
-                                      var duration = player.getDuration();
-                                      var state = player.getPlayerState();
-                                      postMsg({
-                                        type: 'progress',
-                                        currentTime: time,
-                                        duration: duration,
-                                        state: state
-                                      });
-                                    } catch(e) {
-                                      console.error('Progress error:', e);
-                                    }
-                                  }
-                                }, 500);
-                              },
-                              onStateChange: function(event) {
-                                console.log('State change:', event.data);
-                                var states = {'-1': 'unstarted', '0': 'ended', '1': 'playing', '2': 'paused', '3': 'buffering', '5': 'cued'};
-                                postMsg({
-                                  type: 'stateChange',
-                                  state: states[event.data] || 'unknown'
-                                });
-                              },
-                              onError: function(event) {
-                                console.error('Player error:', event.data);
-                                postMsg({type: 'error', error: event.data});
-                              }
-                            }
-                          });
-                        }
-
-                        window.playVideo = function() { 
-                          console.log('playVideo called, isReady:', isReady);
-                          if (player && player.playVideo) {
-                            player.playVideo(); 
-                            console.log('Playing video');
-                          } else {
-                            console.error('Player not available', player);
-                          }
-                        };
-                        window.pauseVideo = function() { 
-                          console.log('pauseVideo called, isReady:', isReady);
-                          if (player && player.pauseVideo) {
-                            player.pauseVideo(); 
-                            console.log('Pausing video');
-                          } else {
-                            console.error('Player not available', player);
-                          }
-                        };
-                        window.seekTo = function(seconds) { 
-                          console.log('seekTo called:', seconds);
-                          if (player && player.seekTo) {
-                            player.seekTo(seconds, true); 
-                            console.log('Seeking to:', seconds);
-                          } else {
-                            console.error('Player not available', player);
-                          }
-                        };
-                      </script>
-                    </body>
-                  </html>
-                `
-              }}
-              style={{ width: 1, height: 1 }}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              mediaPlaybackRequiresUserAction={false}
-              allowsInlineMediaPlayback={true}
-              scalesPageToFit={true}
-              onLoad={() => {
-                console.log('WebView loaded, waiting for YouTube API...');
-                if (webReadyTimeout.current) {
-                  clearTimeout(webReadyTimeout.current);
-                }
-                webReadyTimeout.current = setTimeout(() => {
-                  console.log('⏱️ Timeout: Manually setting player ready');
-                  setPlayerReady(true);
-                  setError(null);
-                }, 5000);
-              }}
-              onMessage={(event) => {
-                try {
-                  const message = event.nativeEvent.data;
-                  let data;
-                  
-                  if (typeof message === 'string') {
-                    data = JSON.parse(message);
-                  } else {
-                    data = message;
-                  }
-                  
-                  console.log('WebView message:', data);
-                  
-                  if (data.type === 'ready') {
-                    console.log('✅ Player is ready via message');
-                    if (webReadyTimeout.current) {
-                      clearTimeout(webReadyTimeout.current);
-                    }
-                    onPlayerReady();
-                  } else if (data.type === 'stateChange') {
-                    console.log('State changed to:', data.state);
-                    onStateChange(data.state);
-                  } else if (data.type === 'progress') {
-                    if (!isSeeking && data.currentTime !== undefined) {
-                      setCurrentTime(data.currentTime);
-                    }
-                    if (data.duration && duration === 0) {
-                      setDuration(data.duration);
-                    }
-                    if (data.state === 1 && !isPlaying) {
-                      setIsPlaying(true);
-                    } else if (data.state === 2 && isPlaying) {
-                      setIsPlaying(false);
-                    }
-                  } else if (data.type === 'error') {
-                    console.error('Player error:', data.error);
-                    onPlayerError('Player error: ' + data.error);
-                  }
-                } catch (e) {
-                  console.error('Error parsing message:', e, event.nativeEvent.data);
-                }
-              }}
-            />
-          </View>
-        ) : (
-          <View style={styles.hiddenPlayerWrapper}>
-            <YoutubePlayer
-              ref={playerRef}
-              videoId={videoId}
-              height={1}
-              width={1}
-              play={isPlaying}
-              onReady={onPlayerReady}
-              onError={onPlayerError}
-              onChangeState={onStateChange}
-              webViewStyle={{ opacity: 0 }}
-            />
-          </View>
-        )}
-        
         <Animated.View style={[styles.thumbnailOverlay, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
           <Image 
             source={{ uri: metadata.thumbnail || thumbnail }} 
@@ -604,11 +396,11 @@ export default function AudioOnlyVideoPlayer({
       </View>
 
       <View style={styles.controls}>
-        <TouchableOpacity onPress={onPrevious} style={styles.smallButton}>
+        <TouchableOpacity onPress={onPrevious} style={styles.smallButton} disabled={!onPrevious}>
           <SkipBack size={28} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleSkipBackward} style={styles.smallButton}>
+        <TouchableOpacity onPress={handleSkipBackward} style={styles.smallButton} disabled={!playerReady}>
           <RotateCcw size={24} color="#FFFFFF" />
           <Text style={styles.skipText}>15</Text>
         </TouchableOpacity>
@@ -621,15 +413,21 @@ export default function AudioOnlyVideoPlayer({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleSkipForward} style={styles.smallButton}>
+        <TouchableOpacity onPress={handleSkipForward} style={styles.smallButton} disabled={!playerReady}>
           <RotateCw size={24} color="#FFFFFF" />
           <Text style={styles.skipText}>15</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onNext} style={styles.smallButton}>
+        <TouchableOpacity onPress={onNext} style={styles.smallButton} disabled={!onNext}>
           <SkipForward size={28} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {playerError && (
+        <TouchableOpacity onPress={openInYouTube} style={styles.fallbackButton}>
+          <Text style={styles.fallbackText}>Player error - Tap to open in YouTube</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -641,6 +439,16 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+
+  hiddenPlayerWrapper: {
+    position: 'absolute',
+    top: -9999,
+    left: -9999,
+    width: 1,
+    height: 1,
+    opacity: 0,
+    zIndex: -1,
   },
 
   artworkContainer: {
@@ -657,17 +465,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
-    position: 'relative',
-  },
-
-  hiddenPlayerWrapper: {
-    position: 'absolute',
-    top: -9999,
-    left: -9999,
-    width: 1,
-    height: 1,
-    opacity: 0,
-    zIndex: -1,
   },
 
   thumbnailOverlay: {
@@ -689,7 +486,7 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 8,
@@ -699,7 +496,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.7)',
-    fontWeight: '500',
+    fontWeight: '500' as const,
     textAlign: 'center',
   },
 
@@ -723,7 +520,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
 
   controls: {
@@ -762,7 +559,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     fontSize: 10,
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '700' as const,
     bottom: 12,
   },
 
@@ -781,7 +578,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     color: '#ff6b6b',
-    fontWeight: '700',
+    fontWeight: '700' as const,
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -790,15 +587,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
-    marginBottom: 8,
+    marginBottom: 16,
   },
 
-  errorHint: {
+  openButton: {
+    backgroundColor: '#FF0000',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+
+  openButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+
+  fallbackButton: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255, 107, 107, 0.2)',
+    borderRadius: 8,
+  },
+
+  fallbackText: {
+    color: '#ff6b6b',
+    fontSize: 13,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-    fontStyle: 'italic',
   },
-
-
 });
