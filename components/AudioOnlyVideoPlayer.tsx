@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Animated,
   Dimensions,
   Linking,
 } from 'react-native';
@@ -49,7 +48,7 @@ export default function AudioOnlyVideoPlayer({
   title,
   thumbnail,
   channelTitle,
-  autoplay = false,
+  autoplay = true,
   onError,
   onNext,
   onPrevious
@@ -57,7 +56,7 @@ export default function AudioOnlyVideoPlayer({
   const [isLoading, setIsLoading] = useState(true);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -66,7 +65,6 @@ export default function AudioOnlyVideoPlayer({
   
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
-  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     return () => {
@@ -184,8 +182,18 @@ export default function AudioOnlyVideoPlayer({
       }).catch((err: any) => {
         console.error('Error getting duration:', err);
       });
+      
+      // Auto-play when player is ready
+      if (autoplay) {
+        console.log('🎬 Triggering auto-play');
+        // Small delay to ensure player is fully ready
+        setTimeout(() => {
+          setIsPlaying(true);
+          console.log('🎬 Auto-play state set to true');
+        }, 100);
+      }
     }
-  }, []);
+  }, [autoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('❌ YouTube player error:', errorMsg);
@@ -210,19 +218,6 @@ export default function AudioOnlyVideoPlayer({
     }
   }, [startProgressTracking, stopProgressTracking]);
 
-  useEffect(() => {
-    if (isPlaying) {
-      Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 10000,
-          useNativeDriver: true,
-        })
-      ).start();
-    } else {
-      rotateAnim.stopAnimation();
-    }
-  }, [isPlaying, rotateAnim]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -299,11 +294,6 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -332,39 +322,42 @@ export default function AudioOnlyVideoPlayer({
   return (
     <View style={styles.container}>
       <View style={styles.artworkContainer}>
-        <View style={styles.ytWrapper}>
-          <YoutubePlayer
-            ref={playerRef}
-            videoId={videoId}
-            height={width * 0.75}
-            width={width * 0.75}
-            play={isPlaying}
-            onReady={onPlayerReady}
-            onError={onPlayerError}
-            onChangeState={onStateChange}
-            webViewStyle={{ opacity: 0.01 }}
-            initialPlayerParams={{
-              controls: false,
-              modestbranding: true,
-              rel: false,
-              playsinline: true,
-              preventFullScreen: true,
-            }}
-          />
-        </View>
-
-        <Animated.View style={[styles.thumbnailOverlay, { transform: [{ rotate: isPlaying ? spin : '0deg' }] }]}>
-          <Image 
-            source={{ uri: metadata.thumbnail || thumbnail }} 
-            style={styles.artwork} 
-          />
-        </Animated.View>
-
-        {!isPlaying && (
-          <View style={styles.playOverlayIcon}>
-            <Play size={60} color="#FFFFFF" fill="rgba(0,0,0,0.6)" />
+        <TouchableOpacity 
+          style={styles.artworkTouchable}
+          onPress={handlePlayPause}
+          activeOpacity={0.8}
+        >
+          <View style={styles.ytWrapper}>
+            <YoutubePlayer
+              ref={playerRef}
+              videoId={videoId}
+              height={width * 0.75}
+              width={width * 0.75}
+              play={isPlaying}
+              onReady={onPlayerReady}
+              onError={onPlayerError}
+              onChangeState={onStateChange}
+              webViewStyle={{ opacity: 0.01 }}
+              initialPlayerParams={{
+                controls: false,
+                modestbranding: true,
+                rel: false,
+                playsinline: true,
+                preventFullScreen: true,
+              }}
+            />
           </View>
-        )}
+
+          <View 
+            style={styles.thumbnailOverlay}
+            pointerEvents="none"
+          >
+            <Image 
+              source={{ uri: metadata.thumbnail || thumbnail }} 
+              style={styles.artwork} 
+            />
+          </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.infoSection}>
@@ -453,6 +446,11 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
     position: 'relative',
+  },
+
+  artworkTouchable: {
+    width: '100%',
+    height: '100%',
   },
 
   ytWrapper: {
