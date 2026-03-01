@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./trpc/app-router";
@@ -9,7 +10,7 @@ console.log('[Backend] Hono server initializing with content.trending support');
 
 const app = new Hono();
 
-app.options("*", (c) => {
+app.options("*", (c: Context) => {
   c.header('Access-Control-Allow-Origin', '*');
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   c.header('Access-Control-Allow-Headers', '*');
@@ -26,7 +27,7 @@ app.use("*", cors({
   credentials: false,
 }));
 
-app.use("*", async (c, next) => {
+app.use("*", async (c: Context, next: Next) => {
   console.log("[Hono] Incoming request:", c.req.method, c.req.url);
   console.log("[Hono] Request path:", c.req.path);
   console.log("[Hono] Request headers:", Object.fromEntries(c.req.raw.headers.entries()));
@@ -35,7 +36,7 @@ app.use("*", async (c, next) => {
   console.log("[Hono] Response content-type:", c.res.headers.get('content-type'));
 });
 
-app.get("/", (c) => {
+app.get("/", (c: Context) => {
   console.log("[Hono] Root endpoint hit");
   return c.json({ ok: true, status: "ok", message: "API is running", timestamp: new Date().toISOString() }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -44,7 +45,7 @@ app.get("/", (c) => {
   });
 });
 
-app.get("/api", (c) => {
+app.get("/api", (c: Context) => {
   console.log("[Hono] /api endpoint hit");
   return c.json({ ok: true, status: "ok", message: "tRPC API is running", timestamp: new Date().toISOString() }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -53,7 +54,7 @@ app.get("/api", (c) => {
   });
 });
 
-app.get("/health", (c) => {
+app.get("/health", (c: Context) => {
   console.log("[Hono] Health check (no /api prefix)");
   return c.json({ 
     ok: true,
@@ -73,7 +74,7 @@ app.get("/health", (c) => {
   });
 });
 
-app.get("/api/health", (c) => {
+app.get("/api/health", (c: Context) => {
   console.log("[Hono] Health check (with /api prefix)");
   return c.json({ 
     ok: true,
@@ -93,7 +94,7 @@ app.get("/api/health", (c) => {
   });
 });
 
-app.all('/api/cron/youtube-batch', async (c) => {
+app.all('/api/cron/youtube-batch', async (c: Context) => {
   try {
     console.log('🕐 Cron job triggered: Running daily YouTube batch fetch');
     
@@ -128,13 +129,13 @@ app.all('/api/cron/youtube-batch', async (c) => {
     
     console.log('✅ Daily batch completed:', result);
     return c.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Cron job failed:', error);
-    return c.json({ error: error.message }, 500);
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
   }
 });
 
-const handleTTS = async (c: any) => {
+const handleTTS = async (c: Context) => {
   try {
     console.log("[Hono] TTS request received");
     console.log("[Hono] Request URL:", c.req.url);
@@ -189,7 +190,7 @@ const handleTTS = async (c: any) => {
 app.post("/api/tts", handleTTS);
 app.post("/tts", handleTTS);
 
-const handleChat = async (c: any) => {
+const handleChat = async (c: Context) => {
   try {
     console.log("[Hono] Chat request received");
     console.log("[Hono] Request URL:", c.req.url);
@@ -464,7 +465,7 @@ Details: ${errorDetails}`;
   }
 }
 
-const handleYouTubeCategory = async (c: any) => {
+const handleYouTubeCategory = async (c: Context) => {
   try {
     console.log('[YouTube] Category request received');
     const body = await c.req.json();
@@ -497,7 +498,7 @@ const handleYouTubeCategory = async (c: any) => {
   }
 };
 
-const handleYouTubeSearch = async (c: any) => {
+const handleYouTubeSearch = async (c: Context) => {
   try {
     console.log('[YouTube] Search request received');
     const body = await c.req.json();
@@ -524,7 +525,7 @@ const handleYouTubeSearch = async (c: any) => {
   }
 };
 
-const handleYouTubeTrending = async (c: any) => {
+const handleYouTubeTrending = async (c: Context) => {
   try {
     console.log('[YouTube] Trending request received');
     const body = await c.req.json();
@@ -563,7 +564,7 @@ app.post('/youtube/search', handleYouTubeSearch);
 app.post('/api/youtube/trending', handleYouTubeTrending);
 app.post('/youtube/trending', handleYouTubeTrending);
 
-app.all("/trpc/*", async (c) => {
+app.all("/trpc/*", async (c: Context) => {
   console.log("[Hono] tRPC request:", c.req.method, c.req.url);
   try {
     const response = await fetchRequestHandler({
@@ -580,7 +581,7 @@ app.all("/trpc/*", async (c) => {
   }
 });
 
-app.all("/api/trpc/*", async (c) => {
+app.all("/api/trpc/*", async (c: Context) => {
   console.log("[Hono] tRPC request (with /api prefix):", c.req.method, c.req.url);
   try {
     const response = await fetchRequestHandler({
@@ -597,12 +598,12 @@ app.all("/api/trpc/*", async (c) => {
   }
 });
 
-app.notFound((c) => {
+app.notFound((c: Context) => {
   console.log("[Hono] 404 Not Found:", c.req.method, c.req.url);
   return c.json({ error: "Not Found", path: c.req.path, method: c.req.method }, 404);
 });
 
-app.onError((err, c) => {
+app.onError((err: Error, c: Context) => {
   console.error("[Hono] Unhandled error:", err);
   return c.json({ 
     error: "Internal Server Error", 

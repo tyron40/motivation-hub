@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
@@ -122,7 +122,7 @@ export default function VoiceCoachScreen() {
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
           { shouldPlay: true },
-          (status) => {
+          (status: AVPlaybackStatus) => {
             if (status.isLoaded && status.didJustFinish) {
               console.log('✅ TTS playback finished');
               setIsPlaying(false);
@@ -1165,7 +1165,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
     if (isPlaying) {
       try {
         if (Platform.OS !== 'web') {
-          const Speech = await import('expo-speech');
+          const Speech = await import('expo-speech') as any;
           await Speech.stop();
         } else {
           if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {

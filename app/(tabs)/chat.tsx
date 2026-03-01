@@ -22,7 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { Audio } from 'expo-av';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
@@ -117,7 +117,7 @@ export default function ChatScreen() {
       
       setSound(newSound);
       
-      newSound.setOnPlaybackStatusUpdate((status) => {
+      newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
         if (status.isLoaded && status.didJustFinish) {
           setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
         }
@@ -645,13 +645,13 @@ export default function ChatScreen() {
     return () => {
       if (recording) {
         console.log('🧹 Cleaning up recording on unmount');
-        recording.stopAndUnloadAsync().catch(err => 
+        recording.stopAndUnloadAsync().catch((err: unknown) => 
           console.error('Error cleaning up recording:', err)
         );
       }
       if (sound) {
         console.log('🧹 Cleaning up sound on unmount');
-        sound.unloadAsync().catch(err => 
+        sound.unloadAsync().catch((err: unknown) => 
           console.error('Error cleaning up sound:', err)
         );
       }
