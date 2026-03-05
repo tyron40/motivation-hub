@@ -236,6 +236,13 @@ function RootLayoutNav() {
                 headerShown: true,
               }} 
             />
+            <Stack.Screen 
+              name="church-motivation" 
+              options={{ 
+                title: 'Church Motivation',
+                headerShown: true,
+              }} 
+            />
           </>
         ) : (
           <Stack.Screen 

@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play } from 'lucide-react-native';
+import { Play, Sparkles, Church } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { EarnCreditsCard } from '@/components/EarnCreditsCard';
@@ -19,10 +19,13 @@ import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
+import { useUserProfile } from '@/hooks/user-profile-context';
+import { motivationalFlyers } from '@/mocks/motivationalFlyers';
 
 export default function HomeScreen() {
   const speechContext = useSpeechContext();
   const { colors } = useTheme();
+  const { profile } = useUserProfile();
   const insets = useSafeAreaInsets();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   
@@ -146,6 +149,60 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Motivation Flyers</Text>
+              <Sparkles size={16} color={colors.primary} />
+            </View>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={motivationalFlyers}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.flyersList}
+              renderItem={({ item }) => (
+                <View style={styles.flyerCard} testID={`flyer-card-${item.id}`}>
+                  <View style={styles.flyerImageWrap}>
+                    <View style={[styles.flyerAccent, { backgroundColor: item.accent }]} />
+                    <SpeechCard
+                      speech={{
+                        id: item.id,
+                        title: item.title,
+                        speaker: 'Motivation Hub',
+                        duration: 60,
+                        category: 'Flyers',
+                        imageUrl: item.imageUrl,
+                        description: item.quote,
+                      }}
+                      onPress={() => {}}
+                      onFavorite={() => {}}
+                    />
+                  </View>
+                  <Text style={styles.flyerQuote}>{item.quote}</Text>
+                </View>
+              )}
+            />
+          </View>
+
+          {profile.includeChurchMotivation && (
+            <View style={styles.section}>
+              <TouchableOpacity
+                testID="church-motivation-cta"
+                style={styles.churchCta}
+                onPress={() => router.push('/church-motivation')}
+              >
+                <View style={styles.churchCtaLeft}>
+                  <Church size={20} color={colors.categories.success} />
+                  <View>
+                    <Text style={styles.churchCtaTitle}>Church Motivation</Text>
+                    <Text style={styles.churchCtaText}>Open faith-based encouragement from YouTube</Text>
+                  </View>
+                </View>
+                <Play size={16} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Categories</Text>
             <FlatList
               horizontal
@@ -237,6 +294,72 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   section: {
     marginTop: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  flyersList: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  flyerCard: {
+    width: 300,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingBottom: 12,
+    overflow: 'hidden' as const,
+  },
+  flyerImageWrap: {
+    position: 'relative' as const,
+  },
+  flyerAccent: {
+    position: 'absolute' as const,
+    top: 14,
+    right: 14,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    zIndex: 2,
+  },
+  flyerQuote: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 12,
+    marginTop: 4,
+  },
+  churchCta: {
+    marginHorizontal: 20,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  churchCtaLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  churchCtaTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700' as const,
+  },
+  churchCtaText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
   },
   sectionTitle: {
     color: colors.text,

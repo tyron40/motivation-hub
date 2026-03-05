@@ -6,6 +6,7 @@ interface UserProfile {
   name: string;
   preferredVoice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
   voiceEnabled: boolean;
+  includeChurchMotivation: boolean;
   profileImageUri?: string;
   coachCharacter?: {
     id: string;
@@ -20,6 +21,7 @@ const defaultProfile: UserProfile = {
   name: '',
   preferredVoice: 'alloy',
   voiceEnabled: true,
+  includeChurchMotivation: false,
 };
 
 export const [UserProfileProvider, useUserProfile] = createContextHook(() => {

@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Image as ImageIcon, Activity } from 'lucide-react-native';
+import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -327,6 +327,17 @@ function ProfileContent() {
               <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/church-motivation')}
+            >
+              <View style={styles.menuItemLeft}>
+                <Church color={colors.categories.success} size={20} />
+                <Text style={styles.menuItemText}>Church Motivation</Text>
+              </View>
+              <ChevronRight color={colors.textSecondary} size={20} />
+            </TouchableOpacity>
+
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={() => router.push('/settings')}

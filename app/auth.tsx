@@ -14,8 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/auth-context';
+import { useUserProfile } from '@/hooks/user-profile-context';
 import { router } from 'expo-router';
-import { Eye, EyeOff, Mail, Lock, User, Mic, BookOpen, MessageCircle, ArrowRight } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, Mic, BookOpen, MessageCircle, ArrowRight, Church } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 type Screen = 'landing' | 'signin' | 'signup';
@@ -26,10 +27,12 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [includeChurchMotivation, setIncludeChurchMotivation] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
   const { signIn, signUp, continueAsGuest } = useAuth();
+  const { updateProfile } = useUserProfile();
 
   React.useEffect(() => {
     fadeAnim.setValue(0);
@@ -87,6 +90,10 @@ export default function AuthScreen() {
         );
       } else {
         if (currentScreen === 'signup') {
+          await updateProfile({
+            name: name.trim(),
+            includeChurchMotivation,
+          });
           Alert.alert(
             'Success',
             'Account created successfully! Please check your email to verify your account.',
@@ -109,6 +116,7 @@ export default function AuthScreen() {
     setPassword('');
     setName('');
     setShowPassword(false);
+    setIncludeChurchMotivation(false);
   };
 
   const navigateToScreen = (screen: Screen) => {
@@ -300,6 +308,26 @@ export default function AuthScreen() {
                       )}
                     </TouchableOpacity>
                   </View>
+
+                  {currentScreen === 'signup' && (
+                    <TouchableOpacity
+                      testID="church-motivation-opt-in"
+                      style={styles.preferenceCard}
+                      onPress={() => setIncludeChurchMotivation((prev) => !prev)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.preferenceLeft}>
+                        <Church color={includeChurchMotivation ? '#FFD700' : '#8B8B9A'} size={18} />
+                        <View>
+                          <Text style={styles.preferenceTitle}>Include Church Motivation</Text>
+                          <Text style={styles.preferenceText}>Show faith-based motivation content</Text>
+                        </View>
+                      </View>
+                      <View style={[styles.preferenceToggle, includeChurchMotivation && styles.preferenceToggleActive]}>
+                        <View style={[styles.preferenceKnob, includeChurchMotivation && styles.preferenceKnobActive]} />
+                      </View>
+                    </TouchableOpacity>
+                  )}
 
                   <TouchableOpacity
                     style={[styles.authButton, isLoading && styles.authButtonDisabled]}
@@ -566,6 +594,55 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 8,
+  },
+  preferenceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 14,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  preferenceLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  preferenceTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700' as const,
+  },
+  preferenceText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  preferenceToggle: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4B5563',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  preferenceToggleActive: {
+    backgroundColor: '#FFD700',
+  },
+  preferenceKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+  },
+  preferenceKnobActive: {
+    alignSelf: 'flex-end',
   },
   authButton: {
     backgroundColor: '#6C5CE7',
