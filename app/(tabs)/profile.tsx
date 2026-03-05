@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Switch } from 'react-native';
 import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
@@ -327,16 +328,21 @@ function ProfileContent() {
               <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/church-motivation')}
-            >
+            <View style={styles.menuItem}>
               <View style={styles.menuItemLeft}>
                 <Church color={colors.categories.success} size={20} />
-                <Text style={styles.menuItemText}>Church Motivation</Text>
+                <View>
+                  <Text style={styles.menuItemText}>Church Motivation</Text>
+                  <Text style={styles.toggleSubtext}>Show on home page</Text>
+                </View>
               </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
+              <Switch
+                value={userProfileData?.includeChurchMotivation ?? false}
+                onValueChange={(value) => updateProfile({ includeChurchMotivation: value })}
+                trackColor={{ false: colors.cardBackground, true: colors.primary + '80' }}
+                thumbColor={userProfileData?.includeChurchMotivation ? colors.primary : colors.textSecondary}
+              />
+            </View>
 
             <TouchableOpacity 
               style={styles.menuItem}
@@ -566,6 +572,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   signOutText: {
     color: '#ff6b6b',
+  },
+  toggleSubtext: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
   },
   createAccountItem: {
     borderColor: 'rgba(108, 92, 231, 0.3)',
