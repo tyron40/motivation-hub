@@ -120,13 +120,6 @@ export const auth = {
     try {
       console.log('🔐 Clearing stored session...');
       
-      // First try to sign out properly
-      try {
-        await supabase.auth.signOut({ scope: 'local' });
-      } catch (signOutError) {
-        console.warn('⚠️ Error during signOut, continuing with storage clear:', signOutError);
-      }
-      
       const storage = createStorageAdapter();
       
       // Clear all Supabase auth keys from storage

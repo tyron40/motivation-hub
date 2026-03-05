@@ -222,30 +222,34 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       
       if (authState.user?.email === 'demo@motivationhub.app') {
         console.log('🎭 Signing out demo user');
-        setAuthState({
-          user: null,
-          session: null,
-          isLoading: false,
-          isAuthenticated: false,
-        });
-        console.log('✅ Demo user signed out successfully');
-        return { error: null };
+      } else {
+        try {
+          await auth.signOut();
+        } catch (signOutError) {
+          console.warn('⚠️ Supabase signOut error (forcing clear):', signOutError);
+        }
       }
       
-      const { error } = await auth.signOut();
+      await auth.clearSession();
       
-      if (error) {
-        console.error('❌ Sign out error:', error);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { error };
-      }
+      setAuthState({
+        user: null,
+        session: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
       
       console.log('✅ User signed out successfully');
       return { error: null };
     } catch (error) {
       console.error('❌ Sign out exception:', error);
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { error };
+      setAuthState({
+        user: null,
+        session: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+      return { error: null };
     }
   }, [authState.user]);
 

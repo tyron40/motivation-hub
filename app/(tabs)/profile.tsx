@@ -356,13 +356,7 @@ function ProfileContent() {
                         text: 'Sign Out',
                         style: 'destructive',
                         onPress: async () => {
-                          const { error } = await signOut();
-                          if (error) {
-                            console.error('Sign out error:', error);
-                            Alert.alert('Error', 'Failed to sign out. Please try again.');
-                          } else {
-                            router.replace('/auth');
-                          }
+                          await signOut();
                         },
                       },
                     ]

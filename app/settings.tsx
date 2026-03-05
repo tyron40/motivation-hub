@@ -253,12 +253,7 @@ export default function SettingsScreen() {
           <TouchableOpacity
             style={[styles.settingItem, styles.signOutItem]}
             onPress={async () => {
-              const { error } = await signOut();
-              if (error) {
-                console.error('Sign out error:', error);
-              } else {
-                router.replace('/auth');
-              }
+              await signOut();
             }}
           >
             <View style={styles.settingLeft}>
@@ -502,16 +497,9 @@ export default function SettingsScreen() {
                       }
                     }
                     
-                    const { error: signOutError } = await signOut();
-                    
-                    if (signOutError) {
-                      console.error('❌ Error signing out:', signOutError);
-                      Alert.alert('Error', 'Failed to delete account. Please try again.');
-                    } else {
-                      console.log('✅ Account deleted successfully');
-                      router.replace('/auth');
-                      Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
-                    }
+                    await signOut();
+                    console.log('✅ Account deleted successfully');
+                    Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
                   } catch (error) {
                     console.error('❌ Exception deleting account:', error);
                     Alert.alert('Error', 'An unexpected error occurred. Please try again.');
