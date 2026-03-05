@@ -58,18 +58,35 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           }
         }
 
+        let validSession = session;
+
+        if (session?.user) {
+          try {
+            const { data: { user }, error: userError } = await auth.getCurrentUser();
+            if (userError || !user) {
+              console.log('🔐 Session exists but user validation failed, clearing session');
+              await auth.clearSession();
+              validSession = null;
+            }
+          } catch (validateError) {
+            console.log('🔐 Could not validate user, clearing session');
+            await auth.clearSession();
+            validSession = null;
+          }
+        }
+
         if (isMounted) {
           setAuthState({
-            user: session?.user || null,
-            session: session || null,
+            user: validSession?.user || null,
+            session: validSession || null,
             isLoading: false,
-            isAuthenticated: !!session?.user,
+            isAuthenticated: !!validSession?.user,
           });
           
-          if (session?.user) {
-            console.log('✅ User authenticated:', session.user.email);
+          if (validSession?.user) {
+            console.log('✅ User authenticated:', validSession.user.email);
           } else {
-            console.log('👤 No authenticated user');
+            console.log('👤 No authenticated user - redirecting to login');
           }
         }
       } catch (error) {
