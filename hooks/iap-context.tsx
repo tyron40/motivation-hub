@@ -40,15 +40,9 @@ const DEFAULT_ENTITLEMENTS_AUTHENTICATED: Entitlements = {
   premiumExpiresAt: null,
 };
 
-const DEFAULT_ENTITLEMENTS_GUEST: Entitlements = {
-  credits: 0,
-  isPremium: false,
-  premiumExpiresAt: null,
-};
-
 export const [IAPProvider, useIAP] = createContextHook(() => {
-  const { isGuest, isAuthenticated, user } = useAuth();
-  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_GUEST);
+  const { isAuthenticated, user } = useAuth();
+  const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
@@ -131,7 +125,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
   const loadEntitlements = useCallback(async () => {
     try {
-      console.log('📦 Loading entitlements... isGuest:', isGuest, 'isAuthenticated:', isAuthenticated, 'isDemoAccount:', isDemoAccount);
+      console.log('📦 Loading entitlements... isAuthenticated:', isAuthenticated, 'isDemoAccount:', isDemoAccount);
       
       // Grant full premium access to demo account
       if (isDemoAccount) {
@@ -142,13 +136,6 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           premiumExpiresAt: null, // Never expires
         };
         setEntitlements(premiumEntitlements);
-        return;
-      }
-      
-      if (isGuest) {
-        console.log('👤 Guest user: Setting credits to 0 and clearing storage');
-        await AsyncStorage.removeItem('entitlements');
-        setEntitlements(DEFAULT_ENTITLEMENTS_GUEST);
         return;
       }
       
@@ -169,26 +156,24 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
           setEntitlements(parsed);
         } catch (parseError) {
           console.error('❌ Error parsing entitlements:', parseError);
-          const defaultEntitlements = isGuest ? DEFAULT_ENTITLEMENTS_GUEST : DEFAULT_ENTITLEMENTS_AUTHENTICATED;
-          setEntitlements(defaultEntitlements);
+          setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
         }
-      } else if (isAuthenticated && !isGuest) {
+      } else if (isAuthenticated) {
         console.log('✅ New authenticated user: Setting default credits to 10');
         setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
       } else {
-        console.log('👤 No stored entitlements, using guest defaults');
-        setEntitlements(DEFAULT_ENTITLEMENTS_GUEST);
+        console.log('👤 No stored entitlements, using defaults');
+        setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
       }
     } catch (error) {
       console.error('❌ Error loading entitlements:', error);
-      const defaultEntitlements = isGuest ? DEFAULT_ENTITLEMENTS_GUEST : DEFAULT_ENTITLEMENTS_AUTHENTICATED;
-      setEntitlements(defaultEntitlements);
+      setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
     }
-  }, [isGuest, isAuthenticated, isDemoAccount]);
+  }, [isAuthenticated, isDemoAccount]);
 
   useEffect(() => {
     loadEntitlements();
-  }, [loadEntitlements, isGuest, isAuthenticated]);
+  }, [loadEntitlements, isAuthenticated]);
 
   const saveEntitlements = useCallback(async (newEntitlements: Entitlements) => {
     try {

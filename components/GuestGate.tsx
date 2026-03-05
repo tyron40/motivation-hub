@@ -18,9 +18,9 @@ interface GuestGateProps {
 }
 
 export function GuestGate({ children, feature }: GuestGateProps) {
-  const { isGuest } = useAuth();
+  const { isAuthenticated } = useAuth();
 
-  if (!isGuest) {
+  if (isAuthenticated) {
     return <>{children}</>;
   }
 
@@ -173,16 +173,16 @@ export function GuestGateModal({ visible, onClose, feature }: GuestGateModalProp
 }
 
 export function useGuestGate() {
-  const { isGuest } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [showModal, setShowModal] = React.useState(false);
 
   const checkAccess = React.useCallback((feature?: string): boolean => {
-    if (isGuest) {
+    if (!isAuthenticated) {
       setShowModal(true);
       return false;
     }
     return true;
-  }, [isGuest]);
+  }, [isAuthenticated]);
 
   const gateModal = React.useMemo(() => (
     <GuestGateModal
@@ -192,7 +192,7 @@ export function useGuestGate() {
     />
   ), [showModal]);
 
-  return { isGuest, checkAccess, gateModal, showGateModal: showModal, setShowGateModal: setShowModal };
+  return { isAuthenticated, checkAccess, gateModal, showGateModal: showModal, setShowGateModal: setShowModal };
 }
 
 const getStyles = (colors: any) => StyleSheet.create({

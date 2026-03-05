@@ -155,8 +155,8 @@ function ProfileContent() {
                 </View>
               </TouchableOpacity>
               <View>
-                <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Guest'}</Text>
-                <Text style={styles.subtitle}>{user?.email || 'Guest User'}</Text>
+                <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
+                <Text style={styles.subtitle}>{user?.email || ''}</Text>
               </View>
             </View>
             <TouchableOpacity 
