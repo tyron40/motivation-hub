@@ -106,7 +106,7 @@ export const getTrendingVideos = async (limit: number = 50): Promise<YouTubeVide
 
 // Get available categories
 export const getAvailableCategories = async (): Promise<string[]> => {
-  return ['Motivation', 'Success', 'Inspiration', 'Study', 'Mindset', 'High Energy', 'Daily Motivation', 'Powerful Speeches'];
+  return ['Motivation', 'Success', 'Mindset', 'Fitness', 'Study'];
 };
 
 // Convert YouTube video to Speech format

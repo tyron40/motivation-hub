@@ -24,40 +24,27 @@ export const categories: Category[] = [
   },
   {
     id: '4',
-    name: 'Inspiration',
-    icon: 'sparkles',
-    color: '#96CEB4',
-    speechCount: 22,
+    name: 'Fitness',
+    icon: 'zap',
+    color: '#FF9F43',
+    speechCount: 20,
   },
   {
     id: '5',
     name: 'Study',
-    icon: 'book',
+    icon: 'book-open',
     color: '#DDA0DD',
     speechCount: 18,
   },
-  {
-    id: '6',
-    name: 'High Energy',
-    icon: 'zap',
-    color: '#FFEAA7',
-    speechCount: 20,
-  },
-  {
-    id: '7',
-    name: 'Daily Motivation',
-    icon: 'sun',
-    color: '#FF9F43',
-    speechCount: 30,
-  },
-  {
-    id: '8',
-    name: 'Powerful Speeches',
-    icon: 'mic',
-    color: '#6C5CE7',
-    speechCount: 40,
-  },
 ];
+
+export const churchCategory: Category = {
+  id: 'church',
+  name: 'Christian Motivation',
+  icon: 'church',
+  color: '#FFD700',
+  speechCount: 30,
+};
 
 export const speeches: Speech[] = [
   {

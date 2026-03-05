@@ -11,11 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Sparkles, Church } from 'lucide-react-native';
+import { Play, Sparkles } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { EarnCreditsCard } from '@/components/EarnCreditsCard';
-import { featuredSpeech, categories, popularSpeeches } from '@/mocks/speeches';
+import { featuredSpeech, categories, popularSpeeches, churchCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
@@ -30,6 +30,16 @@ export default function HomeScreen() {
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   
   const styles = getStyles(colors);
+
+  const allCategories = React.useMemo(() => {
+    const base = categories.filter(category => 
+      category && typeof category === 'object' && category.id && category.name
+    );
+    if (profile.includeChurchMotivation) {
+      return [...base, churchCategory];
+    }
+    return base;
+  }, [profile.includeChurchMotivation]);
 
   React.useEffect(() => {
     const loadYouTubeSpeeches = async () => {
@@ -92,17 +102,12 @@ export default function HomeScreen() {
     }
   };
 
-  // Use YouTube API speeches if available, otherwise fallback to mock data
   const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : popularSpeeches;
   const displayFeatured = youtubeSpeeches.length > 0 ? youtubeSpeeches[0] : featuredSpeech;
   
-  // Safety check to ensure we have valid data
   const safeDisplaySpeeches = displaySpeeches.filter(speech => 
     speech && typeof speech === 'object' && speech.id && speech.title
-  );
-  const safeCategories = categories.filter(category => 
-    category && typeof category === 'object' && category.id && category.name
-  );
+  ).slice(0, 6);
 
   return (
     <>
@@ -183,31 +188,12 @@ export default function HomeScreen() {
             />
           </View>
 
-          {profile.includeChurchMotivation && (
-            <View style={styles.section}>
-              <TouchableOpacity
-                testID="church-motivation-cta"
-                style={styles.churchCta}
-                onPress={() => router.push('/church-motivation')}
-              >
-                <View style={styles.churchCtaLeft}>
-                  <Church size={20} color={colors.categories.success} />
-                  <View>
-                    <Text style={styles.churchCtaTitle}>Church Motivation</Text>
-                    <Text style={styles.churchCtaText}>Open faith-based encouragement from YouTube</Text>
-                  </View>
-                </View>
-                <Play size={16} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-          )}
-
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Categories</Text>
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={safeCategories}
+              data={allCategories}
               keyExtractor={(item) => String(item?.id || Math.random())}
               contentContainerStyle={styles.categoriesList}
               renderItem={({ item }) => {
@@ -334,33 +320,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 12,
     marginTop: 4,
   },
-  churchCta: {
-    marginHorizontal: 20,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-  },
-  churchCtaLeft: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 10,
-  },
-  churchCtaTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700' as const,
-  },
-  churchCtaText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
+
   sectionTitle: {
     color: colors.text,
     fontSize: 19,

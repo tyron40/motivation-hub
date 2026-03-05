@@ -17,63 +17,13 @@ interface YouTubeVideo {
   category: string;
 }
 
-const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
-  motivation: [
-    'motivational speech 2024',
-    'david goggins motivation',
-    'best motivational speech',
-    'powerful motivation',
-    'morning motivation speech',
-  ],
-  success: [
-    'success mindset speech',
-    'entrepreneur motivation',
-    'business success speech',
-    'wealth mindset',
-    'success principles',
-  ],
-  mindset: [
-    'growth mindset speech',
-    'mental toughness',
-    'champion mindset',
-    'positive thinking speech',
-    'mindset transformation',
-  ],
-  inspiration: [
-    'inspirational speech',
-    'life changing speech',
-    'inspiring stories',
-    'overcome adversity',
-    'never give up speech',
-  ],
-  study: [
-    'study motivation',
-    'focus and concentration',
-    'academic success',
-    'learning motivation',
-    'student motivation',
-  ],
-  'high energy': [
-    'high energy workout motivation',
-    'powerful pump up speech',
-    'intense workout motivation',
-    'best gym motivation',
-    'energy boost speech',
-  ],
-  'daily motivation': [
-    'daily motivation speech',
-    'morning routine motivation',
-    'daily inspiration',
-    'start your day right',
-    'daily mindset',
-  ],
-  'powerful speeches': [
-    'powerful motivational speech',
-    'life changing speech',
-    'greatest speeches',
-    'legendary speeches',
-    'iconic motivational speech',
-  ],
+const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
+  motivation: 'best motivational speech compilation 2024',
+  success: 'success mindset entrepreneur motivation speech',
+  mindset: 'growth mindset mental toughness speech',
+  fitness: 'fitness workout motivation gym speech',
+  study: 'study motivation focus concentration speech',
+  'christian motivation': 'christian motivational speech church encouragement sermon',
 };
 
 function parseDuration(duration: string): number {
@@ -337,10 +287,20 @@ export async function fetchChannelVideos(
 
 export async function fetchContentByCategory(
   category: string,
-  limit: number = 100
+  limit: number = 50
 ): Promise<YouTubeVideo[]> {
-  console.log(`📺 Fetching content from Motivation Fueled channel`);
-  return await fetchChannelVideos(MOTIVATION_CHANNEL_ID, limit);
+  const normalizedCategory = category.toLowerCase().trim();
+  const query = CATEGORY_SEARCH_QUERIES[normalizedCategory];
+  
+  if (query) {
+    console.log(`📺 Fetching YouTube videos for category "${category}" with query: "${query}"`);
+    const videos = await fetchYouTubeVideosDirect(query, limit);
+    return videos.map(v => ({ ...v, category }));
+  }
+  
+  console.log(`📺 No specific query for "${category}", using generic search`);
+  const videos = await fetchYouTubeVideosDirect(`${category} motivational speech`, limit);
+  return videos.map(v => ({ ...v, category }));
 }
 
 export async function searchYouTubeContent(

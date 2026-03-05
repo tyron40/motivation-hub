@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories } from '@/mocks/speeches';
+import { categories, churchCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
@@ -25,7 +25,8 @@ export default function CategoryScreen() {
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
   const styles = getStyles(colors);
   
-  const category = categories.find(c => c.id === id);
+  const allCategories = [...categories, churchCategory];
+  const category = allCategories.find(c => c.id === id);
   const contextSpeeches = category ? getSpeechesByCategory(category.name) : [];
   const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
 

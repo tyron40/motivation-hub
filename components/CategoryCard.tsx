@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { Sun, Trophy, Zap, Brain, Target, Heart } from 'lucide-react-native';
+import { Sun, Trophy, Zap, Brain, Target, Heart, Flame, BookOpen, Church } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { Category } from '@/types/speech';
 
@@ -16,6 +16,9 @@ const iconMap: { [key: string]: any } = {
   brain: Brain,
   target: Target,
   heart: Heart,
+  flame: Flame,
+  'book-open': BookOpen,
+  church: Church,
 };
 
 export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress }) => {
