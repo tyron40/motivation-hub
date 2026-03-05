@@ -22,6 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
+import { generateText } from '@rork-ai/toolkit-sdk';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -134,8 +135,8 @@ function ChatScreenContent() {
     try {
       console.log('🎤 Generating voice for message:', messageId);
       
-      const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
-      const apiUrl = `${API_BASE}/api/tts`;
+      const TOOLKIT_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
+      const apiUrl = `${TOOLKIT_URL}/tts/synthesize/`;
       
       console.log('🎤 Calling TTS API:', apiUrl);
       
@@ -143,7 +144,6 @@ function ChatScreenContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify({
           text: text.substring(0, 500),
@@ -360,38 +360,25 @@ function ChatScreenContent() {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
       try {
-        const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
-        const apiUrl = `${API_BASE}/api/chat`;
+        console.log('🤖 Sending chat message via generateText...');
         
-        console.log('🤖 Sending chat message to:', apiUrl);
-        
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: 'system',
-                content: `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`,
-              },
-              ...chatMessages,
-            ],
-          }),
-          signal: controller.signal,
+        const systemMessage = {
+          role: 'user' as const,
+          content: `[System instruction] You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`,
+        };
+
+        const formattedMessages = chatMessages.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        }));
+
+        const completion = await generateText({
+          messages: [systemMessage, ...formattedMessages],
         });
 
         clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        console.log('📥 Chat API response:', data);
-        const completion = data.message || data.completion;
+        console.log('📥 Chat response received, length:', completion?.length);
         
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format');
