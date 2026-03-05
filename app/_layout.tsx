@@ -158,13 +158,13 @@ function AudioPlayerWrapper() {
 }
 
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading, isGuest } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen message="Loading your motivational coach..." />;
   }
 
-  const canAccessApp = isAuthenticated || isGuest;
+  const canAccessApp = isAuthenticated;
 
   return (
     <>

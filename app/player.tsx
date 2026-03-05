@@ -15,27 +15,15 @@ import { Speech } from '@/types/speech';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
-import { useAuth } from '@/hooks/auth-context';
-import { GuestGateModal } from '@/components/GuestGate';
+
 
 export default function PlayerScreen() {
   const { colors } = useTheme();
-  const { isGuest } = useAuth();
   const { currentSpeech } = useCurrentSpeech();
   const { toggleFavorite, speeches, setCurrentSpeech } = useSpeechContext();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [showGuestGate, setShowGuestGate] = React.useState(false);
   const styles = getStyles(colors);
-
-  useEffect(() => {
-    if (isGuest) {
-      const timer = setTimeout(() => {
-        setShowGuestGate(true);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isGuest]);
 
   const handleNext = () => {
     if (!currentSpeech || !speeches || speeches.length === 0) return;
@@ -190,14 +178,6 @@ export default function PlayerScreen() {
           </View>
         </Animated.View>
       </SafeAreaView>
-      <GuestGateModal
-        visible={showGuestGate}
-        onClose={() => {
-          setShowGuestGate(false);
-          router.back();
-        }}
-        feature="play full speeches"
-      />
     </View>
   );
 }

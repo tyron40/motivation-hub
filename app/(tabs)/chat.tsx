@@ -22,7 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { GuestGate } from '@/components/GuestGate';
+
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -81,6 +81,7 @@ function ChatScreenContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [hasStartedChat, setHasStartedChat] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
 
@@ -229,6 +230,9 @@ function ChatScreenContent() {
           timestamp: new Date(msg.timestamp),
         }));
         setMessages(convertedMessages);
+        if (currentSession.messages.length > 1) {
+          setHasStartedChat(true);
+        }
         return;
       }
     };
@@ -323,6 +327,7 @@ function ChatScreenContent() {
       setInputText('');
       setIsLoading(true);
       setIsTyping(true);
+      setHasStartedChat(true);
 
       let sessionId = currentSessionId;
       if (!sessionId) {
@@ -866,7 +871,7 @@ function ChatScreenContent() {
               </Animated.View>
             )}
 
-            {messages.length === 1 && (
+            {!hasStartedChat && messages.length <= 1 && (
               <Animated.View 
                 style={[
                   styles.suggestionsContainer,
@@ -1015,11 +1020,7 @@ function ChatScreenContent() {
 }
 
 export default function ChatScreen() {
-  return (
-    <GuestGate feature="AI Chat">
-      <ChatScreenContent />
-    </GuestGate>
-  );
+  return <ChatScreenContent />;
 }
 
 interface SettingsModalProps {

@@ -20,7 +20,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
-import { GuestGate } from '@/components/GuestGate';
+
 
 interface Message {
   role: 'user' | 'assistant';
@@ -1381,11 +1381,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
 }
 
 export default function VoiceCoachScreen() {
-  return (
-    <GuestGate feature="Voice Coach">
-      <VoiceCoachContent />
-    </GuestGate>
-  );
+  return <VoiceCoachContent />;
 }
 
 const createStyles = (colors: any) => StyleSheet.create({

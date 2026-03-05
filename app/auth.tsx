@@ -31,7 +31,7 @@ export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
-  const { signIn, signUp, continueAsGuest } = useAuth();
+  const { signIn, signUp } = useAuth();
   const { updateProfile } = useUserProfile();
 
   React.useEffect(() => {
@@ -196,16 +196,6 @@ export default function AuthScreen() {
                     <Text style={styles.secondaryButtonText}>Sign In</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.guestButton}
-                    onPress={async () => {
-                      await continueAsGuest();
-                      router.replace('/(tabs)');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.guestButtonText}>Continue as Guest</Text>
-                  </TouchableOpacity>
                 </View>
               </Animated.View>
             </ScrollView>
@@ -354,16 +344,6 @@ export default function AuthScreen() {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.guestButton}
-                    onPress={async () => {
-                      await continueAsGuest();
-                      router.replace('/(tabs)');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.guestButtonText}>Continue as Guest</Text>
-                  </TouchableOpacity>
                 </View>
               </Animated.View>
             </ScrollView>

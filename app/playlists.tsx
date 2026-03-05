@@ -16,7 +16,7 @@ import { Stack, router } from 'expo-router';
 import { usePlaylists } from '@/hooks/playlist-context';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
-import { GuestGate } from '@/components/GuestGate';
+
 
 const PRESET_COLORS = [
   '#8B4513', '#10B981', '#3B82F6', '#F59E0B', 
@@ -286,11 +286,7 @@ function PlaylistsContent() {
 }
 
 export default function PlaylistsScreen() {
-  return (
-    <GuestGate feature="Playlists">
-      <PlaylistsContent />
-    </GuestGate>
-  );
+  return <PlaylistsContent />;
 }
 
 const getStyles = (colors: any) => StyleSheet.create({

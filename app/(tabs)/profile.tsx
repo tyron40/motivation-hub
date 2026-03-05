@@ -32,7 +32,7 @@ function ProfileContent() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
-  const { user, signOut, isGuest } = useAuth();
+  const { user, signOut } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
   
@@ -186,17 +186,6 @@ function ProfileContent() {
             <TouchableOpacity 
               style={styles.upgradeCard}
               onPress={() => {
-                if (isGuest) {
-                  Alert.alert(
-                    'Account Required',
-                    'Create an account to upgrade to premium and enjoy unlimited AI features, premium voices, and no ads.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Create Account', onPress: () => router.push('/auth') }
-                    ]
-                  );
-                  return;
-                }
                 setShowPaywall(true);
               }}
             >
@@ -222,7 +211,7 @@ function ProfileContent() {
             </TouchableOpacity>
           )}
 
-          {!isGuest && entitlements.isPremium && (
+          {entitlements.isPremium && (
             <View style={styles.premiumStatusCard}>
               <View style={styles.premiumStatusContent}>
                 <Sparkles color={colors.accent} size={24} />
@@ -242,23 +231,12 @@ function ProfileContent() {
                 </View>
                 <View>
                   <Text style={styles.creditsLabel}>Available Credits</Text>
-                  <Text style={styles.creditsValue}>{isGuest ? 0 : entitlements.credits}</Text>
+                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
                 </View>
               </View>
               <TouchableOpacity 
                 style={styles.buyCreditsButton}
                 onPress={() => {
-                  if (isGuest) {
-                    Alert.alert(
-                      'Account Required',
-                      'Please create an account to purchase credits. Guest users cannot buy tokens.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Create Account', onPress: () => router.push('/auth') }
-                      ]
-                    );
-                    return;
-                  }
                   setShowPaywall(true);
                 }}
               >
@@ -366,8 +344,7 @@ function ProfileContent() {
               <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
             
-            {!isGuest ? (
-              <TouchableOpacity 
+            <TouchableOpacity 
                 style={[styles.menuItem, styles.signOutItem]}
                 onPress={async () => {
                   const { error } = await signOut();
@@ -381,17 +358,6 @@ function ProfileContent() {
                   <Text style={[styles.menuItemText, styles.signOutText]}>Sign Out</Text>
                 </View>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity 
-                style={[styles.menuItem, styles.createAccountItem]}
-                onPress={() => router.push('/auth')}
-              >
-                <View style={styles.menuItemLeft}>
-                  <User size={20} color="#6C5CE7" />
-                  <Text style={[styles.menuItemText, styles.createAccountText]}>Create Account</Text>
-                </View>
-              </TouchableOpacity>
-            )}
           </View>
         </ScrollView>
       </SafeAreaView>
