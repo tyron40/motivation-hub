@@ -151,17 +151,28 @@ export default function PlayerScreen() {
           <View style={styles.bottomActions}>
             <TouchableOpacity 
               onPress={() => toggleFavorite(currentSpeech.id)} 
-              style={styles.actionButton}
+              style={[
+                styles.actionButton,
+                currentSpeech.isFavorite && styles.actionButtonActive,
+              ]}
+              activeOpacity={0.7}
             >
               <Heart 
-                color={currentSpeech.isFavorite ? '#FF3B30' : '#FFFFFF'} 
-                size={26} 
+                color={currentSpeech.isFavorite ? '#FF3B30' : 'rgba(255,255,255,0.8)'} 
+                size={22} 
                 fill={currentSpeech.isFavorite ? '#FF3B30' : 'transparent'}
-                strokeWidth={currentSpeech.isFavorite ? 0 : 2}
+                strokeWidth={currentSpeech.isFavorite ? 0 : 1.8}
               />
+              <Text style={[
+                styles.actionLabel,
+                currentSpeech.isFavorite && styles.actionLabelActive,
+              ]}>
+                {currentSpeech.isFavorite ? 'Saved' : 'Save'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Share2 color="#FFFFFF" size={24} strokeWidth={2} />
+            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
+              <Share2 color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
+              <Text style={styles.actionLabel}>Share</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -316,17 +327,29 @@ const getStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
-    marginTop: 20,
+    gap: 40,
+    marginTop: 24,
   },
   actionButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    minWidth: 80,
+  },
+  actionButtonActive: {
+    backgroundColor: 'rgba(255,59,48,0.12)',
+  },
+  actionLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontWeight: '600' as const,
+    marginTop: 6,
+    letterSpacing: 0.3,
+  },
+  actionLabelActive: {
+    color: '#FF3B30',
   },
 });

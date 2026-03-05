@@ -56,7 +56,7 @@ export default function AudioOnlyVideoPlayer({
   const [isLoading, setIsLoading] = useState(true);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -183,14 +183,15 @@ export default function AudioOnlyVideoPlayer({
         console.error('Error getting duration:', err);
       });
       
-      // Auto-play when player is ready
       if (autoplay) {
-        console.log('🎬 Triggering auto-play');
-        // Small delay to ensure player is fully ready
+        console.log('🎬 Triggering auto-play with seekTo kick');
         setTimeout(() => {
+          if (playerRef.current) {
+            playerRef.current.seekTo(0, true);
+          }
           setIsPlaying(true);
-          console.log('🎬 Auto-play state set to true');
-        }, 100);
+          console.log('🎬 Auto-play triggered');
+        }, 300);
       }
     }
   }, [autoplay]);
@@ -386,30 +387,56 @@ export default function AudioOnlyVideoPlayer({
       </View>
 
       <View style={styles.controls}>
-        <TouchableOpacity onPress={onPrevious} style={styles.smallButton} disabled={!onPrevious}>
-          <SkipBack size={28} color="#FFFFFF" fill="#FFFFFF" />
+        <TouchableOpacity 
+          onPress={onPrevious} 
+          style={[styles.navButton, !onPrevious && styles.buttonDisabled]} 
+          disabled={!onPrevious}
+          activeOpacity={0.7}
+        >
+          <SkipBack size={22} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleSkipBackward} style={styles.smallButton} disabled={!playerReady}>
-          <RotateCcw size={24} color="#FFFFFF" />
-          <Text style={styles.skipText}>15</Text>
+        <TouchableOpacity 
+          onPress={handleSkipBackward} 
+          style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
+          disabled={!playerReady}
+          activeOpacity={0.7}
+        >
+          <RotateCcw size={20} color="#FFFFFF" />
+          <Text style={styles.seekLabel}>15</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
-          {isPlaying ? (
-            <Pause size={36} color="#000000" fill="#000000" />
+        <TouchableOpacity 
+          onPress={handlePlayPause} 
+          style={styles.playButton}
+          activeOpacity={0.8}
+        >
+          {!playerReady ? (
+            <ActivityIndicator size="small" color="#000000" />
+          ) : isPlaying ? (
+            <Pause size={32} color="#000000" fill="#000000" />
           ) : (
-            <Play size={36} color="#000000" fill="#000000" />
+            <Play size={32} color="#000000" fill="#000000" style={{ marginLeft: 3 }} />
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleSkipForward} style={styles.smallButton} disabled={!playerReady}>
-          <RotateCw size={24} color="#FFFFFF" />
-          <Text style={styles.skipText}>15</Text>
+        <TouchableOpacity 
+          onPress={handleSkipForward} 
+          style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
+          disabled={!playerReady}
+          activeOpacity={0.7}
+        >
+          <RotateCw size={20} color="#FFFFFF" />
+          <Text style={styles.seekLabel}>15</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onNext} style={styles.smallButton} disabled={!onNext}>
-          <SkipForward size={28} color="#FFFFFF" fill="#FFFFFF" />
+        <TouchableOpacity 
+          onPress={onNext} 
+          style={[styles.navButton, !onNext && styles.buttonDisabled]} 
+          disabled={!onNext}
+          activeOpacity={0.7}
+        >
+          <SkipForward size={22} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -527,40 +554,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: 16,
     marginBottom: 24,
   },
 
-  smallButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  navButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
+  },
+
+  seekButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   playButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    marginHorizontal: 4,
+    elevation: 10,
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
   },
 
-  skipText: {
+  buttonDisabled: {
+    opacity: 0.35,
+  },
+
+  seekLabel: {
     position: 'absolute',
-    fontSize: 10,
+    fontSize: 9,
     color: '#FFFFFF',
-    fontWeight: '700' as const,
-    bottom: 12,
+    fontWeight: '800' as const,
+    bottom: 10,
+    letterSpacing: -0.3,
   },
 
   loadingText: {
