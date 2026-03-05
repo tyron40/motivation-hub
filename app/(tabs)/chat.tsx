@@ -22,6 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
+import { GuestGate } from '@/components/GuestGate';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -57,7 +58,7 @@ const suggestedPrompts = [
   },
 ];
 
-export default function ChatScreen() {
+function ChatScreenContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const { useCredit: deductCredit, usageStats } = useIAP();
@@ -1010,6 +1011,14 @@ export default function ChatScreen() {
       onClose={() => setShowPaywall(false)}
     />
     </>
+  );
+}
+
+export default function ChatScreen() {
+  return (
+    <GuestGate feature="AI Chat">
+      <ChatScreenContent />
+    </GuestGate>
   );
 }
 

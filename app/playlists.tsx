@@ -16,13 +16,14 @@ import { Stack, router } from 'expo-router';
 import { usePlaylists } from '@/hooks/playlist-context';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
+import { GuestGate } from '@/components/GuestGate';
 
 const PRESET_COLORS = [
   '#8B4513', '#10B981', '#3B82F6', '#F59E0B', 
   '#8B5CF6', '#EC4899', '#06B6D4', '#EF4444'
 ];
 
-export default function PlaylistsScreen() {
+function PlaylistsContent() {
   const { colors } = useTheme();
   const { playlists, createPlaylist, deletePlaylist, updatePlaylist } = usePlaylists();
   const { speeches } = useSpeechContext();
@@ -281,6 +282,14 @@ export default function PlaylistsScreen() {
         </Modal>
       </LinearGradient>
     </>
+  );
+}
+
+export default function PlaylistsScreen() {
+  return (
+    <GuestGate feature="Playlists">
+      <PlaylistsContent />
+    </GuestGate>
   );
 }
 

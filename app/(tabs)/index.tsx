@@ -22,13 +22,17 @@ import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { motivationalFlyers } from '@/mocks/motivationalFlyers';
+import { useAuth } from '@/hooks/auth-context';
+import { GuestGateModal } from '@/components/GuestGate';
 
 export default function HomeScreen() {
   const speechContext = useSpeechContext();
   const { colors } = useTheme();
   const { profile } = useUserProfile();
+  const { isGuest } = useAuth();
   const insets = useSafeAreaInsets();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
+  const [showGuestGate, setShowGuestGate] = React.useState(false);
   
   const styles = getStyles(colors);
 
@@ -83,6 +87,12 @@ export default function HomeScreen() {
     try {
       if (!speech || typeof speech !== 'object' || !speech.id) {
         console.warn('Invalid speech object:', speech);
+        return;
+      }
+
+      if (isGuest) {
+        console.log('🚫 Guest user attempted to play speech:', speech.title);
+        setShowGuestGate(true);
         return;
       }
       
@@ -232,6 +242,11 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
     </LinearGradient>
+    <GuestGateModal
+      visible={showGuestGate}
+      onClose={() => setShowGuestGate(false)}
+      feature="play speeches and access all content"
+    />
     </>
   );
 }

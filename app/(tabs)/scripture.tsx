@@ -19,6 +19,8 @@ import { useTheme } from '@/hooks/theme-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { allScriptures, Scripture } from '@/mocks/allScriptures';
 import { useScriptureFavorites } from '@/hooks/scripture-favorites-context';
+import { useAuth } from '@/hooks/auth-context';
+import { GuestGateModal } from '@/components/GuestGate';
 
 
 const categories = ['All', 'Strength', 'Hope', 'Courage', 'Faith', 'Love', 'Peace', 'Wisdom'];
@@ -29,6 +31,8 @@ export default function ScriptureScreen() {
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const { favorites, addFavorite, removeFavorite, isFavorite } = useScriptureFavorites();
+  const { isGuest } = useAuth();
+  const [showGuestGate, setShowGuestGate] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -155,6 +159,10 @@ export default function ScriptureScreen() {
   }, [searchQuery, showFavoritesOnly, selectedCategory]);
 
   const toggleFavorite = async (scripture: Scripture) => {
+    if (isGuest) {
+      setShowGuestGate(true);
+      return;
+    }
     try {
       if (isFavorite(scripture.reference)) {
         const favoriteToRemove = favorites.find(f => f.reference === scripture.reference);
@@ -300,6 +308,10 @@ Shared from Motivation Hub`;
     };
 
     const handleInspire = async () => {
+      if (isGuest) {
+        setShowGuestGate(true);
+        return;
+      }
       const id = scripture.id;
       if (!id) return;
       const current = insights[id];
@@ -573,6 +585,11 @@ Shared from Motivation Hub`;
         </ScrollView>
       </Animated.View>
     </LinearGradient>
+    <GuestGateModal
+      visible={showGuestGate}
+      onClose={() => setShowGuestGate(false)}
+      feature="save favorites and get AI insights"
+    />
     </>
   );
 }

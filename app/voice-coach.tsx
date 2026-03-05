@@ -20,6 +20,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
+import { GuestGate } from '@/components/GuestGate';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -36,7 +37,7 @@ const voiceCharacters = [
   { id: 'shimmer', name: 'Shimmer', description: 'Soft and gentle female voice' },
 ] as const;
 
-export default function VoiceCoachScreen() {
+function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const iapContext = useIAP();
@@ -1376,6 +1377,14 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+export default function VoiceCoachScreen() {
+  return (
+    <GuestGate feature="Voice Coach">
+      <VoiceCoachContent />
+    </GuestGate>
   );
 }
 
