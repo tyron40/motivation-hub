@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, Palette, DollarSign } from 'lucide-react-native';
+import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Activity, Palette, DollarSign, Church } from 'lucide-react-native';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
 import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
@@ -208,6 +208,29 @@ export default function SettingsScreen() {
               onValueChange={setDarkMode}
               trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Content</Text>
+          
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <Church size={20} color={colors.primary} />
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>Church Motivation</Text>
+                <Text style={styles.settingValue}>
+                  {profile.includeChurchMotivation ? 'Showing on home page' : 'Hidden'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={profile.includeChurchMotivation}
+              onValueChange={(value) => updateProfile({ includeChurchMotivation: value })}
+              trackColor={{ false: '#767577', true: colors.primary }}
+              thumbColor={'white'}
+              testID="church-motivation-toggle"
             />
           </View>
         </View>
