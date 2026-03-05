@@ -346,11 +346,25 @@ function ProfileContent() {
             
             <TouchableOpacity 
                 style={[styles.menuItem, styles.signOutItem]}
-                onPress={async () => {
-                  const { error } = await signOut();
-                  if (error) {
-                    console.error('Sign out error:', error);
-                  }
+                onPress={() => {
+                  Alert.alert(
+                    'Sign Out',
+                    'Are you sure you want to sign out?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Sign Out',
+                        style: 'destructive',
+                        onPress: async () => {
+                          const { error } = await signOut();
+                          if (error) {
+                            console.error('Sign out error:', error);
+                            Alert.alert('Error', 'Failed to sign out. Please try again.');
+                          }
+                        },
+                      },
+                    ]
+                  );
                 }}
               >
                 <View style={styles.menuItemLeft}>
