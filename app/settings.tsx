@@ -256,6 +256,8 @@ export default function SettingsScreen() {
               const { error } = await signOut();
               if (error) {
                 console.error('Sign out error:', error);
+              } else {
+                router.replace('/auth');
               }
             }}
           >
@@ -507,6 +509,7 @@ export default function SettingsScreen() {
                       Alert.alert('Error', 'Failed to delete account. Please try again.');
                     } else {
                       console.log('✅ Account deleted successfully');
+                      router.replace('/auth');
                       Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
                     }
                   } catch (error) {
