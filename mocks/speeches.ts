@@ -38,6 +38,36 @@ export const categories: Category[] = [
   },
 ];
 
+export const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  'Motivation': ['motivat', 'inspire', 'dream', 'never give up', 'keep going', 'grind', 'hustle', 'push', 'fuel'],
+  'Success': ['success', 'wealth', 'money', 'business', 'entrepreneur', 'rich', 'financial', 'leadership', 'win'],
+  'Mindset': ['mindset', 'mental', 'psychology', 'think', 'brain', 'habit', 'attitude', 'belief', 'focus'],
+  'Fitness': ['fitness', 'workout', 'gym', 'exercise', 'body', 'health', 'training', 'muscle', 'strength'],
+  'Study': ['study', 'learn', 'education', 'read', 'knowledge', 'school', 'focus', 'concentration', 'productivity'],
+  'Christian Motivation': ['christian', 'church', 'god', 'jesus', 'faith', 'prayer', 'sermon', 'gospel', 'bible', 'lord', 'scripture', 'worship', 'holy'],
+};
+
+export function classifyVideoToCategory(title: string, description: string): string {
+  const text = `${title} ${description}`.toLowerCase();
+  let bestCategory = 'Motivation';
+  let bestScore = 0;
+
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    let score = 0;
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        score++;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
+    }
+  }
+
+  return bestCategory;
+}
+
 export const churchCategory: Category = {
   id: 'church',
   name: 'Christian Motivation',

@@ -11,10 +11,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory } from '@/mocks/speeches';
+import { categories, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
+import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
 
 export default function CategoryScreen() {
@@ -35,17 +35,37 @@ export default function CategoryScreen() {
       if (!category || hasLoadedOnline) return;
       
       try {
-        console.log(`🔄 Loading YouTube speeches for ${category.name} from API...`);
+        console.log(`🔄 Loading content for ${category.name}...`);
         
-        const videos = await getVideosByCategory(category.name, 50);
-        console.log(`✅ Loaded ${videos.length} YouTube videos for ${category.name}`);
+        const [categoryVideos, channelVideos] = await Promise.all([
+          getVideosByCategory(category.name, 30),
+          getTrendingVideos(50),
+        ]);
         
-        const speeches: Speech[] = videos.map(video => convertVideoToSpeech(video));
+        const channelSpeeches = channelVideos
+          .map(video => {
+            const speech = convertVideoToSpeech(video);
+            const assigned = classifyVideoToCategory(speech.title, speech.description);
+            return { ...speech, category: assigned };
+          })
+          .filter(s => s.category === category.name);
         
-        setYoutubeSpeeches(speeches);
+        const categorySpeeches: Speech[] = categoryVideos.map(video => convertVideoToSpeech(video));
+        
+        const seenIds = new Set<string>();
+        const merged: Speech[] = [];
+        for (const s of [...channelSpeeches, ...categorySpeeches]) {
+          if (!seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            merged.push(s);
+          }
+        }
+        
+        console.log(`✅ Loaded ${merged.length} videos for ${category.name} (${channelSpeeches.length} from Motivation Fuel)`);
+        setYoutubeSpeeches(merged);
         setHasLoadedOnline(true);
       } catch (error) {
-        console.error(`❌ Failed to load YouTube speeches for ${category.name}:`, error);
+        console.error(`❌ Failed to load speeches for ${category.name}:`, error);
       }
     };
 

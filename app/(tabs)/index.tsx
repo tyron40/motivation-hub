@@ -7,15 +7,16 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Sparkles } from 'lucide-react-native';
+import { Play, Sparkles, Quote } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { EarnCreditsCard } from '@/components/EarnCreditsCard';
-import { featuredSpeech, categories, popularSpeeches, churchCategory } from '@/mocks/speeches';
+import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
@@ -36,7 +37,8 @@ export default function HomeScreen() {
       category && typeof category === 'object' && category.id && category.name
     );
     if (profile.includeChurchMotivation) {
-      return [...base, churchCategory];
+      const [first, ...rest] = base;
+      return [first, churchCategory, ...rest];
     }
     return base;
   }, [profile.includeChurchMotivation]);
@@ -44,11 +46,15 @@ export default function HomeScreen() {
   React.useEffect(() => {
     const loadYouTubeSpeeches = async () => {
       try {
-        console.log('🔄 Loading YouTube speeches from Vercel backend...');
+        console.log('🔄 Loading YouTube speeches from Motivation Fuel channel...');
         const videos = await getTrendingVideos(50);
         console.log(`✅ Loaded ${videos.length} YouTube videos`);
         
-        const speeches = videos.map(video => convertVideoToSpeech(video));
+        const speeches = videos.map(video => {
+          const speech = convertVideoToSpeech(video);
+          const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
+          return { ...speech, category: assignedCategory };
+        });
         
         setYoutubeSpeeches(speeches);
       } catch (error) {
@@ -165,25 +171,27 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
-                <View style={styles.flyerCard} testID={`flyer-card-${item.id}`}>
-                  <View style={styles.flyerImageWrap}>
-                    <View style={[styles.flyerAccent, { backgroundColor: item.accent }]} />
-                    <SpeechCard
-                      speech={{
-                        id: item.id,
-                        title: item.title,
-                        speaker: 'Motivation Hub',
-                        duration: 60,
-                        category: 'Flyers',
-                        imageUrl: item.imageUrl,
-                        description: item.quote,
-                      }}
-                      onPress={() => {}}
-                      onFavorite={() => {}}
-                    />
-                  </View>
-                  <Text style={styles.flyerQuote}>{item.quote}</Text>
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={styles.flyerPoster}
+                  testID={`flyer-card-${item.id}`}
+                >
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.flyerPosterImage}
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.92)']}
+                    style={styles.flyerPosterGradient}
+                  >
+                    <View style={styles.flyerQuoteRow}>
+                      <Quote size={14} color={item.accent} fill={item.accent} />
+                    </View>
+                    <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
+                    <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
+                    <Text style={styles.flyerPosterTitle}>{item.title}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               )}
             />
           </View>
@@ -290,35 +298,52 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyersList: {
     paddingHorizontal: 20,
-    gap: 12,
+    gap: 14,
   },
-  flyerCard: {
-    width: 300,
-    backgroundColor: colors.cardBackground,
+  flyerPoster: {
+    width: 220,
+    height: 300,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingBottom: 12,
     overflow: 'hidden' as const,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
-  flyerImageWrap: {
-    position: 'relative' as const,
-  },
-  flyerAccent: {
+  flyerPosterImage: {
+    width: '100%' as const,
+    height: '100%' as const,
     position: 'absolute' as const,
-    top: 14,
-    right: 14,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    zIndex: 2,
   },
-  flyerQuote: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-    paddingHorizontal: 12,
-    marginTop: 4,
+  flyerPosterGradient: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
+    padding: 16,
+  },
+  flyerQuoteRow: {
+    marginBottom: 6,
+  },
+  flyerPosterQuote: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600' as const,
+    lineHeight: 21,
+    fontStyle: 'italic' as const,
+    marginBottom: 10,
+  },
+  flyerPosterAccentLine: {
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  flyerPosterTitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.2,
   },
 
   sectionTitle: {
