@@ -2,11 +2,24 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
-import Purchases, { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import { IAPProductId, ALL_VOICES, IAP_PRODUCT_IDS } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
 const isWeb = Platform.OS === 'web';
+
+let Purchases: any = null;
+if (!isWeb) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    Purchases = require('react-native-purchases').default;
+    console.log('✅ RevenueCat SDK loaded successfully');
+  } catch {
+    console.log('📦 RevenueCat SDK not available - IAP features disabled');
+  }
+}
+
+type CustomerInfo = any;
+type PurchasesPackage = any;
 
 interface Entitlements {
   credits: number;
@@ -83,7 +96,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         if (offerings.current && offerings.current.availablePackages.length > 0) {
           setAvailablePackages(offerings.current.availablePackages);
           console.log('✅ Available packages:', offerings.current.availablePackages.length);
-          console.log('✅ Package IDs:', offerings.current.availablePackages.map(p => p.product.identifier));
+          console.log('✅ Package IDs:', offerings.current.availablePackages.map((p: any) => p.product.identifier));
         } else {
           console.warn('⚠️ No offerings found in RevenueCat');
           console.log('ℹ️ Make sure:');
