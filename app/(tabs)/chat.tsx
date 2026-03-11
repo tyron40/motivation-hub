@@ -22,7 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { sendChatMessage } from '@/lib/api-client';
 import { useAdMob } from '@/hooks/admob-context';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
@@ -369,11 +369,11 @@ function ChatScreenContent() {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
       try {
-        console.log('🤖 Sending chat message via generateText...');
+        console.log('🤖 Sending chat message via Vercel API...');
         
         const systemMessage = {
-          role: 'user' as const,
-          content: `[System instruction] You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`,
+          role: 'system' as const,
+          content: `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`,
         };
 
         const formattedMessages = chatMessages.map(msg => ({
@@ -381,12 +381,13 @@ function ChatScreenContent() {
           content: msg.content,
         }));
 
-        const completion = await generateText({
+        const result = await sendChatMessage({
           messages: [systemMessage, ...formattedMessages],
         });
 
         clearTimeout(timeoutId);
 
+        const completion = result.message;
         console.log('📥 Chat response received, length:', completion?.length);
         
         if (!completion || typeof completion !== 'string') {
