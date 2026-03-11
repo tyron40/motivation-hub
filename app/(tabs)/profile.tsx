@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, 
   Text, 
   View, 
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   Image,
   Alert,
   Platform,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
-import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity } from 'lucide-react-native';
+import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity, Crown, Zap } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -22,36 +22,39 @@ import * as ImagePicker from 'expo-image-picker';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { useSpeechContext } from '@/hooks/speech-context';
-import { SpeechCard } from '@/components/SpeechCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Speech } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function ProfileContent() {
   const { colors } = useTheme();
-  const [showFavorites, setShowFavorites] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const { user, signOut } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
+  const insets = useSafeAreaInsets();
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
   const context = useSpeechContext();
   
   const userProfile = context?.userProfile || { name: 'User', totalListeningTime: 0, favoriteCount: 0, streak: 0 };
   const favorites = context?.favorites || [];
-  const toggleFavorite = context?.toggleFavorite || ((id: string) => {});
-  const setCurrentSpeech = context?.setCurrentSpeech || ((speech: Speech | null) => {});
   
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsInitialized(true);
-    }, 500);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }, 300);
     
     return () => clearTimeout(timer);
-  }, []);
+  }, [fadeAnim]);
 
-  const formatListeningTime = (seconds: number) => {
+  const formatListeningTime = useCallback((seconds: number) => {
     try {
       const safeSeconds = Math.max(0, Number(seconds) || 0);
       const hours = Math.floor(safeSeconds / 3600);
@@ -59,323 +62,312 @@ function ProfileContent() {
       if (hours > 0) {
         return `${hours}h ${minutes}m`;
       }
-      return `${minutes} minutes`;
+      return `${minutes}m`;
     } catch (error) {
       console.error('Error formatting time:', error);
-      return '0 minutes';
+      return '0m';
     }
-  };
+  }, []);
 
-  const stats = [
-    {
-      icon: Clock,
-      label: 'Total Listening',
-      value: formatListeningTime(userProfile?.totalListeningTime || 0),
-      color: colors.categories.daily,
-    },
-    {
-      icon: Heart,
-      label: 'Favorites',
-      value: String(userProfile?.favoriteCount || 0),
-      color: colors.categories.relationships,
-    },
-    {
-      icon: Flame,
-      label: 'Day Streak',
-      value: String(userProfile?.streak || 0),
-      color: colors.categories.confidence,
-    },
-  ];
+  const handlePickImage = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Available', 'Image upload is not available on web');
+      return;
+    }
+    
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions');
+      return;
+    }
+    
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    
+    if (!result.canceled && result.assets[0]) {
+      await updateProfile({ profileImageUri: result.assets[0].uri });
+    }
+  }, [updateProfile]);
+
+  const handleSignOut = useCallback(() => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+          },
+        },
+      ]
+    );
+  }, [signOut]);
+
+  const displayName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const displayEmail = user?.email || '';
   
   const styles = getStyles(colors);
   
   if (!isInitialized) {
     return (
-      <LinearGradient
-        colors={[colors.background, colors.card]}
-        style={styles.container}
-      >
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading profile...</Text>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
     );
   }
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <LinearGradient
-        colors={[colors.background, colors.card]}
-        style={styles.container}
-      >
-        <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ScrollView 
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 12 }]}
         >
-          <View style={styles.header}>
-            <View style={styles.profileInfo}>
-              <TouchableOpacity 
-                style={styles.avatar}
-                onPress={async () => {
-                  if (Platform.OS === 'web') {
-                    Alert.alert('Not Available', 'Image upload is not available on web');
-                    return;
-                  }
-                  
-                  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                  if (status !== 'granted') {
-                    Alert.alert('Permission Required', 'Please grant camera roll permissions');
-                    return;
-                  }
-                  
-                  const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    allowsEditing: true,
-                    aspect: [1, 1],
-                    quality: 0.8,
-                  });
-                  
-                  if (!result.canceled && result.assets[0]) {
-                    await updateProfile({ profileImageUri: result.assets[0].uri });
-                  }
-                }}
-              >
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <View style={styles.profileHeader}>
+              <TouchableOpacity style={styles.avatar} onPress={handlePickImage} activeOpacity={0.8}>
                 {userProfileData?.profileImageUri ? (
                   <Image source={{ uri: userProfileData.profileImageUri }} style={styles.avatarImage} />
                 ) : (
-                  <User color={colors.text} size={40} />
+                  <LinearGradient
+                    colors={[colors.primary + '40', colors.primary + '20']}
+                    style={styles.avatarPlaceholder}
+                  >
+                    <User color={colors.primary} size={36} />
+                  </LinearGradient>
                 )}
                 <View style={styles.cameraIcon}>
-                  <Camera color={colors.background} size={16} />
+                  <Camera color="#fff" size={14} />
                 </View>
               </TouchableOpacity>
-              <View>
-                <Text style={styles.name}>{userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'}</Text>
-                <Text style={styles.subtitle}>{user?.email || ''}</Text>
+              <Text style={styles.name}>{displayName}</Text>
+              <Text style={styles.email}>{displayEmail}</Text>
+
+              {entitlements.isPremium && (
+                <View style={styles.premiumBadge}>
+                  <Crown color="#FFD700" size={14} />
+                  <Text style={styles.premiumBadgeText}>Premium</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <View style={[styles.statIconBg, { backgroundColor: colors.categories.daily + '20' }]}>
+                  <Clock color={colors.categories.daily} size={18} />
+                </View>
+                <Text style={styles.statValue}>{formatListeningTime(userProfile?.totalListeningTime || 0)}</Text>
+                <Text style={styles.statLabel}>Listened</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <View style={[styles.statIconBg, { backgroundColor: colors.categories.relationships + '20' }]}>
+                  <Heart color={colors.categories.relationships} size={18} />
+                </View>
+                <Text style={styles.statValue}>{String(userProfile?.favoriteCount || 0)}</Text>
+                <Text style={styles.statLabel}>Favorites</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <View style={[styles.statIconBg, { backgroundColor: colors.categories.confidence + '20' }]}>
+                  <Flame color={colors.categories.confidence} size={18} />
+                </View>
+                <Text style={styles.statValue}>{String(userProfile?.streak || 0)}</Text>
+                <Text style={styles.statLabel}>Streak</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <View style={[styles.statIconBg, { backgroundColor: colors.primary + '20' }]}>
+                  <Zap color={colors.primary} size={18} />
+                </View>
+                <Text style={styles.statValue}>{entitlements.credits}</Text>
+                <Text style={styles.statLabel}>Credits</Text>
               </View>
             </View>
-            <TouchableOpacity 
-              style={styles.settingsButton}
-              onPress={() => router.push('/settings')}
-            >
-              <Settings color={colors.textSecondary} size={24} />
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.statsContainer}>
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <View key={stat.label} style={styles.statCard}>
-                  <View style={[styles.statIcon, { backgroundColor: stat.color + '20' }]}>
-                    <Icon color={stat.color} size={24} />
-                  </View>
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {!entitlements.isPremium && (
-            <TouchableOpacity 
-              style={styles.upgradeCard}
-              onPress={() => {
-                setShowPaywall(true);
-              }}
-            >
-              <LinearGradient
-                colors={['#FF6B35', '#F7931E']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.upgradeGradient}
+            {!entitlements.isPremium && (
+              <TouchableOpacity 
+                style={styles.upgradeCard}
+                onPress={() => setShowPaywall(true)}
+                activeOpacity={0.85}
               >
-                <View style={styles.upgradeContent}>
-                  <View style={styles.upgradeLeft}>
-                    <Sparkles color="#fff" size={28} />
+                <LinearGradient
+                  colors={[colors.primary, colors.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.upgradeGradient}
+                >
+                  <View style={styles.upgradeIconContainer}>
+                    <Crown color="#fff" size={22} />
+                  </View>
+                  <View style={styles.upgradeTextContainer}>
+                    <Text style={styles.upgradeTitle}>Go Premium</Text>
+                    <Text style={styles.upgradeSubtitle}>Ad-free + unlimited AI features</Text>
+                  </View>
+                  <ChevronRight color="rgba(255,255,255,0.7)" size={22} />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.achievementsSection}>
+              <Text style={styles.sectionTitle}>Achievements</Text>
+              <View style={styles.achievementsRow}>
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
+                  style={styles.achievementCard}
+                >
+                  <View style={[styles.achievementIcon, { backgroundColor: colors.categories.success + '20' }]}>
+                    <Award color={colors.categories.success} size={24} />
+                  </View>
+                  <Text style={styles.achievementName}>Early Bird</Text>
+                  <Text style={styles.achievementDesc}>7 day streak</Text>
+                </LinearGradient>
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
+                  style={styles.achievementCard}
+                >
+                  <View style={[styles.achievementIcon, { backgroundColor: colors.categories.productivity + '20' }]}>
+                    <Award color={colors.categories.productivity} size={24} />
+                  </View>
+                  <Text style={styles.achievementName}>Explorer</Text>
+                  <Text style={styles.achievementDesc}>All categories</Text>
+                </LinearGradient>
+              </View>
+            </View>
+
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Library</Text>
+              <View style={styles.menuGroup}>
+                <MenuItem 
+                  icon={Heart} 
+                  iconColor={colors.categories.relationships} 
+                  label={`Favorites (${String(favorites.length)})`}
+                  onPress={() => router.push('/favorites')}
+                  colors={colors}
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem 
+                  icon={ListMusic} 
+                  iconColor={colors.categories.productivity} 
+                  label="My Playlists"
+                  onPress={() => router.push('/playlists')}
+                  colors={colors}
+                />
+              </View>
+            </View>
+
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Coach</Text>
+              <View style={styles.menuGroup}>
+                <MenuItem 
+                  icon={Sparkles} 
+                  iconColor={colors.categories.confidence} 
+                  label="Choose Coach Character"
+                  onPress={() => router.push('/coach-character')}
+                  colors={colors}
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem 
+                  icon={MessageCircle} 
+                  iconColor={colors.primary} 
+                  label="Talk to Voice Coach"
+                  onPress={() => router.push('/voice-coach')}
+                  colors={colors}
+                />
+              </View>
+            </View>
+
+            <View style={styles.menuSection}>
+              <Text style={styles.sectionTitle}>Preferences</Text>
+              <View style={styles.menuGroup}>
+                <View style={styles.menuItem}>
+                  <View style={styles.menuItemLeft}>
+                    <View style={[styles.menuIconBg, { backgroundColor: colors.categories.success + '15' }]}>
+                      <Church color={colors.categories.success} size={18} />
+                    </View>
                     <View>
-                      <Text style={styles.upgradeTitle}>Upgrade to Premium</Text>
-                      <Text style={styles.upgradeSubtitle}>No ads & unlimited AI features</Text>
+                      <Text style={styles.menuItemText}>Church Motivation</Text>
+                      <Text style={styles.menuItemSub}>Show on home page</Text>
                     </View>
                   </View>
-                  <View style={styles.upgradeButton}>
-                    <Text style={styles.upgradeButtonText}>Unlock</Text>
+                  <Switch
+                    value={userProfileData?.includeChurchMotivation ?? false}
+                    onValueChange={(value) => updateProfile({ includeChurchMotivation: value })}
+                    trackColor={{ false: colors.cardBackground, true: colors.primary + '80' }}
+                    thumbColor={userProfileData?.includeChurchMotivation ? colors.primary : colors.textSecondary}
+                  />
+                </View>
+                <View style={styles.menuDivider} />
+                <MenuItem 
+                  icon={Settings} 
+                  iconColor={colors.textSecondary} 
+                  label="Settings"
+                  onPress={() => router.push('/settings')}
+                  colors={colors}
+                />
+                <View style={styles.menuDivider} />
+                <MenuItem 
+                  icon={Activity} 
+                  iconColor={colors.categories.productivity} 
+                  label="Diagnostics"
+                  onPress={() => router.push('/diagnostic')}
+                  colors={colors}
+                />
+              </View>
+            </View>
+
+            <View style={styles.menuSection}>
+              <View style={styles.menuGroup}>
+                <TouchableOpacity style={styles.signOutItem} onPress={handleSignOut} activeOpacity={0.7}>
+                  <View style={styles.menuItemLeft}>
+                    <View style={[styles.menuIconBg, { backgroundColor: 'rgba(255,107,107,0.12)' }]}>
+                      <LogOut size={18} color="#ff6b6b" />
+                    </View>
+                    <Text style={styles.signOutText}>Sign Out</Text>
                   </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-
-          {entitlements.isPremium && (
-            <View style={styles.premiumStatusCard}>
-              <View style={styles.premiumStatusContent}>
-                <Sparkles color={colors.accent} size={24} />
-                <View style={styles.premiumStatusText}>
-                  <Text style={styles.premiumStatusTitle}>Premium Member</Text>
-                  <Text style={styles.premiumStatusSubtitle}>You have unlimited access to all features</Text>
-                </View>
+                </TouchableOpacity>
               </View>
             </View>
-          )}
-
-          <View style={styles.creditsCard}>
-            <View style={styles.creditsContent}>
-              <View style={styles.creditsLeft}>
-                <View style={styles.creditsIcon}>
-                  <Sparkles color={colors.primary} size={20} />
-                </View>
-                <View>
-                  <Text style={styles.creditsLabel}>Available Credits</Text>
-                  <Text style={styles.creditsValue}>{entitlements.credits}</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.buyCreditsButton}
-                onPress={() => {
-                  setShowPaywall(true);
-                }}
-              >
-                <Text style={styles.buyCreditsButtonText}>Buy More</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Achievements</Text>
-            <View style={styles.achievementsList}>
-              <View style={styles.achievement}>
-                <Award color={colors.categories.success} size={32} />
-                <Text style={styles.achievementName}>Early Bird</Text>
-                <Text style={styles.achievementDesc}>Listen 7 days in a row</Text>
-              </View>
-              <View style={styles.achievement}>
-                <Award color={colors.categories.productivity} size={32} />
-                <Text style={styles.achievementName}>Explorer</Text>
-                <Text style={styles.achievementDesc}>Try all categories</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/favorites')}
-            >
-              <View style={styles.menuItemLeft}>
-                <Heart color={colors.categories.relationships} size={20} />
-                <Text style={styles.menuItemText}>Favorites ({String(favorites.length)})</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/playlists')}
-            >
-              <View style={styles.menuItemLeft}>
-                <ListMusic color={colors.categories.productivity} size={20} />
-                <Text style={styles.menuItemText}>My Playlists</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/coach-character')}
-            >
-              <View style={styles.menuItemLeft}>
-                <Sparkles color={colors.categories.confidence} size={20} />
-                <Text style={styles.menuItemText}>Choose Coach Character</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/voice-coach')}
-            >
-              <View style={styles.menuItemLeft}>
-                <MessageCircle color={colors.primary} size={20} />
-                <Text style={styles.menuItemText}>Talk to Voice Coach</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <View style={styles.menuItem}>
-              <View style={styles.menuItemLeft}>
-                <Church color={colors.categories.success} size={20} />
-                <View>
-                  <Text style={styles.menuItemText}>Church Motivation</Text>
-                  <Text style={styles.toggleSubtext}>Show on home page</Text>
-                </View>
-              </View>
-              <Switch
-                value={userProfileData?.includeChurchMotivation ?? false}
-                onValueChange={(value) => updateProfile({ includeChurchMotivation: value })}
-                trackColor={{ false: colors.cardBackground, true: colors.primary + '80' }}
-                thumbColor={userProfileData?.includeChurchMotivation ? colors.primary : colors.textSecondary}
-              />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/settings')}
-            >
-              <View style={styles.menuItemLeft}>
-                <Settings color={colors.textSecondary} size={20} />
-                <Text style={styles.menuItemText}>Settings</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => router.push('/diagnostic')}
-            >
-              <View style={styles.menuItemLeft}>
-                <Activity color={colors.categories.productivity} size={20} />
-                <Text style={styles.menuItemText}>Diagnostics</Text>
-              </View>
-              <ChevronRight color={colors.textSecondary} size={20} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-                style={[styles.menuItem, styles.signOutItem]}
-                onPress={() => {
-                  Alert.alert(
-                    'Sign Out',
-                    'Are you sure you want to sign out?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Sign Out',
-                        style: 'destructive',
-                        onPress: async () => {
-                          await signOut();
-                        },
-                      },
-                    ]
-                  );
-                }}
-              >
-                <View style={styles.menuItemLeft}>
-                  <LogOut size={20} color="#ff6b6b" />
-                  <Text style={[styles.menuItemText, styles.signOutText]}>Sign Out</Text>
-                </View>
-              </TouchableOpacity>
-          </View>
+          </Animated.View>
         </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
-    <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} />
+      </View>
+      <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </>
   );
 }
+
+interface MenuItemProps {
+  icon: any;
+  iconColor: string;
+  label: string;
+  onPress: () => void;
+  colors: any;
+}
+
+const MenuItem = React.memo(({ icon: Icon, iconColor, label, onPress, colors }: MenuItemProps) => {
+  const styles = getStyles(colors);
+  return (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.6}>
+      <View style={styles.menuItemLeft}>
+        <View style={[styles.menuIconBg, { backgroundColor: iconColor + '15' }]}>
+          <Icon color={iconColor} size={18} />
+        </View>
+        <Text style={styles.menuItemText}>{label}</Text>
+      </View>
+      <ChevronRight color={colors.textSecondary + '60'} size={18} />
+    </TouchableOpacity>
+  );
+});
 
 export default function ProfileScreen() {
   return (
@@ -389,297 +381,263 @@ const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
   },
-  safeArea: {
-    flex: 1,
-  },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  profileHeader: {
+    alignItems: 'center' as const,
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  profileInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingBottom: 24,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-    borderWidth: 2,
-    borderColor: colors.primary + '30',
-    position: 'relative',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    marginBottom: 14,
+    position: 'relative' as const,
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: colors.primary + '40',
+  },
+  avatarPlaceholder: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderWidth: 3,
+    borderColor: colors.primary + '30',
   },
   cameraIcon: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
+    position: 'absolute' as const,
+    bottom: 2,
+    right: 2,
     backgroundColor: colors.primary,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderWidth: 3,
     borderColor: colors.background,
   },
   name: {
     color: colors.text,
-    fontSize: 22,
-    fontWeight: 'bold',
-    letterSpacing: -0.3,
+    fontSize: 24,
+    fontWeight: '700' as const,
+    letterSpacing: -0.5,
   },
-  subtitle: {
+  email: {
     color: colors.textSecondary,
     fontSize: 14,
     marginTop: 4,
   },
-  settingsButton: {
-    padding: 8,
+  premiumBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: 'rgba(255,215,0,0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.2)',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
+  premiumBadgeText: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
+  statsRow: {
+    flexDirection: 'row' as const,
+    marginHorizontal: 20,
+    backgroundColor: colors.cardBackground,
+    borderRadius: 20,
+    padding: 18,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  statCard: {
-    alignItems: 'center',
+  statItem: {
     flex: 1,
+    alignItems: 'center' as const,
   },
-  statIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
+  statIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginBottom: 8,
   },
   statValue: {
     color: colors.text,
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700' as const,
+    marginBottom: 2,
   },
   statLabel: {
     color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  achievementsList: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  achievement: {
-    flex: 1,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-  },
-  achievementName: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  achievementDesc: {
-    color: colors.textSecondary,
     fontSize: 11,
-    marginTop: 4,
-    textAlign: 'center',
+    fontWeight: '500' as const,
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  menuItemText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    color: colors.text,
-    fontSize: 16,
-  },
-  signOutItem: {
-    borderColor: 'rgba(255, 107, 107, 0.3)',
-    borderWidth: 1,
-  },
-  signOutText: {
-    color: '#ff6b6b',
-  },
-  toggleSubtext: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  createAccountItem: {
-    borderColor: 'rgba(108, 92, 231, 0.3)',
-    borderWidth: 1,
-  },
-  createAccountText: {
-    color: '#6C5CE7',
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginVertical: 4,
   },
   upgradeCard: {
     marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    marginBottom: 24,
+    borderRadius: 18,
+    overflow: 'hidden' as const,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   upgradeGradient: {
-    padding: 20,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: 18,
+    gap: 14,
   },
-  upgradeContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  upgradeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  upgradeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  upgradeTextContainer: {
     flex: 1,
   },
   upgradeTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700' as const,
   },
   upgradeSubtitle: {
-    color: 'rgba(255,255,255,0.9)',
+    color: 'rgba(255,255,255,0.8)',
     fontSize: 13,
     marginTop: 2,
   },
-  upgradeButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+  achievementsSection: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    marginBottom: 24,
   },
-  upgradeButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
+  sectionTitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  premiumStatusCard: {
-    marginHorizontal: 20,
+  achievementsRow: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  achievementCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 18,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  achievementIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    marginBottom: 10,
+  },
+  achievementName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  achievementDesc: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  menuSection: {
+    paddingHorizontal: 20,
     marginBottom: 20,
+  },
+  menuGroup: {
     backgroundColor: colors.cardBackground,
     borderRadius: 16,
+    overflow: 'hidden' as const,
     borderWidth: 1,
-    borderColor: colors.accent + '30',
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  premiumStatusContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  menuItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  menuItemLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
-    padding: 16,
-  },
-  premiumStatusText: {
     flex: 1,
   },
-  premiumStatusTitle: {
+  menuIconBg: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  menuItemText: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '500' as const,
   },
-  premiumStatusSubtitle: {
+  menuItemSub: {
     color: colors.textSecondary,
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 1,
   },
-  creditsCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+  menuDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginLeft: 62,
   },
-  creditsContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  creditsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  creditsIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  creditsLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  creditsValue: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  buyCreditsButton: {
-    backgroundColor: colors.primary,
+  signOutItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
   },
-  buyCreditsButtonText: {
-    color: colors.background,
-    fontSize: 14,
-    fontWeight: 'bold',
+  signOutText: {
+    color: '#ff6b6b',
+    fontSize: 15,
+    fontWeight: '500' as const,
   },
 });

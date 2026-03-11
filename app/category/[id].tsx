@@ -16,6 +16,7 @@ import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
+import { useAdMob } from '@/hooks/admob-context';
 
 export default function CategoryScreen() {
   const { colors } = useTheme();
@@ -23,6 +24,8 @@ export default function CategoryScreen() {
   const { toggleFavorite, setCurrentSpeech, getSpeechesByCategory } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
+  const { showInterstitialAd } = useAdMob();
+  const speechPlayCount = React.useRef(0);
   const styles = getStyles(colors);
   
   const allCategories = [...categories, churchCategory];
@@ -70,14 +73,24 @@ export default function CategoryScreen() {
     };
 
     console.log(`📂 Category page loaded: ${category?.name}`);
-    handleLoadOnlineSpeeches();
+    void handleLoadOnlineSpeeches();
   }, [category, hasLoadedOnline]);
 
   const handleSpeechPress = (speech: Speech) => {
     console.log('🎵 Selected speech:', speech.title);
     console.log('🎵 Speech type:', speech.youtubeId ? 'YouTube' : 'Audio');
-    setCurrentSpeech(speech);
-    router.push('/player');
+    speechPlayCount.current += 1;
+    
+    if (speechPlayCount.current % 3 === 0) {
+      console.log('📺 Showing interstitial ad before playing speech');
+      void showInterstitialAd().then(() => {
+        setCurrentSpeech(speech);
+        router.push('/player');
+      });
+    } else {
+      setCurrentSpeech(speech);
+      router.push('/player');
+    }
   };
 
   if (!category) {

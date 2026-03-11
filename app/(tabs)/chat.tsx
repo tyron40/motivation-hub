@@ -23,6 +23,7 @@ import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { generateText } from '@rork-ai/toolkit-sdk';
+import { useAdMob } from '@/hooks/admob-context';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,6 +65,8 @@ function ChatScreenContent() {
   const { profile, updateProfile } = useUserProfile();
   const { useCredit: deductCredit, usageStats } = useIAP();
   const insets = useSafeAreaInsets();
+  const { showInterstitialAd } = useAdMob();
+  const chatMessageCount = useRef(0);
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
@@ -174,7 +177,7 @@ function ChatScreenContent() {
       console.log('✅ Voice generated successfully for message:', messageId);
       
       setTimeout(() => {
-        playAudio(messageId, audioUrl);
+        void playAudio(messageId, audioUrl);
       }, 500);
     } catch (error: any) {
       console.error('❌ Voice generation error:', error);
@@ -255,7 +258,7 @@ function ChatScreenContent() {
       
       if (profile.voiceEnabled) {
         const timeoutId = setTimeout(() => {
-          generateVoice(greetingMessage.id, greeting);
+          void generateVoice(greetingMessage.id, greeting);
         }, 1000);
         
         return () => clearTimeout(timeoutId);
@@ -269,6 +272,12 @@ function ChatScreenContent() {
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    chatMessageCount.current += 1;
+    if (chatMessageCount.current % 5 === 0) {
+      console.log('📺 Showing interstitial ad in chat');
+      void showInterstitialAd();
+    }
 
     // Check if user has credits
     if (!usageStats.canUseAI) {
@@ -407,7 +416,7 @@ function ChatScreenContent() {
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
               console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
-              generateVoice(aiMessage.id, completion);
+              void generateVoice(aiMessage.id, completion);
             } else {
               console.log('⚠️ Not enough credits for voice generation');
             }
@@ -446,7 +455,7 @@ function ChatScreenContent() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, showInterstitialAd]);
 
 
 
@@ -724,9 +733,9 @@ function ChatScreenContent() {
                 style={styles.voiceButton}
                 onPress={() => {
                   if (message.isPlaying) {
-                    stopAudio();
+                    void stopAudio();
                   } else {
-                    playAudio(message.id, message.audioUrl!);
+                    void playAudio(message.id, message.audioUrl!);
                   }
                 }}
               >
@@ -851,8 +860,8 @@ function ChatScreenContent() {
                   </View>
                   <View style={styles.typingIndicator}>
                     <View style={styles.typingDot} />
-                    <View style={[styles.typingDot, { animationDelay: '0.2s' }]} />
-                    <View style={[styles.typingDot, { animationDelay: '0.4s' }]} />
+                    <View style={styles.typingDot} />
+                    <View style={styles.typingDot} />
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -869,7 +878,7 @@ function ChatScreenContent() {
                 ]}
               >
                 <Text style={styles.suggestionsTitle}>Get started with these questions:</Text>
-                {suggestedPrompts.map((prompt, index) => {
+                {suggestedPrompts.map((prompt) => {
                   const Icon = prompt.icon;
                   return (
                     <TouchableOpacity

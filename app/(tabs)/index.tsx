@@ -15,13 +15,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Sparkles, Quote } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
-import { EarnCreditsCard } from '@/components/EarnCreditsCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { motivationalFlyers } from '@/mocks/motivationalFlyers';
+import { useAdMob } from '@/hooks/admob-context';
 
 
 export default function HomeScreen() {
@@ -29,7 +29,9 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { profile } = useUserProfile();
   const insets = useSafeAreaInsets();
+  const { showInterstitialAd } = useAdMob();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
+  const speechPlayCount = React.useRef(0);
   
   const styles = getStyles(colors);
 
@@ -63,7 +65,7 @@ export default function HomeScreen() {
       }
     };
     
-    loadYouTubeSpeeches();
+    void loadYouTubeSpeeches();
   }, []);
   
   if (!speechContext) {
@@ -80,7 +82,7 @@ export default function HomeScreen() {
   
   const { toggleFavorite, setCurrentSpeech } = speechContext;
 
-  const handleSpeechPress = (speech: any) => {
+  const handleSpeechPress = React.useCallback((speech: any) => {
     try {
       if (!speech || typeof speech !== 'object' || !speech.id) {
         console.warn('Invalid speech object:', speech);
@@ -88,12 +90,22 @@ export default function HomeScreen() {
       }
 
       console.log('🎵 Setting current speech:', speech.title);
-      setCurrentSpeech(speech);
-      router.push('/player');
+      speechPlayCount.current += 1;
+      
+      if (speechPlayCount.current % 3 === 0) {
+        console.log('📺 Showing interstitial ad before playing speech');
+        void showInterstitialAd().then(() => {
+          setCurrentSpeech(speech);
+          router.push('/player');
+        });
+      } else {
+        setCurrentSpeech(speech);
+        router.push('/player');
+      }
     } catch (error) {
       console.error('Error handling speech press:', error);
     }
-  };
+  }, [showInterstitialAd, setCurrentSpeech]);
 
   const handleCategoryPress = (categoryId: string) => {
     try {
@@ -148,7 +160,23 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <EarnCreditsCard />
+          <View style={styles.dailyQuoteSection}>
+            <LinearGradient
+              colors={[colors.primary + '18', colors.accent + '10', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.dailyQuoteCard}
+            >
+              <View style={styles.dailyQuoteBadge}>
+                <Sparkles size={12} color={colors.primary} />
+                <Text style={styles.dailyQuoteBadgeText}>DAILY PICK</Text>
+              </View>
+              <Text style={styles.dailyQuoteText} numberOfLines={2}>
+                "{displayFeatured?.title || 'Stay motivated today'}"
+              </Text>
+              <Text style={styles.dailyQuoteAuthor}>{displayFeatured?.speaker || ''}</Text>
+            </LinearGradient>
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Today&apos;s Featured</Text>
@@ -350,10 +378,45 @@ const getStyles = (colors: any) => StyleSheet.create({
   sectionTitle: {
     color: colors.text,
     fontSize: 19,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     marginBottom: 12,
     paddingHorizontal: 20,
     letterSpacing: -0.3,
+  },
+  dailyQuoteSection: {
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  dailyQuoteCard: {
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.primary + '20',
+  },
+  dailyQuoteBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginBottom: 10,
+  },
+  dailyQuoteBadgeText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '800' as const,
+    letterSpacing: 1.5,
+  },
+  dailyQuoteText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600' as const,
+    lineHeight: 26,
+    fontStyle: 'italic' as const,
+    marginBottom: 8,
+  },
+  dailyQuoteAuthor: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500' as const,
   },
   categoriesList: {
     paddingHorizontal: 20,
