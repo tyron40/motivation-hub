@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#FFFFFF',
     fontWeight: '800' as const,
-    bottom: 10,
+    bottom: 6,
     letterSpacing: -0.3,
   },
 
