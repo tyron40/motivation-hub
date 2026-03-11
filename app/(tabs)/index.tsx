@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Sparkles, Quote } from 'lucide-react-native';
+import { Play, Sparkles, Quote, Sun } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
@@ -31,6 +31,43 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { showInterstitialAd } = useAdMob();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
+  const dailyQuote = React.useMemo(() => {
+    const quotes = [
+      { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+      { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
+      { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
+      { text: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
+      { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
+      { text: "Don't watch the clock; do what it does. Keep going.", author: "Sam Levenson" },
+      { text: "You are never too old to set another goal or to dream a new dream.", author: "C.S. Lewis" },
+      { text: "What lies behind us and what lies before us are tiny matters compared to what lies within us.", author: "Ralph Waldo Emerson" },
+      { text: "Hardships often prepare ordinary people for an extraordinary destiny.", author: "C.S. Lewis" },
+      { text: "The only impossible journey is the one you never begin.", author: "Tony Robbins" },
+      { text: "Act as if what you do makes a difference. It does.", author: "William James" },
+      { text: "Your limitation—it's only your imagination.", author: "Unknown" },
+      { text: "Push yourself, because no one else is going to do it for you.", author: "Unknown" },
+      { text: "Great things never come from comfort zones.", author: "Unknown" },
+      { text: "Dream it. Wish it. Do it.", author: "Unknown" },
+      { text: "Wake up with determination. Go to bed with satisfaction.", author: "Unknown" },
+      { text: "Do something today that your future self will thank you for.", author: "Sean Patrick Flanery" },
+      { text: "It's going to be hard, but hard does not mean impossible.", author: "Unknown" },
+      { text: "Don't stop when you're tired. Stop when you're done.", author: "Unknown" },
+      { text: "Little things make big days.", author: "Unknown" },
+      { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+      { text: "Stars can't shine without darkness.", author: "Unknown" },
+      { text: "Fall seven times, stand up eight.", author: "Japanese Proverb" },
+      { text: "What we achieve inwardly will change outer reality.", author: "Plutarch" },
+      { text: "In the middle of every difficulty lies opportunity.", author: "Albert Einstein" },
+      { text: "Everything you've ever wanted is on the other side of fear.", author: "George Addair" },
+      { text: "You didn't come this far to only come this far.", author: "Unknown" },
+      { text: "If it doesn't challenge you, it won't change you.", author: "Fred DeVito" },
+      { text: "Life begins at the end of your comfort zone.", author: "Neale Donald Walsch" },
+      { text: "A winner is a dreamer who never gives up.", author: "Nelson Mandela" },
+      { text: "Stay patient and trust your journey.", author: "Unknown" },
+    ];
+    const dayIndex = new Date().getDate() % quotes.length;
+    return quotes[dayIndex];
+  }, []);
   const speechPlayCount = React.useRef(0);
   
   const styles = getStyles(colors);
@@ -168,13 +205,13 @@ export default function HomeScreen() {
               style={styles.dailyQuoteCard}
             >
               <View style={styles.dailyQuoteBadge}>
-                <Sparkles size={12} color={colors.primary} />
-                <Text style={styles.dailyQuoteBadgeText}>DAILY PICK</Text>
+                <Sun size={13} color={colors.primary} />
+                <Text style={styles.dailyQuoteBadgeText}>DAILY MOTIVATION</Text>
               </View>
-              <Text style={styles.dailyQuoteText} numberOfLines={2}>
-                "{displayFeatured?.title || 'Stay motivated today'}"
+              <Text style={styles.dailyQuoteText} numberOfLines={3}>
+                "{dailyQuote.text}"
               </Text>
-              <Text style={styles.dailyQuoteAuthor}>{displayFeatured?.speaker || ''}</Text>
+              <Text style={styles.dailyQuoteAuthor}>— {dailyQuote.author}</Text>
             </LinearGradient>
           </View>
 
