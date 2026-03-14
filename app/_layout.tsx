@@ -15,6 +15,7 @@ import { ChatSessionsProvider } from "@/hooks/chat-sessions-context";
 import { IAPProvider } from "@/hooks/iap-context";
 import { ThemeProvider } from "@/hooks/theme-context";
 import { AdMobProvider } from "@/hooks/admob-context";
+import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -118,7 +119,7 @@ function AudioPlayerWrapper() {
       }
     };
     
-    loadAudioUrl();
+    void loadAudioUrl();
     
     return () => {
       isMounted = false;
@@ -243,6 +244,18 @@ function RootLayoutNav() {
                 headerShown: true,
               }} 
             />
+            <Stack.Screen 
+              name="flyers" 
+              options={{ 
+                headerShown: false,
+              }} 
+            />
+            <Stack.Screen 
+              name="short-clips" 
+              options={{ 
+                headerShown: false,
+              }} 
+            />
           </>
         ) : (
           <Stack.Screen 
@@ -296,7 +309,7 @@ export default function RootLayout() {
       }
     };
 
-    prepare();
+    void prepare();
     
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
@@ -321,6 +334,7 @@ export default function RootLayout() {
                 <IAPProvider>
                   <AdMobProvider>
                     <UserProfileProvider>
+                    <AdminProvider>
                     <PlaylistProvider>
                       <ScriptureFavoritesProvider>
                         <ChatSessionsProvider>
@@ -330,6 +344,7 @@ export default function RootLayout() {
                         </ChatSessionsProvider>
                       </ScriptureFavoritesProvider>
                     </PlaylistProvider>
+                    </AdminProvider>
                     </UserProfileProvider>
                   </AdMobProvider>
                 </IAPProvider>

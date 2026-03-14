@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
-import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity, Crown, Zap } from 'lucide-react-native';
+import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity, Crown, Zap, Shield, ImageIcon, Film } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -24,6 +24,7 @@ import PaywallModal from '@/components/PaywallModal';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useTheme } from '@/hooks/theme-context';
+import { useAdmin } from '@/hooks/admin-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function ProfileContent() {
@@ -33,6 +34,7 @@ function ProfileContent() {
   const { user, signOut } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
+  const { isAdmin } = useAdmin();
   const insets = useSafeAreaInsets();
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
@@ -286,6 +288,33 @@ function ProfileContent() {
                 />
               </View>
             </View>
+
+            {isAdmin && (
+              <View style={styles.menuSection}>
+                <Text style={styles.sectionTitle}>Admin</Text>
+                <View style={styles.menuGroup}>
+                  <MenuItem 
+                    icon={ImageIcon} 
+                    iconColor="#FF8A00" 
+                    label="Manage Flyers"
+                    onPress={() => router.push('/flyers')}
+                    colors={colors}
+                  />
+                  <View style={styles.menuDivider} />
+                  <MenuItem 
+                    icon={Film} 
+                    iconColor="#0984E3" 
+                    label="Manage Short Clips"
+                    onPress={() => router.push('/short-clips')}
+                    colors={colors}
+                  />
+                </View>
+                <View style={styles.adminBadgeRow}>
+                  <Shield size={12} color={colors.primary} />
+                  <Text style={[styles.adminBadgeText, { color: colors.primary }]}>Full Admin Access</Text>
+                </View>
+              </View>
+            )}
 
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Preferences</Text>
@@ -639,5 +668,16 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: '#ff6b6b',
     fontSize: 15,
     fontWeight: '500' as const,
+  },
+  adminBadgeRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
 });

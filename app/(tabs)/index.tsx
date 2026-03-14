@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Sparkles, Quote, Sun } from 'lucide-react-native';
+import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
@@ -226,10 +226,16 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Motivation Flyers</Text>
-              <Sparkles size={16} color={colors.primary} />
-            </View>
+            <TouchableOpacity style={styles.sectionHeaderRow} onPress={() => router.push('/flyers')} activeOpacity={0.7}>
+              <View style={styles.sectionHeaderLeft}>
+                <ImageIcon size={16} color={colors.primary} />
+                <Text style={styles.sectionTitle}>Motivation Flyers</Text>
+              </View>
+              <View style={styles.seeAllRow}>
+                <Text style={styles.seeAllText}>See All</Text>
+                <ChevronRight size={16} color={colors.primary} />
+              </View>
+            </TouchableOpacity>
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -240,6 +246,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   activeOpacity={0.9}
                   style={styles.flyerPoster}
+                  onPress={() => router.push('/flyers')}
                   testID={`flyer-card-${item.id}`}
                 >
                   <Image
@@ -256,6 +263,48 @@ export default function HomeScreen() {
                     <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
                     <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
                     <Text style={styles.flyerPosterTitle}>{item.title}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.sectionHeaderRow} onPress={() => router.push('/short-clips')} activeOpacity={0.7}>
+              <View style={styles.sectionHeaderLeft}>
+                <Film size={16} color={colors.accent} />
+                <Text style={styles.sectionTitle}>Short Clips</Text>
+              </View>
+              <View style={styles.seeAllRow}>
+                <Text style={styles.seeAllText}>Watch All</Text>
+                <ChevronRight size={16} color={colors.primary} />
+              </View>
+            </TouchableOpacity>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={displaySpeeches.filter(s => s.youtubeId).slice(0, 8)}
+              keyExtractor={(item) => `clip-${item.id}`}
+              contentContainerStyle={styles.flyersList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  style={styles.clipPoster}
+                  onPress={() => router.push({ pathname: '/video-player', params: { videoId: item.youtubeId || item.id, title: item.title, thumbnail: item.imageUrl, channelTitle: item.speaker, autoplay: 'true' } })}
+                >
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={styles.flyerPosterImage}
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.85)']}
+                    style={styles.clipPosterGradient}
+                  >
+                    <View style={styles.clipPlayIcon}>
+                      <Play size={20} color="#fff" fill="#fff" />
+                    </View>
+                    <Text style={styles.clipPosterTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.clipPosterChannel}>{item.speaker}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               )}
@@ -416,9 +465,63 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     fontSize: 19,
     fontWeight: '700' as const,
-    marginBottom: 12,
-    paddingHorizontal: 20,
+    marginBottom: 0,
     letterSpacing: -0.3,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
+  seeAllRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 2,
+  },
+  seeAllText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  clipPoster: {
+    width: 200,
+    height: 130,
+    borderRadius: 14,
+    overflow: 'hidden' as const,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  clipPosterGradient: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
+    padding: 12,
+  },
+  clipPlayIcon: {
+    position: 'absolute' as const,
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingLeft: 2,
+  },
+  clipPosterTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
+    lineHeight: 17,
+  },
+  clipPosterChannel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 10,
+    fontWeight: '500' as const,
+    marginTop: 3,
   },
   dailyQuoteSection: {
     paddingHorizontal: 20,
