@@ -16,7 +16,7 @@ import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-na
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
-import { getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
@@ -31,6 +31,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { showInterstitialAd } = useAdMob();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
+  const [shortClips, setShortClips] = React.useState<any[]>([]);
   const dailyQuote = React.useMemo(() => {
     const quotes = [
       { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -101,8 +102,38 @@ export default function HomeScreen() {
         console.error('❌ Failed to load YouTube speeches:', error);
       }
     };
+
+    const loadShortClips = async () => {
+      try {
+        console.log('🎬 Loading short clips for home page...');
+        const [searchResults, trending] = await Promise.all([
+          searchVideos('motivational short clips inspiration', 30),
+          getTrendingVideos(30),
+        ]);
+        const seenIds = new Set<string>();
+        const clips: any[] = [];
+        for (const v of [...searchResults, ...trending]) {
+          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 60) {
+            seenIds.add(v.id);
+            clips.push({
+              id: v.id,
+              youtubeId: v.id,
+              title: v.title,
+              speaker: v.channelTitle,
+              imageUrl: v.thumbnail,
+              duration: v.duration,
+            });
+          }
+        }
+        console.log(`✅ Found ${clips.length} actual short clips (≤60s)`);
+        setShortClips(clips);
+      } catch (error) {
+        console.error('❌ Failed to load short clips:', error);
+      }
+    };
     
     void loadYouTubeSpeeches();
+    void loadShortClips();
   }, []);
   
   if (!speechContext) {
@@ -283,7 +314,7 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={displaySpeeches.filter(s => s.youtubeId).slice(0, 8)}
+              data={shortClips.slice(0, 8)}
               keyExtractor={(item) => `clip-${item.id}`}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
