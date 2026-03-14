@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,26 +11,88 @@ import {
   TextInput,
   Alert,
   Modal,
+  Animated,
+  Platform,
+  ViewToken,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Play, Clock, Eye, Plus, Trash2, X, Youtube } from 'lucide-react-native';
-import { useTheme } from '@/hooks/theme-context';
-import { searchVideos, getTrendingVideos, YouTubeVideoData } from '@/services/youtubeService';
-import { useAdmin, AdminVideo } from '@/hooks/admin-context';
+import {
+  ArrowLeft,
+  Heart,
+  Bookmark,
+  Share2,
+  Play,
+  Plus,
+  Trash2,
+  X,
+  Youtube,
+  Music2,
+  Eye,
+} from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
+import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
+import { useAdmin } from '@/hooks/admin-context';
 
-const { width: _SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const LIKED_CLIPS_KEY = 'liked_clips_v1';
+const SAVED_CLIPS_KEY = 'saved_clips_v1';
+
+interface ClipItem {
+  id: string;
+  youtubeId: string;
+  title: string;
+  channelTitle: string;
+  thumbnail: string;
+  viewCount?: number;
+  viewCountFormatted?: string;
+  duration?: number;
+  durationFormatted?: string;
+  isAdmin?: boolean;
+}
 
 export default function ShortClipsScreen() {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { isAdmin, customVideos, addVideo, removeVideo } = useAdmin();
-  const [clips, setClips] = useState<YouTubeVideoData[]>([]);
+
+  const [clips, setClips] = useState<ClipItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [likedClips, setLikedClips] = useState<Set<string>>(new Set());
+  const [savedClips, setSavedClips] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoId, setNewVideoId] = useState('');
+
+  const likeAnimations = useRef<Record<string, Animated.Value>>({}).current;
+  const saveAnimations = useRef<Record<string, Animated.Value>>({}).current;
+
+  const getOrCreateAnim = useCallback((map: Record<string, Animated.Value>, key: string) => {
+    if (!map[key]) {
+      map[key] = new Animated.Value(1);
+    }
+    return map[key];
+  }, []);
+
+  useEffect(() => {
+    const loadPrefs = async () => {
+      try {
+        const [likedRaw, savedRaw] = await Promise.all([
+          AsyncStorage.getItem(LIKED_CLIPS_KEY),
+          AsyncStorage.getItem(SAVED_CLIPS_KEY),
+        ]);
+        if (likedRaw) setLikedClips(new Set(JSON.parse(likedRaw)));
+        if (savedRaw) setSavedClips(new Set(JSON.parse(savedRaw)));
+      } catch (e) {
+        console.error('Error loading clip prefs:', e);
+      }
+    };
+    void loadPrefs();
+  }, []);
 
   useEffect(() => {
     const fetchClips = async () => {
@@ -39,22 +101,46 @@ export default function ShortClipsScreen() {
         setIsLoading(true);
 
         const [searchResults, trending] = await Promise.all([
-          searchVideos('motivational short clips inspiration', 25),
-          getTrendingVideos(25),
+          searchVideos('motivational short clips inspiration', 30),
+          getTrendingVideos(30),
         ]);
 
         const seenIds = new Set<string>();
-        const merged: YouTubeVideoData[] = [];
-        for (const v of [...searchResults, ...trending]) {
-          if (!seenIds.has(v.id) && v.duration <= 600) {
-            seenIds.add(v.id);
-            merged.push(v);
+        const merged: ClipItem[] = [];
+
+        for (const v of customVideos) {
+          if (!seenIds.has(v.youtubeId)) {
+            seenIds.add(v.youtubeId);
+            merged.push({
+              id: v.id,
+              youtubeId: v.youtubeId,
+              title: v.title,
+              channelTitle: v.channelTitle,
+              thumbnail: v.thumbnail,
+              isAdmin: true,
+            });
           }
         }
 
-        const shortFirst = merged.sort((a, b) => a.duration - b.duration);
-        console.log(`Loaded ${shortFirst.length} short clips`);
-        setClips(shortFirst);
+        for (const v of [...searchResults, ...trending]) {
+          if (!seenIds.has(v.id) && v.duration <= 600) {
+            seenIds.add(v.id);
+            merged.push({
+              id: v.id,
+              youtubeId: v.id,
+              title: v.title,
+              channelTitle: v.channelTitle,
+              thumbnail: v.thumbnail,
+              viewCount: v.viewCount,
+              viewCountFormatted: v.viewCountFormatted,
+              duration: v.duration,
+              durationFormatted: v.durationFormatted,
+            });
+          }
+        }
+
+        console.log(`Loaded ${merged.length} short clips for TikTok view`);
+        setClips(merged);
       } catch (error) {
         console.error('Error fetching short clips:', error);
       } finally {
@@ -63,30 +149,60 @@ export default function ShortClipsScreen() {
     };
 
     void fetchClips();
-  }, []);
+  }, [customVideos]);
 
-  const handleVideoPress = useCallback((video: YouTubeVideoData | AdminVideo) => {
-    const videoId = 'youtubeId' in video ? video.youtubeId : video.id;
-    router.push({
-      pathname: '/video-player',
-      params: {
-        videoId,
-        title: video.title,
-        thumbnail: video.thumbnail,
-        channelTitle: 'channelTitle' in video ? video.channelTitle : 'Motivation Fuel',
-        autoplay: 'true',
-      },
+  const toggleLike = useCallback(async (clipId: string) => {
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    const anim = getOrCreateAnim(likeAnimations, clipId);
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1.4, duration: 120, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, friction: 3, useNativeDriver: true }),
+    ]).start();
+
+    setLikedClips(prev => {
+      const next = new Set(prev);
+      if (next.has(clipId)) {
+        next.delete(clipId);
+      } else {
+        next.add(clipId);
+      }
+      void AsyncStorage.setItem(LIKED_CLIPS_KEY, JSON.stringify(Array.from(next)));
+      return next;
     });
-  }, []);
+  }, [getOrCreateAnim, likeAnimations]);
+
+  const toggleSave = useCallback(async (clipId: string) => {
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    const anim = getOrCreateAnim(saveAnimations, clipId);
+    Animated.sequence([
+      Animated.timing(anim, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+      Animated.spring(anim, { toValue: 1, friction: 3, useNativeDriver: true }),
+    ]).start();
+
+    setSavedClips(prev => {
+      const next = new Set(prev);
+      if (next.has(clipId)) {
+        next.delete(clipId);
+      } else {
+        next.add(clipId);
+      }
+      void AsyncStorage.setItem(SAVED_CLIPS_KEY, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, [getOrCreateAnim, saveAnimations]);
 
   const handleAddVideo = useCallback(async () => {
     if (!newVideoTitle.trim() || !newVideoId.trim()) {
       Alert.alert('Missing Fields', 'Please fill in title and YouTube video ID');
       return;
     }
-
     const cleanId = newVideoId.trim().replace(/.*(?:youtu\.be\/|v=)/, '').replace(/[&?].*/, '');
-
     await addVideo({
       id: `custom-vid-${Date.now()}`,
       title: newVideoTitle.trim(),
@@ -96,7 +212,6 @@ export default function ShortClipsScreen() {
       description: '',
       addedAt: Date.now(),
     });
-
     setNewVideoTitle('');
     setNewVideoId('');
     setShowAddModal(false);
@@ -109,342 +224,380 @@ export default function ShortClipsScreen() {
     ]);
   }, [removeVideo]);
 
-  const formatDuration = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    if (viewableItems.length > 0 && viewableItems[0].index != null) {
+      setActiveIndex(viewableItems[0].index);
+    }
+  }).current;
 
-  const styles = getStyles(colors);
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 }).current;
 
-  const renderAdminVideo = ({ item }: { item: AdminVideo }) => (
-    <TouchableOpacity
-      style={styles.clipCard}
-      activeOpacity={0.85}
-      onPress={() => handleVideoPress(item)}
-    >
-      <View style={styles.thumbnailContainer}>
-        <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.thumbnailOverlay}
-        >
-          <View style={styles.playCircle}>
-            <Play size={18} color="#fff" fill="#fff" />
-          </View>
-        </LinearGradient>
-        <View style={styles.adminBadge}>
-          <Text style={styles.adminBadgeText}>ADDED</Text>
-        </View>
-      </View>
-      <View style={styles.clipInfo}>
-        <Text style={styles.clipTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.clipChannel}>{item.channelTitle}</Text>
-      </View>
-      {isAdmin && (
-        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteVideo(item.id)}>
-          <Trash2 size={16} color="#EF4444" />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  );
+  const itemHeight = SCREEN_HEIGHT;
 
-  const renderClip = ({ item }: { item: YouTubeVideoData }) => (
-    <TouchableOpacity
-      style={styles.clipCard}
-      activeOpacity={0.85}
-      onPress={() => handleVideoPress(item)}
-    >
-      <View style={styles.thumbnailContainer}>
-        <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.thumbnailOverlay}
-        >
-          <View style={styles.playCircle}>
-            <Play size={18} color="#fff" fill="#fff" />
-          </View>
-        </LinearGradient>
-        <View style={styles.durationBadge}>
-          <Clock size={10} color="#fff" />
-          <Text style={styles.durationText}>{item.durationFormatted || formatDuration(item.duration)}</Text>
-        </View>
-      </View>
-      <View style={styles.clipInfo}>
-        <Text style={styles.clipTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.clipMeta}>
-          <Text style={styles.clipChannel}>{item.channelTitle}</Text>
-          {item.viewCountFormatted && (
-            <View style={styles.viewsRow}>
-              <Eye size={11} color={colors.textSecondary} />
-              <Text style={styles.viewsText}>{item.viewCountFormatted}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderClipPage = useCallback(({ item, index }: { item: ClipItem; index: number }) => {
+    return (
+      <ClipPage
+        clip={item}
+        isActive={index === activeIndex}
+        isLiked={likedClips.has(item.id)}
+        isSaved={savedClips.has(item.id)}
+        onToggleLike={() => toggleLike(item.id)}
+        onToggleSave={() => toggleSave(item.id)}
+        likeScale={getOrCreateAnim(likeAnimations, item.id)}
+        saveScale={getOrCreateAnim(saveAnimations, item.id)}
+        isAdmin={isAdmin}
+        isAdminClip={item.isAdmin ?? false}
+        onDelete={() => handleDeleteVideo(item.id)}
+        insets={insets}
+        height={itemHeight}
+      />
+    );
+  }, [activeIndex, likedClips, savedClips, toggleLike, toggleSave, isAdmin, insets, itemHeight, getOrCreateAnim, likeAnimations, saveAnimations, handleDeleteVideo]);
 
-  const ListHeader = () => (
-    <>
-      {customVideos.length > 0 && (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionLabel}>Admin Picks</Text>
-          {customVideos.map((v) => (
-            <React.Fragment key={v.id}>
-              {renderAdminVideo({ item: v })}
-            </React.Fragment>
-          ))}
-          <View style={styles.sectionDivider} />
-        </View>
-      )}
-      <Text style={styles.sectionLabel}>Trending Short Clips</Text>
-    </>
-  );
+  const getItemLayout = useCallback((_: any, index: number) => ({
+    length: itemHeight,
+    offset: itemHeight * index,
+    index,
+  }), [itemHeight]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: '#000' }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Loading clips...</Text>
+      </View>
+    );
+  }
 
   return (
-    <>
+    <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-            <ArrowLeft size={22} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Short Clips</Text>
-          {isAdmin ? (
-            <TouchableOpacity onPress={() => setShowAddModal(true)} style={styles.addBtn} activeOpacity={0.7}>
-              <Plus size={22} color={colors.text} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.backBtn} />
-          )}
-        </View>
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading short clips...</Text>
+      <FlatList
+        data={clips}
+        renderItem={renderClipPage}
+        keyExtractor={(item) => item.id}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        getItemLayout={getItemLayout}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        initialNumToRender={2}
+        maxToRenderPerBatch={3}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        ListEmptyComponent={
+          <View style={[styles.emptyContainer, { height: itemHeight }]}>
+            <Play size={48} color="#555" />
+            <Text style={styles.emptyText}>No clips available</Text>
+            <Text style={styles.emptySubtext}>Check your connection and try again</Text>
           </View>
+        }
+      />
+
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+        <TouchableOpacity onPress={() => router.back()} style={styles.topBtn} activeOpacity={0.7}>
+          <ArrowLeft size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.topTitle}>Short Clips</Text>
+        {isAdmin ? (
+          <TouchableOpacity onPress={() => setShowAddModal(true)} style={styles.topBtn} activeOpacity={0.7}>
+            <Plus size={22} color="#fff" />
+          </TouchableOpacity>
         ) : (
-          <FlatList
-            data={clips}
-            renderItem={renderClip}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={ListHeader}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.text }]}>No clips found</Text>
-                <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Check your connection and try again</Text>
-              </View>
-            }
-          />
+          <View style={styles.topBtn} />
         )}
+      </View>
 
-        <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
-          <View style={styles.addModalOverlay}>
-            <View style={[styles.addModalContent, { backgroundColor: colors.card }]}>
-              <View style={styles.addModalHeader}>
-                <Text style={[styles.addModalTitle, { color: colors.text }]}>Add Video Clip</Text>
-                <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                  <X size={22} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.addModalBody}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Title</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.textSecondary + '30' }]}
-                  value={newVideoTitle}
-                  onChangeText={setNewVideoTitle}
-                  placeholder="Video title..."
-                  placeholderTextColor={colors.textSecondary + '60'}
-                />
-
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>YouTube Video ID or URL</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.textSecondary + '30' }]}
-                  value={newVideoId}
-                  onChangeText={setNewVideoId}
-                  placeholder="e.g. dQw4w9WgXcQ or full URL"
-                  placeholderTextColor={colors.textSecondary + '60'}
-                  autoCapitalize="none"
-                />
-
-                {newVideoId.trim().length > 5 && (
-                  <View style={styles.previewContainer}>
-                    <Image
-                      source={{ uri: `https://i.ytimg.com/vi/${newVideoId.trim().replace(/.*(?:youtu\.be\/|v=)/, '').replace(/[&?].*/, '')}/hqdefault.jpg` }}
-                      style={styles.previewImage}
-                    />
-                  </View>
-                )}
-
-                <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={handleAddVideo} activeOpacity={0.8}>
-                  <Youtube size={18} color="#fff" />
-                  <Text style={styles.addButtonText}>Add Video</Text>
-                </TouchableOpacity>
-              </View>
+      <Modal visible={showAddModal} transparent animationType="slide" onRequestClose={() => setShowAddModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Video Clip</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <X size={22} color="#999" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Title</Text>
+              <TextInput
+                style={styles.input}
+                value={newVideoTitle}
+                onChangeText={setNewVideoTitle}
+                placeholder="Video title..."
+                placeholderTextColor="#666"
+              />
+              <Text style={styles.inputLabel}>YouTube Video ID or URL</Text>
+              <TextInput
+                style={styles.input}
+                value={newVideoId}
+                onChangeText={setNewVideoId}
+                placeholder="e.g. dQw4w9WgXcQ or full URL"
+                placeholderTextColor="#666"
+                autoCapitalize="none"
+              />
+              {newVideoId.trim().length > 5 && (
+                <View style={styles.previewContainer}>
+                  <Image
+                    source={{ uri: `https://i.ytimg.com/vi/${newVideoId.trim().replace(/.*(?:youtu\.be\/|v=)/, '').replace(/[&?].*/, '')}/hqdefault.jpg` }}
+                    style={styles.previewImage}
+                  />
+                </View>
+              )}
+              <TouchableOpacity style={styles.addButton} onPress={handleAddVideo} activeOpacity={0.8}>
+                <Youtube size={18} color="#fff" />
+                <Text style={styles.addButtonText}>Add Video</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </View>
-    </>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
-const getStyles = (colors: any) => StyleSheet.create({
+interface ClipPageProps {
+  clip: ClipItem;
+  isActive: boolean;
+  isLiked: boolean;
+  isSaved: boolean;
+  onToggleLike: () => void;
+  onToggleSave: () => void;
+  likeScale: Animated.Value;
+  saveScale: Animated.Value;
+  isAdmin: boolean;
+  isAdminClip: boolean;
+  onDelete: () => void;
+  insets: { top: number; bottom: number; left: number; right: number };
+  height: number;
+}
+
+const ClipPage = React.memo(function ClipPage({
+  clip,
+  isActive,
+  isLiked,
+  isSaved,
+  onToggleLike,
+  onToggleSave,
+  likeScale,
+  saveScale,
+  isAdmin,
+  isAdminClip,
+  onDelete,
+  insets,
+  height,
+}: ClipPageProps) {
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+
+  useEffect(() => {
+    if (isActive) {
+      const timer = setTimeout(() => setShowPlayer(true), 300);
+      return () => clearTimeout(timer);
+    } else {
+      setShowPlayer(false);
+      setIsVideoReady(false);
+    }
+  }, [isActive]);
+
+  const embedHtml = useMemo(() => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow: hidden; }
+        #player-container { width: 100vw; height: 100vh; }
+        #player { width: 100%; height: 100%; border: none; }
+      </style>
+    </head>
+    <body>
+      <div id="player-container"><div id="player"></div></div>
+      <script src="https://www.youtube.com/iframe_api"></script>
+      <script>
+        let player;
+        function onYouTubeIframeAPIReady() {
+          player = new YT.Player('player', {
+            videoId: '${clip.youtubeId}',
+            width: '100%',
+            height: '100%',
+            playerVars: {
+              autoplay: 1,
+              controls: 0,
+              rel: 0,
+              showinfo: 0,
+              modestbranding: 1,
+              playsinline: 1,
+              fs: 0,
+              cc_load_policy: 0,
+              iv_load_policy: 3,
+              loop: 1,
+              playlist: '${clip.youtubeId}'
+            },
+            events: {
+              onReady: function(event) {
+                event.target.playVideo();
+                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+              },
+              onStateChange: function(event) {
+                if (event.data === 0) {
+                  event.target.playVideo();
+                }
+                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'state', state: event.data }));
+              },
+              onError: function(event) {
+                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', code: event.data }));
+              }
+            }
+          });
+        }
+      </script>
+    </body>
+    </html>
+  `, [clip.youtubeId]);
+
+  const handleMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'ready') {
+        setIsVideoReady(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const formatViews = (count?: number) => {
+    if (!count) return '';
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(0)}K`;
+    return `${count}`;
+  };
+
+  return (
+    <View style={[styles.clipPage, { height }]}>
+      <Image
+        source={{ uri: clip.thumbnail }}
+        style={StyleSheet.absoluteFillObject}
+        blurRadius={20}
+      />
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+
+      {showPlayer && isActive ? (
+        <View style={styles.playerWrapper}>
+          <WebView
+            source={{ html: embedHtml }}
+            style={styles.webview}
+            onMessage={handleMessage}
+            allowsFullscreenVideo={false}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            scrollEnabled={false}
+            bounces={false}
+          />
+          {!isVideoReady && (
+            <View style={styles.playerLoading}>
+              <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={styles.playerWrapper}>
+          <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
+          <View style={styles.playOverlay}>
+            <View style={styles.bigPlayBtn}>
+              <Play size={40} color="#fff" fill="#fff" />
+            </View>
+          </View>
+        </View>
+      )}
+
+      <LinearGradient
+        colors={['transparent', 'transparent', 'rgba(0,0,0,0.85)']}
+        locations={[0, 0.5, 1]}
+        style={styles.bottomGradient}
+        pointerEvents="box-none"
+      />
+
+      <View style={[styles.sideActions, { bottom: insets.bottom + 100 }]} pointerEvents="box-none">
+        <TouchableOpacity onPress={onToggleLike} activeOpacity={0.7} style={styles.sideBtn}>
+          <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+            <Heart
+              size={30}
+              color={isLiked ? '#FF2D55' : '#fff'}
+              fill={isLiked ? '#FF2D55' : 'transparent'}
+            />
+          </Animated.View>
+          <Text style={styles.sideBtnLabel}>{isLiked ? 'Liked' : 'Like'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7} style={styles.sideBtn}>
+          <Animated.View style={{ transform: [{ scale: saveScale }] }}>
+            <Bookmark
+              size={28}
+              color={isSaved ? '#FFD60A' : '#fff'}
+              fill={isSaved ? '#FFD60A' : 'transparent'}
+            />
+          </Animated.View>
+          <Text style={styles.sideBtnLabel}>{isSaved ? 'Saved' : 'Save'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity activeOpacity={0.7} style={styles.sideBtn}>
+          <Share2 size={26} color="#fff" />
+          <Text style={styles.sideBtnLabel}>Share</Text>
+        </TouchableOpacity>
+
+        {isAdmin && isAdminClip && (
+          <TouchableOpacity onPress={onDelete} activeOpacity={0.7} style={styles.sideBtn}>
+            <Trash2 size={24} color="#EF4444" />
+            <Text style={[styles.sideBtnLabel, { color: '#EF4444' }]}>Delete</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={[styles.bottomInfo, { paddingBottom: insets.bottom + 16 }]} pointerEvents="none">
+        <View style={styles.channelRow}>
+          <View style={styles.channelIcon}>
+            <Music2 size={14} color="#fff" />
+          </View>
+          <Text style={styles.channelName} numberOfLines={1}>{clip.channelTitle}</Text>
+          {clip.isAdmin && (
+            <View style={styles.adminTag}>
+              <Text style={styles.adminTagText}>ADMIN</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.clipTitle} numberOfLines={2}>{clip.title}</Text>
+        {(clip.viewCountFormatted || clip.durationFormatted) && (
+          <View style={styles.metaRow}>
+            {clip.viewCount != null && clip.viewCount > 0 && (
+              <View style={styles.metaItem}>
+                <Eye size={12} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.metaText}>{formatViews(clip.viewCount)} views</Text>
+              </View>
+            )}
+            {clip.durationFormatted && (
+              <Text style={styles.metaText}>{clip.durationFormatted}</Text>
+            )}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    backgroundColor: colors.primary + '25',
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700' as const,
-    letterSpacing: -0.3,
-  },
-  list: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  sectionBlock: {
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700' as const,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  sectionDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 16,
-  },
-  clipCard: {
-    flexDirection: 'row' as const,
-    marginBottom: 14,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    overflow: 'hidden' as const,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  thumbnailContainer: {
-    width: 140,
-    height: 90,
-    position: 'relative' as const,
-  },
-  thumbnail: {
-    width: '100%' as const,
-    height: '100%' as const,
-  },
-  thumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  playCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    paddingLeft: 2,
-  },
-  durationBadge: {
-    position: 'absolute' as const,
-    bottom: 6,
-    right: 6,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  durationText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600' as const,
-  },
-  adminBadge: {
-    position: 'absolute' as const,
-    top: 6,
-    left: 6,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  adminBadgeText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800' as const,
-    letterSpacing: 0.5,
-  },
-  clipInfo: {
-    flex: 1,
-    padding: 10,
-    justifyContent: 'center' as const,
-  },
-  clipTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    lineHeight: 19,
-    marginBottom: 6,
-  },
-  clipMeta: {
-    gap: 4,
-  },
-  clipChannel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500' as const,
-  },
-  viewsRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
-  },
-  viewsText: {
-    color: colors.textSecondary,
-    fontSize: 11,
-  },
-  deleteBtn: {
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: 12,
+    backgroundColor: '#000',
   },
   loadingContainer: {
     flex: 1,
@@ -453,46 +606,218 @@ const getStyles = (colors: any) => StyleSheet.create({
     gap: 12,
   },
   loadingText: {
+    color: '#fff',
     fontSize: 15,
+    fontWeight: '500' as const,
+    marginTop: 8,
   },
   emptyContainer: {
+    justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingTop: 60,
-    gap: 8,
+    gap: 12,
+    backgroundColor: '#000',
   },
   emptyText: {
+    color: '#fff',
     fontSize: 18,
     fontWeight: '600' as const,
   },
   emptySubtext: {
+    color: '#888',
     fontSize: 14,
   },
-  addModalOverlay: {
+  topBar: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    zIndex: 100,
+  },
+  topBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  topTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700' as const,
+    letterSpacing: -0.3,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  clipPage: {
+    width: SCREEN_WIDTH,
+    backgroundColor: '#000',
+    position: 'relative' as const,
+  },
+  playerWrapper: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: '#000',
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  playerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    zIndex: 5,
+  },
+  thumbnailFull: {
+    width: '100%' as const,
+    height: '100%' as const,
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  bigPlayBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingLeft: 4,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  bottomGradient: {
+    position: 'absolute' as const,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 300,
+  },
+  sideActions: {
+    position: 'absolute' as const,
+    right: 12,
+    alignItems: 'center' as const,
+    gap: 20,
+    zIndex: 50,
+  },
+  sideBtn: {
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  sideBtnLabel: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600' as const,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  bottomInfo: {
+    position: 'absolute' as const,
+    bottom: 0,
+    left: 0,
+    right: 70,
+    paddingHorizontal: 16,
+    zIndex: 50,
+  },
+  channelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginBottom: 8,
+  },
+  channelIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  channelName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700' as const,
+    flex: 1,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  adminTag: {
+    backgroundColor: '#FF2D55',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  adminTagText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800' as const,
+    letterSpacing: 0.5,
+  },
+  clipTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500' as const,
+    lineHeight: 21,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  metaItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  metaText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '500' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end' as const,
   },
-  addModalContent: {
+  modalContent: {
+    backgroundColor: '#1C1C1E',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
   },
-  addModalHeader: {
+  modalHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  addModalTitle: {
+  modalTitle: {
+    color: '#fff',
     fontSize: 18,
     fontWeight: '700' as const,
   },
-  addModalBody: {
+  modalBody: {
     padding: 20,
   },
   inputLabel: {
+    color: '#999',
     fontSize: 13,
     fontWeight: '600' as const,
     marginBottom: 6,
@@ -500,11 +825,14 @@ const getStyles = (colors: any) => StyleSheet.create({
     letterSpacing: 0.8,
   },
   input: {
+    backgroundColor: '#2C2C2E',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
+    color: '#fff',
     marginBottom: 16,
   },
   previewContainer: {
@@ -524,6 +852,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 14,
+    backgroundColor: '#FF2D55',
     marginTop: 4,
   },
   addButtonText: {
