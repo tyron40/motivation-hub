@@ -18,6 +18,7 @@ import {
   SkipBack,
   RotateCcw,
   RotateCw,
+  ExternalLink,
 } from 'lucide-react-native';
 
 interface AudioOnlyVideoPlayerProps {
@@ -45,9 +46,9 @@ interface VideoMetadata {
 
 export default function AudioOnlyVideoPlayer({
   videoId,
-  title,
+  title: _title,
   thumbnail,
-  channelTitle,
+  channelTitle: _channelTitle,
   autoplay = true,
   onError,
   onNext,
@@ -76,7 +77,7 @@ export default function AudioOnlyVideoPlayer({
 
   useEffect(() => {
     const fetchVideoMetadata = async () => {
-      console.log(`🎵 Fetching metadata for audio: ${videoId}`);
+      console.log(`Fetching metadata for video: ${videoId}`);
       setIsLoading(true);
       setError(null);
 
@@ -100,13 +101,13 @@ export default function AudioOnlyVideoPlayer({
         const data = await response.json();
         
         if (!data.items || data.items.length === 0) {
-          throw new Error('Audio not found');
+          throw new Error('Video not found');
         }
 
         const video = data.items[0];
         
-        const parseDuration = (duration: string): number => {
-          const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        const parseDuration = (dur: string): number => {
+          const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
           if (!match) return 0;
           const hours = parseInt(match[1] || '0');
           const minutes = parseInt(match[2] || '0');
@@ -128,18 +129,18 @@ export default function AudioOnlyVideoPlayer({
           publishedAt: video.snippet.publishedAt,
         });
 
-        console.log(`✅ Audio metadata fetched:`, video.snippet.title);
+        console.log('Video metadata fetched:', video.snippet.title);
         setIsLoading(false);
       } catch (err: any) {
-        console.error('❌ Error fetching audio metadata:', err);
-        setError(err.message || 'Failed to fetch audio data');
+        console.error('Error fetching video metadata:', err);
+        setError(err.message || 'Failed to fetch video data');
         setIsLoading(false);
-        onError?.(err.message || 'Failed to fetch audio data');
+        onError?.(err.message || 'Failed to fetch video data');
       }
     };
 
     if (videoId) {
-      fetchVideoMetadata();
+      void fetchVideoMetadata();
     }
   }, [videoId, onError]);
 
@@ -168,14 +169,14 @@ export default function AudioOnlyVideoPlayer({
   }, []);
 
   const onPlayerReady = useCallback(() => {
-    console.log('✅ YouTube player ready');
+    console.log('YouTube player ready');
     setPlayerReady(true);
     setPlayerError(false);
     setError(null);
     
     if (playerRef.current) {
-      playerRef.current.getDuration().then((dur: number) => {
-        console.log('📊 Video duration:', dur);
+      void playerRef.current.getDuration().then((dur: number) => {
+        console.log('Video duration:', dur);
         if (dur > 0) {
           setDuration(dur);
         }
@@ -184,26 +185,25 @@ export default function AudioOnlyVideoPlayer({
       });
       
       if (autoplay) {
-        console.log('🎬 Triggering auto-play with seekTo kick');
+        console.log('Triggering auto-play');
         setTimeout(() => {
           if (playerRef.current) {
             playerRef.current.seekTo(0, true);
           }
           setIsPlaying(true);
-          console.log('🎬 Auto-play triggered');
         }, 300);
       }
     }
   }, [autoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
-    console.error('❌ YouTube player error:', errorMsg);
+    console.error('YouTube player error:', errorMsg);
     setPlayerError(true);
     setPlayerReady(false);
   }, []);
 
   const onStateChange = useCallback((state: string) => {
-    console.log('🎬 Player state:', state);
+    console.log('Player state:', state);
     
     if (state === 'playing') {
       setIsPlaying(true);
@@ -215,7 +215,7 @@ export default function AudioOnlyVideoPlayer({
       setIsPlaying(false);
       stopProgressTracking();
       setCurrentTime(0);
-      console.log('🏁 Video ended');
+      console.log('Video ended');
     }
   }, [startProgressTracking, stopProgressTracking]);
 
@@ -232,7 +232,7 @@ export default function AudioOnlyVideoPlayer({
 
   const openInYouTube = useCallback(() => {
     const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log('🔗 Opening in YouTube app:', youtubeUrl);
+    console.log('Opening in YouTube:', youtubeUrl);
     Linking.openURL(youtubeUrl).catch((err) => {
       console.error('Error opening YouTube:', err);
     });
@@ -240,17 +240,17 @@ export default function AudioOnlyVideoPlayer({
 
   const handlePlayPause = () => {
     if (playerError) {
-      console.log('⚠️ Player error, opening in YouTube app');
+      console.log('Player error, opening in YouTube app');
       openInYouTube();
       return;
     }
 
     if (!playerReady) {
-      console.log('⚠️ Player not ready yet');
+      console.log('Player not ready yet');
       return;
     }
 
-    console.log(isPlaying ? '⏸️ Pausing video' : '▶️ Playing video');
+    console.log(isPlaying ? 'Pausing video' : 'Playing video');
     setIsPlaying(!isPlaying);
   };
 
@@ -298,10 +298,10 @@ export default function AudioOnlyVideoPlayer({
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.artworkContainer}>
+        <View style={styles.videoContainer}>
           <ActivityIndicator size="large" color="#667eea" />
         </View>
-        <Text style={styles.loadingText}>Loading audio...</Text>
+        <Text style={styles.loadingText}>Loading video...</Text>
       </View>
     );
   }
@@ -310,8 +310,8 @@ export default function AudioOnlyVideoPlayer({
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Cannot load audio</Text>
-          <Text style={styles.errorSub}>{error || 'Audio not found'}</Text>
+          <Text style={styles.errorText}>Cannot load video</Text>
+          <Text style={styles.errorSub}>{error || 'Video not found'}</Text>
           <TouchableOpacity onPress={openInYouTube} style={styles.openButton}>
             <Text style={styles.openButtonText}>Open in YouTube</Text>
           </TouchableOpacity>
@@ -322,48 +322,46 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
-      <View style={styles.artworkContainer}>
-        <TouchableOpacity 
-          style={styles.artworkTouchable}
-          onPress={handlePlayPause}
-          activeOpacity={0.8}
-        >
-          <View style={styles.ytWrapper}>
-            <YoutubePlayer
-              ref={playerRef}
-              videoId={videoId}
-              height={width * 0.75}
-              width={width * 0.75}
-              play={isPlaying}
-              onReady={onPlayerReady}
-              onError={onPlayerError}
-              onChangeState={onStateChange}
-              webViewStyle={{ opacity: 0.01 }}
-              initialPlayerParams={{
-                controls: false,
-                modestbranding: true,
-                rel: false,
-                playsinline: true,
-                preventFullScreen: true,
-              }}
-            />
-          </View>
-
-          <View 
-            style={styles.thumbnailOverlay}
-            pointerEvents="none"
-          >
+      <View style={styles.videoContainer}>
+        <YoutubePlayer
+          ref={playerRef}
+          videoId={videoId}
+          height={videoPlayerHeight}
+          width={videoPlayerWidth}
+          play={isPlaying}
+          onReady={onPlayerReady}
+          onError={onPlayerError}
+          onChangeState={onStateChange}
+          initialPlayerParams={{
+            controls: false,
+            modestbranding: true,
+            rel: false,
+            playsinline: true,
+            preventFullScreen: true,
+          }}
+          webViewStyle={styles.ytWebView}
+        />
+        {!playerReady && (
+          <View style={styles.playerLoadingOverlay}>
             <Image 
               source={{ uri: metadata.thumbnail || thumbnail }} 
-              style={styles.artwork} 
+              style={StyleSheet.absoluteFillObject} 
             />
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.3)' }]} />
+            <ActivityIndicator size="large" color="#fff" />
           </View>
-        </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.infoSection}>
         <Text style={styles.title} numberOfLines={2}>{metadata.title}</Text>
-        <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
+        <View style={styles.channelRow}>
+          <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
+          <TouchableOpacity onPress={openInYouTube} style={styles.ytLinkBtn} activeOpacity={0.7}>
+            <ExternalLink size={13} color="#FF0000" />
+            <Text style={styles.ytLinkText}>YouTube</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.progressSection}>
@@ -450,6 +448,8 @@ export default function AudioOnlyVideoPlayer({
 }
 
 const { width } = Dimensions.get('window');
+const videoPlayerWidth = Math.min(width - 48, 340);
+const videoPlayerHeight = Math.round(videoPlayerWidth * (9 / 16));
 
 const styles = StyleSheet.create({
   container: {
@@ -458,14 +458,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  artworkContainer: {
-    width: width * 0.75,
-    height: width * 0.75,
-    maxWidth: 320,
-    maxHeight: 320,
-    borderRadius: 24,
+  videoContainer: {
+    width: videoPlayerWidth,
+    height: videoPlayerHeight,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 40,
+    marginBottom: 32,
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -475,61 +473,68 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  artworkTouchable: {
-    width: '100%',
-    height: '100%',
+  ytWebView: {
+    backgroundColor: '#000',
+    borderRadius: 16,
   },
 
-  ytWrapper: {
+  playerLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.01,
-  },
-
-  thumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-
-  playOverlayIcon: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-
-  artwork: {
-    width: '100%',
-    height: '100%',
+    zIndex: 5,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
 
   infoSection: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     paddingHorizontal: 10,
   },
 
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 8,
-    lineHeight: 28,
+    lineHeight: 26,
+  },
+
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
 
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '500' as const,
     textAlign: 'center',
   },
 
+  ytLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,0,0,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+
+  ytLinkText: {
+    color: '#FF0000',
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+
   progressSection: {
     width: '100%',
-    marginBottom: 32,
+    marginBottom: 24,
   },
 
   slider: {

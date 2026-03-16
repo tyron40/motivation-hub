@@ -270,7 +270,7 @@ function ChatScreenContent() {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
     chatMessageCount.current += 1;
@@ -279,8 +279,8 @@ function ChatScreenContent() {
       void showInterstitialAd();
     }
 
-    // Check if user has credits
-    if (!usageStats.canUseAI) {
+    // Check if user has credits (suggested questions are free)
+    if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
       if (Platform.OS !== 'web') {
         Alert.alert(
@@ -311,26 +311,29 @@ function ChatScreenContent() {
         timestamp: new Date(),
       };
 
-      // Deduct 1 credit for chat message
-      const creditUsed = await deductCredit();
-      if (!creditUsed) {
-        console.log('❌ Failed to deduct credit');
-        if (Platform.OS !== 'web') {
-          Alert.alert(
-            'No Credits',
-            'You need credits to use the AI chat feature. Purchase credits to continue.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-            ]
-          );
-        } else {
-          console.error('You need credits to use the AI chat feature.');
+      // Deduct 1 credit for chat message (suggested questions are free)
+      if (!isSuggestion) {
+        const creditUsed = await deductCredit();
+        if (!creditUsed) {
+          console.log('❌ Failed to deduct credit');
+          if (Platform.OS !== 'web') {
+            Alert.alert(
+              'No Credits',
+              'You need credits to use the AI chat feature. Purchase credits to continue.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+              ]
+            );
+          } else {
+            console.error('You need credits to use the AI chat feature.');
+          }
+          return;
         }
-        return;
+        console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
+      } else {
+        console.log('✅ Suggested question - no credit needed');
       }
-
-      console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
 
       setMessages(prev => [...prev, userMessage]);
       setInputText('');
@@ -888,7 +891,7 @@ function ChatScreenContent() {
                         styles.suggestionButton,
                         { borderLeftColor: prompt.color }
                       ]}
-                      onPress={() => sendMessage(prompt.text)}
+                      onPress={() => sendMessage(prompt.text, true)}
                     >
                       <View style={[styles.suggestionIcon, { backgroundColor: prompt.color + '20' }]}>
                         <Icon color={prompt.color} size={18} />

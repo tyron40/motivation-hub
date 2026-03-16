@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/hooks/auth-context';
 import { MotivationalFlyer } from '@/mocks/motivationalFlyers';
+import { CategoryBanner, getDefaultBannerForCategory } from '@/mocks/categoryBanners';
 
 const ADMIN_EMAILS = ['robertstyron40@gmail.com'];
 
@@ -18,11 +19,13 @@ export interface AdminVideo {
 
 const STORAGE_KEY_FLYERS = 'admin_custom_flyers';
 const STORAGE_KEY_VIDEOS = 'admin_custom_videos';
+const STORAGE_KEY_BANNERS = 'admin_category_banners';
 
 export const [AdminProvider, useAdmin] = createContextHook(() => {
   const { user } = useAuth();
   const [customFlyers, setCustomFlyers] = useState<MotivationalFlyer[]>([]);
   const [customVideos, setCustomVideos] = useState<AdminVideo[]>([]);
+  const [customBanners, setCustomBanners] = useState<CategoryBanner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = useMemo(() => {
@@ -33,9 +36,10 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [flyersRaw, videosRaw] = await Promise.all([
+        const [flyersRaw, videosRaw, bannersRaw] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEY_FLYERS),
           AsyncStorage.getItem(STORAGE_KEY_VIDEOS),
+          AsyncStorage.getItem(STORAGE_KEY_BANNERS),
         ]);
 
         if (flyersRaw) {
@@ -45,6 +49,10 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         if (videosRaw) {
           const parsed = JSON.parse(videosRaw);
           if (Array.isArray(parsed)) setCustomVideos(parsed);
+        }
+        if (bannersRaw) {
+          const parsed = JSON.parse(bannersRaw);
+          if (Array.isArray(parsed)) setCustomBanners(parsed);
         }
       } catch (error) {
         console.error('Error loading admin data:', error);
@@ -98,14 +106,41 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     }
   }, [customVideos]);
 
+  const updateBanner = useCallback(async (banner: CategoryBanner) => {
+    try {
+      const existing = customBanners.findIndex(b => b.categoryId === banner.categoryId);
+      let updated: CategoryBanner[];
+      if (existing >= 0) {
+        updated = [...customBanners];
+        updated[existing] = banner;
+      } else {
+        updated = [...customBanners, banner];
+      }
+      setCustomBanners(updated);
+      await AsyncStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(updated));
+      console.log('Admin: Banner updated for', banner.categoryName);
+    } catch (error) {
+      console.error('Error saving banner:', error);
+    }
+  }, [customBanners]);
+
+  const getBannerForCategory = useCallback((categoryId: string, categoryName: string): CategoryBanner => {
+    const custom = customBanners.find(b => b.categoryId === categoryId);
+    if (custom) return custom;
+    return getDefaultBannerForCategory(categoryId, categoryName);
+  }, [customBanners]);
+
   return useMemo(() => ({
     isAdmin,
     isLoading,
     customFlyers,
     customVideos,
+    customBanners,
     addFlyer,
     removeFlyer,
     addVideo,
     removeVideo,
-  }), [isAdmin, isLoading, customFlyers, customVideos, addFlyer, removeFlyer, addVideo, removeVideo]);
+    updateBanner,
+    getBannerForCategory,
+  }), [isAdmin, isLoading, customFlyers, customVideos, customBanners, addFlyer, removeFlyer, addVideo, removeVideo, updateBanner, getBannerForCategory]);
 });

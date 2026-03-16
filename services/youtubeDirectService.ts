@@ -1,8 +1,21 @@
 const YOUTUBE_API_KEY = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || 'AIzaSyDCCZSM3VQT8BcYEqX5Qs0X5Yn_YF6Kd0w';
 const MOTIVATION_CHANNEL_ID = 'UCHmQDfB84rZecCY_ERM4eYQ';
 
-const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 1000 * 60 * 30;
+const REQUEST_CACHE = new Map<string, { data: any; timestamp: number; dateKey: string }>();
+
+function getTodayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+}
+
+function isCacheValid(entry: { data: any; timestamp: number; dateKey: string }): boolean {
+  const today = getTodayKey();
+  if (entry.dateKey !== today) {
+    return false;
+  }
+  const elapsed = Date.now() - entry.timestamp;
+  return elapsed < 1000 * 60 * 60 * 4;
+}
 
 interface YouTubeVideo {
   id: string;
@@ -49,7 +62,7 @@ export async function fetchYouTubeVideosDirect(
   const cacheKey = `${query}-${maxResults}`;
   const cached = REQUEST_CACHE.get(cacheKey);
   
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+  if (cached && isCacheValid(cached)) {
     console.log(`✅ Using cached YouTube data for: "${query}"`);
     return cached.data;
   }
@@ -171,7 +184,7 @@ export async function fetchYouTubeVideosDirect(
 
     const finalVideos = allVideos.slice(0, maxResults);
     
-    REQUEST_CACHE.set(cacheKey, { data: finalVideos, timestamp: Date.now() });
+    REQUEST_CACHE.set(cacheKey, { data: finalVideos, timestamp: Date.now(), dateKey: getTodayKey() });
     
     if (REQUEST_CACHE.size > 50) {
       const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
@@ -202,7 +215,7 @@ export async function fetchChannelVideos(
   const cacheKey = `channel-${channelId}-${limit}`;
   const cached = REQUEST_CACHE.get(cacheKey);
   
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+  if (cached && isCacheValid(cached)) {
     console.log(`✅ Using cached channel data for: ${channelId}`);
     return cached.data;
   }
@@ -275,7 +288,7 @@ export async function fetchChannelVideos(
         category: 'Motivation',
       }));
     
-    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
+    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now(), dateKey: getTodayKey() });
     
     console.log(`✅ Successfully fetched ${videos.length} videos from channel`);
     return videos;

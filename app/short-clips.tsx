@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Animated,
   Platform,
   ViewToken,
+  Linking,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,8 +31,9 @@ import {
   Youtube,
   Music2,
   Eye,
+  ExternalLink,
 } from 'lucide-react-native';
-import { WebView } from 'react-native-webview';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
@@ -152,9 +154,7 @@ export default function ShortClipsScreen() {
   }, [customVideos]);
 
   const toggleLike = useCallback(async (clipId: string) => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const anim = getOrCreateAnim(likeAnimations, clipId);
     Animated.sequence([
@@ -175,9 +175,7 @@ export default function ShortClipsScreen() {
   }, [getOrCreateAnim, likeAnimations]);
 
   const toggleSave = useCallback(async (clipId: string) => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const anim = getOrCreateAnim(saveAnimations, clipId);
     Animated.sequence([
@@ -391,85 +389,54 @@ const ClipPage = React.memo(function ClipPage({
   height,
 }: ClipPageProps) {
   const [showPlayer, setShowPlayer] = useState(false);
-  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
+  const playerRef = useRef<any>(null);
 
   useEffect(() => {
     if (isActive) {
-      const timer = setTimeout(() => setShowPlayer(true), 300);
+      const timer = setTimeout(() => {
+        setShowPlayer(true);
+        setIsPlaying(true);
+      }, 400);
       return () => clearTimeout(timer);
     } else {
+      setIsPlaying(false);
       setShowPlayer(false);
-      setIsVideoReady(false);
+      setPlayerReady(false);
     }
   }, [isActive]);
 
-  const embedHtml = useMemo(() => `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000; overflow: hidden; }
-        #player-container { width: 100vw; height: 100vh; }
-        #player { width: 100%; height: 100%; border: none; }
-      </style>
-    </head>
-    <body>
-      <div id="player-container"><div id="player"></div></div>
-      <script src="https://www.youtube.com/iframe_api"></script>
-      <script>
-        let player;
-        function onYouTubeIframeAPIReady() {
-          player = new YT.Player('player', {
-            videoId: '${clip.youtubeId}',
-            width: '100%',
-            height: '100%',
-            playerVars: {
-              autoplay: 1,
-              controls: 0,
-              rel: 0,
-              showinfo: 0,
-              modestbranding: 1,
-              playsinline: 1,
-              fs: 0,
-              cc_load_policy: 0,
-              iv_load_policy: 3,
-              loop: 1,
-              playlist: '${clip.youtubeId}'
-            },
-            events: {
-              onReady: function(event) {
-                event.target.playVideo();
-                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
-              },
-              onStateChange: function(event) {
-                if (event.data === 0) {
-                  event.target.playVideo();
-                }
-                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'state', state: event.data }));
-              },
-              onError: function(event) {
-                window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', code: event.data }));
-              }
-            }
-          });
-        }
-      </script>
-    </body>
-    </html>
-  `, [clip.youtubeId]);
-
-  const handleMessage = useCallback((event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'ready') {
-        setIsVideoReady(true);
-      }
-    } catch {
-      // ignore
+  const onStateChange = useCallback((state: string) => {
+    console.log('Clip player state:', state, clip.youtubeId);
+    if (state === 'ended') {
+      setIsPlaying(true);
+    } else if (state === 'paused') {
+      setIsPlaying(false);
+    } else if (state === 'playing') {
+      setIsPlaying(true);
     }
-  }, []);
+  }, [clip.youtubeId]);
+
+  const onPlayerReady = useCallback(() => {
+    console.log('Clip player ready:', clip.youtubeId);
+    setPlayerReady(true);
+  }, [clip.youtubeId]);
+
+  const onPlayerError = useCallback((error: string) => {
+    console.error('Clip player error:', error, clip.youtubeId);
+  }, [clip.youtubeId]);
+
+  const handleTapToPlay = useCallback(() => {
+    if (playerReady) {
+      setIsPlaying(prev => !prev);
+    }
+  }, [playerReady]);
+
+  const openInYouTube = useCallback(() => {
+    const url = `https://www.youtube.com/watch?v=${clip.youtubeId}`;
+    Linking.openURL(url).catch(err => console.error('Error opening YouTube:', err));
+  }, [clip.youtubeId]);
 
   const formatViews = (count?: number) => {
     if (!count) return '';
@@ -477,6 +444,8 @@ const ClipPage = React.memo(function ClipPage({
     if (count >= 1000) return `${(count / 1000).toFixed(0)}K`;
     return `${count}`;
   };
+
+  const playerHeight = Math.round(SCREEN_WIDTH * (9 / 16));
 
   return (
     <View style={[styles.clipPage, { height }]}>
@@ -487,38 +456,67 @@ const ClipPage = React.memo(function ClipPage({
       />
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
 
-      {showPlayer && isActive ? (
-        <View style={styles.playerWrapper}>
-          <WebView
-            source={{ html: embedHtml }}
-            style={styles.webview}
-            onMessage={handleMessage}
-            allowsFullscreenVideo={false}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            scrollEnabled={false}
-            bounces={false}
-          />
-          {!isVideoReady && (
-            <View style={styles.playerLoading}>
-              <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
-              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
-              <ActivityIndicator size="large" color="#fff" />
-            </View>
-          )}
-        </View>
-      ) : (
-        <View style={styles.playerWrapper}>
-          <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
-          <View style={styles.playOverlay}>
-            <View style={styles.bigPlayBtn}>
-              <Play size={40} color="#fff" fill="#fff" />
+      <TouchableOpacity
+        style={styles.playerWrapper}
+        activeOpacity={1}
+        onPress={handleTapToPlay}
+      >
+        {showPlayer && isActive ? (
+          <View style={styles.ytPlayerContainer}>
+            <YoutubePlayer
+              ref={playerRef}
+              videoId={clip.youtubeId}
+              height={playerHeight}
+              width={SCREEN_WIDTH}
+              play={isPlaying}
+              onReady={onPlayerReady}
+              onError={onPlayerError}
+              onChangeState={onStateChange}
+              initialPlayerParams={{
+                controls: false,
+                modestbranding: true,
+                rel: false,
+                playsinline: true,
+                preventFullScreen: true,
+                loop: true,
+              }}
+              webViewStyle={styles.ytWebView}
+            />
+            {!playerReady && (
+              <View style={styles.playerLoading}>
+                <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
+                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            )}
+            {playerReady && !isPlaying && (
+              <View style={styles.pauseOverlay} pointerEvents="none">
+                <View style={styles.bigPlayBtn}>
+                  <Play size={40} color="#fff" fill="#fff" />
+                </View>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.thumbnailContainer}>
+            <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
+            <View style={styles.playOverlay}>
+              <View style={styles.bigPlayBtn}>
+                <Play size={40} color="#fff" fill="#fff" />
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={openInYouTube}
+        style={[styles.youtubeLink, { top: insets.top + 56 }]}
+        activeOpacity={0.7}
+      >
+        <ExternalLink size={14} color="#fff" />
+        <Text style={styles.youtubeLinkText}>YouTube</Text>
+      </TouchableOpacity>
 
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.85)']}
@@ -663,9 +661,16 @@ const styles = StyleSheet.create({
   playerWrapper: {
     flex: 1,
     backgroundColor: '#000',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  webview: {
-    flex: 1,
+  ytPlayerContainer: {
+    width: SCREEN_WIDTH,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    position: 'relative' as const,
+  },
+  ytWebView: {
     backgroundColor: '#000',
   },
   playerLoading: {
@@ -673,6 +678,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     zIndex: 5,
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  thumbnailContainer: {
+    flex: 1,
+    width: '100%' as const,
   },
   thumbnailFull: {
     width: '100%' as const,
@@ -694,6 +709,23 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
+  },
+  youtubeLink: {
+    position: 'absolute' as const,
+    right: 12,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: 'rgba(255,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    zIndex: 80,
+  },
+  youtubeLinkText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700' as const,
   },
   bottomGradient: {
     position: 'absolute' as const,
