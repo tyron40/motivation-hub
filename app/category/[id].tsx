@@ -30,7 +30,7 @@ import { CategoryBanner } from '@/mocks/categoryBanners';
 export default function CategoryScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
-  const { toggleFavorite, setCurrentSpeech, getSpeechesByCategory } = useSpeechContext();
+  const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
   const { tryShowInterstitialOnTransition } = useAdMob();
@@ -149,6 +149,8 @@ export default function CategoryScreen() {
     try {
       await tryShowInterstitialOnTransition();
     } catch {}
+    const validSpeeches = categorySpeeches.filter(s => s && typeof s === 'object' && s.id && s.title);
+    setCurrentPlaylist(validSpeeches);
     setCurrentSpeech(speech);
     router.push('/player');
   };

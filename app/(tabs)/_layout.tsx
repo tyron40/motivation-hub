@@ -1,7 +1,7 @@
 import { Tabs } from "expo-router";
 import { Home, User, BookOpen, MessageCircle } from "lucide-react-native";
 import React from "react";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import MiniPlayer from "@/components/MiniPlayer";
 import { useTheme } from "@/hooks/theme-context";
 
 export default function TabLayout() {

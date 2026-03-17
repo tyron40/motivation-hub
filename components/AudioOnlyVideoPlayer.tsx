@@ -7,7 +7,7 @@ import {
   Image,
   ActivityIndicator,
   Dimensions,
-  Linking,
+  Animated,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import YoutubePlayer from 'react-native-youtube-iframe';
@@ -18,7 +18,6 @@ import {
   SkipBack,
   RotateCcw,
   RotateCw,
-  ExternalLink,
 } from 'lucide-react-native';
 
 interface AudioOnlyVideoPlayerProps {
@@ -50,6 +49,7 @@ export default function AudioOnlyVideoPlayer({
   thumbnail,
   channelTitle: _channelTitle,
   autoplay = true,
+  onEnd,
   onError,
   onNext,
   onPrevious
@@ -66,6 +66,33 @@ export default function AudioOnlyVideoPlayer({
   
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.04,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isPlaying, pulseAnim]);
 
   useEffect(() => {
     return () => {
@@ -216,9 +243,9 @@ export default function AudioOnlyVideoPlayer({
       stopProgressTracking();
       setCurrentTime(0);
       console.log('Video ended');
+      onEnd?.();
     }
-  }, [startProgressTracking, stopProgressTracking]);
-
+  }, [startProgressTracking, stopProgressTracking, onEnd]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -230,18 +257,9 @@ export default function AudioOnlyVideoPlayer({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const openInYouTube = useCallback(() => {
-    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log('Opening in YouTube:', youtubeUrl);
-    Linking.openURL(youtubeUrl).catch((err) => {
-      console.error('Error opening YouTube:', err);
-    });
-  }, [videoId]);
-
   const handlePlayPause = () => {
     if (playerError) {
-      console.log('Player error, opening in YouTube app');
-      openInYouTube();
+      console.log('Player error state');
       return;
     }
 
@@ -295,13 +313,18 @@ export default function AudioOnlyVideoPlayer({
     }
   };
 
+  const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.videoContainer}>
-          <ActivityIndicator size="large" color="#667eea" />
+        <View style={styles.coverImageContainer}>
+          <Image source={{ uri: coverImageUrl }} style={styles.coverImage} blurRadius={2} />
+          <View style={styles.coverOverlay}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </View>
         </View>
-        <Text style={styles.loadingText}>Loading video...</Text>
+        <Text style={styles.loadingText}>Loading audio...</Text>
       </View>
     );
   }
@@ -309,12 +332,12 @@ export default function AudioOnlyVideoPlayer({
   if (error || !metadata) {
     return (
       <View style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Cannot load video</Text>
-          <Text style={styles.errorSub}>{error || 'Video not found'}</Text>
-          <TouchableOpacity onPress={openInYouTube} style={styles.openButton}>
-            <Text style={styles.openButtonText}>Open in YouTube</Text>
-          </TouchableOpacity>
+        <View style={styles.coverImageContainer}>
+          <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
+          <View style={styles.coverOverlay}>
+            <Text style={styles.errorText}>Cannot load audio</Text>
+            <Text style={styles.errorSub}>{error || 'Video not found'}</Text>
+          </View>
         </View>
       </View>
     );
@@ -322,12 +345,26 @@ export default function AudioOnlyVideoPlayer({
 
   return (
     <View style={styles.container}>
-      <View style={styles.videoContainer}>
+      <Animated.View style={[styles.coverImageContainer, { transform: [{ scale: pulseAnim }] }]}>
+        <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
+        <View style={styles.coverGradient}>
+          {isPlaying && (
+            <View style={styles.nowPlayingIndicator}>
+              <View style={[styles.soundBar, styles.soundBar1]} />
+              <View style={[styles.soundBar, styles.soundBar2]} />
+              <View style={[styles.soundBar, styles.soundBar3]} />
+              <View style={[styles.soundBar, styles.soundBar4]} />
+            </View>
+          )}
+        </View>
+      </Animated.View>
+
+      <View style={styles.hiddenPlayer}>
         <YoutubePlayer
           ref={playerRef}
           videoId={videoId}
-          height={videoPlayerHeight}
-          width={videoPlayerWidth}
+          height={1}
+          width={1}
           play={isPlaying}
           onReady={onPlayerReady}
           onError={onPlayerError}
@@ -339,29 +376,13 @@ export default function AudioOnlyVideoPlayer({
             playsinline: true,
             preventFullScreen: true,
           }}
-          webViewStyle={styles.ytWebView}
+          webViewStyle={styles.hiddenWebView}
         />
-        {!playerReady && (
-          <View style={styles.playerLoadingOverlay}>
-            <Image 
-              source={{ uri: metadata.thumbnail || thumbnail }} 
-              style={StyleSheet.absoluteFillObject} 
-            />
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.3)' }]} />
-            <ActivityIndicator size="large" color="#fff" />
-          </View>
-        )}
       </View>
 
       <View style={styles.infoSection}>
         <Text style={styles.title} numberOfLines={2}>{metadata.title}</Text>
-        <View style={styles.channelRow}>
-          <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
-          <TouchableOpacity onPress={openInYouTube} style={styles.ytLinkBtn} activeOpacity={0.7}>
-            <ExternalLink size={13} color="#FF0000" />
-            <Text style={styles.ytLinkText}>YouTube</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
       </View>
 
       <View style={styles.progressSection}>
@@ -439,17 +460,16 @@ export default function AudioOnlyVideoPlayer({
       </View>
 
       {playerError && (
-        <TouchableOpacity onPress={openInYouTube} style={styles.fallbackButton}>
-          <Text style={styles.fallbackText}>Player error - Tap to open in YouTube</Text>
-        </TouchableOpacity>
+        <View style={styles.fallbackButton}>
+          <Text style={styles.fallbackText}>Audio playback issue - try next speech</Text>
+        </View>
       )}
     </View>
   );
 }
 
 const { width } = Dimensions.get('window');
-const videoPlayerWidth = Math.min(width - 48, 340);
-const videoPlayerHeight = Math.round(videoPlayerWidth * (9 / 16));
+const coverSize = Math.min(width - 80, 280);
 
 const styles = StyleSheet.create({
   container: {
@@ -458,10 +478,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  videoContainer: {
-    width: videoPlayerWidth,
-    height: videoPlayerHeight,
-    borderRadius: 16,
+  coverImageContainer: {
+    width: coverSize,
+    height: coverSize,
+    borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 32,
     elevation: 20,
@@ -470,21 +490,73 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
-    position: 'relative',
   },
 
-  ytWebView: {
-    backgroundColor: '#000',
-    borderRadius: 16,
+  coverImage: {
+    width: '100%',
+    height: '100%',
   },
 
-  playerLoadingOverlay: {
+  coverGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+
+  coverOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 5,
-    borderRadius: 16,
-    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+
+  nowPlayingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+    height: 20,
+  },
+
+  soundBar: {
+    width: 3,
+    backgroundColor: '#667eea',
+    borderRadius: 2,
+  },
+
+  soundBar1: {
+    height: 8,
+  },
+
+  soundBar2: {
+    height: 16,
+  },
+
+  soundBar3: {
+    height: 12,
+  },
+
+  soundBar4: {
+    height: 18,
+  },
+
+  hiddenPlayer: {
+    width: 1,
+    height: 1,
+    opacity: 0,
+    position: 'absolute',
+    top: -9999,
+    left: -9999,
+  },
+
+  hiddenWebView: {
+    backgroundColor: 'transparent',
+    width: 1,
+    height: 1,
   },
 
   infoSection: {
@@ -503,33 +575,11 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
 
-  channelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
   subtitle: {
     fontSize: 15,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '500' as const,
     textAlign: 'center',
-  },
-
-  ytLinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255,0,0,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  ytLinkText: {
-    color: '#FF0000',
-    fontSize: 12,
-    fontWeight: '600' as const,
   },
 
   progressSection: {
@@ -616,11 +666,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 
-  errorContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-
   errorText: {
     fontSize: 18,
     color: '#ff6b6b',
@@ -634,19 +679,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
     marginBottom: 16,
-  },
-
-  openButton: {
-    backgroundColor: '#FF0000',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-
-  openButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600' as const,
   },
 
   fallbackButton: {

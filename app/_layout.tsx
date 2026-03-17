@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+
 import { SpeechProvider, useSpeechContext } from "@/hooks/speech-context";
 import { UserProfileProvider } from "@/hooks/user-profile-context";
 import { AuthProvider, useAuth } from "@/hooks/auth-context";
@@ -20,6 +21,7 @@ import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoadingScreen } from '@/components/LoadingScreen';
+
 
 // Prevent splash screen from auto-hiding with error handling
 if (Platform.OS !== 'web') {
@@ -283,7 +285,22 @@ export default function RootLayout() {
       try {
         console.log('🚀 Starting app initialization...');
         
-        // Set ready immediately to prevent hydration timeout
+        if (Platform.OS !== 'web') {
+          try {
+            const { Audio } = require('expo-av');
+            await Audio.setAudioModeAsync({
+              allowsRecordingIOS: false,
+              staysActiveInBackground: true,
+              playsInSilentModeIOS: true,
+              shouldDuckAndroid: true,
+              playThroughEarpieceAndroid: false,
+            });
+            console.log('🔊 Background audio mode configured');
+          } catch (audioErr) {
+            console.warn('⚠️ Failed to set audio mode:', audioErr);
+          }
+        }
+        
         setIsReady(true);
         
         // Hide splash screen after a short delay

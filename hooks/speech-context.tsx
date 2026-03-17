@@ -11,6 +11,7 @@ interface SpeechContextValue {
   speeches: Speech[];
   favorites: Speech[];
   currentSpeech: Speech | null;
+  currentPlaylist: Speech[];
   isPlaying: boolean;
   listeningHistory: ListeningHistory[];
   userProfile: UserProfile;
@@ -18,9 +19,12 @@ interface SpeechContextValue {
   duration: number;
   isLoading: boolean;
   audioError: string | null;
+  isMinimized: boolean;
   toggleFavorite: (speechId: string) => void;
   playPause: () => void;
   setCurrentSpeech: (speech: Speech | null) => void;
+  setCurrentPlaylist: (playlist: Speech[]) => void;
+  setIsMinimized: (minimized: boolean) => void;
   searchSpeeches: (query: string) => Speech[];
   getSpeechesByCategory: (category: string) => Speech[];
   updateListeningTime: (seconds: number) => void;
@@ -31,6 +35,8 @@ interface SpeechContextValue {
   loadFreshContent: (category: string, useCache?: boolean) => Promise<void>;
   searchFreshContent: (query: string) => Promise<void>;
   loadTrendingContent: (useCache?: boolean) => Promise<void>;
+  skipToNext: () => void;
+  skipToPrevious: () => void;
   handlePlaybackStatusUpdate: (status: {
     isPlaying: boolean;
     currentTime: number;
@@ -52,7 +58,9 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const queryClient = useQueryClient();
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [currentSpeech, setCurrentSpeech] = useState<Speech | null>(null);
+  const [currentPlaylist, setCurrentPlaylist] = useState<Speech[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [listeningHistory, setListeningHistory] = useState<ListeningHistory[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultUserProfile);
   const [currentTime, setCurrentTime] = useState(0);
@@ -95,7 +103,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       return favoriteIds;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
+      void queryClient.invalidateQueries({ queryKey: ['favorites'] });
     },
   });
   const { mutate: mutateFavorites } = saveFavoritesMutation;
@@ -186,7 +194,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       }
     };
     
-    initializeSpeeches();
+    void initializeSpeeches();
     
     return () => {
       isMounted = false;
@@ -276,6 +284,30 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     console.log('🎵 Toggle play/pause, current state:', isPlaying);
     setIsPlaying(prev => !prev);
   }, [isPlaying]);
+
+  const skipToNext = useCallback(() => {
+    if (!currentSpeech || currentPlaylist.length === 0) return;
+    const currentIndex = currentPlaylist.findIndex((s: Speech) => s.id === currentSpeech.id);
+    if (currentIndex === -1) return;
+    const nextIndex = (currentIndex + 1) % currentPlaylist.length;
+    const nextSpeech = currentPlaylist[nextIndex];
+    if (nextSpeech) {
+      console.log('⏭️ Skipping to next in playlist:', nextSpeech.title);
+      setCurrentSpeech(nextSpeech);
+    }
+  }, [currentSpeech, currentPlaylist]);
+
+  const skipToPrevious = useCallback(() => {
+    if (!currentSpeech || currentPlaylist.length === 0) return;
+    const currentIndex = currentPlaylist.findIndex((s: Speech) => s.id === currentSpeech.id);
+    if (currentIndex === -1) return;
+    const prevIndex = currentIndex === 0 ? currentPlaylist.length - 1 : currentIndex - 1;
+    const prevSpeech = currentPlaylist[prevIndex];
+    if (prevSpeech) {
+      console.log('⏮️ Skipping to previous in playlist:', prevSpeech.title);
+      setCurrentSpeech(prevSpeech);
+    }
+  }, [currentSpeech, currentPlaylist]);
 
   const searchSpeeches = useCallback((query: string): Speech[] => {
     const lowercaseQuery = query.toLowerCase();
@@ -628,6 +660,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     speeches,
     favorites,
     currentSpeech,
+    currentPlaylist,
     isPlaying,
     listeningHistory,
     userProfile,
@@ -635,9 +668,12 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     duration,
     isLoading,
     audioError,
+    isMinimized,
     toggleFavorite,
     playPause,
     setCurrentSpeech,
+    setCurrentPlaylist,
+    setIsMinimized,
     searchSpeeches,
     getSpeechesByCategory,
     updateListeningTime,
@@ -648,6 +684,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     loadFreshContent,
     searchFreshContent: searchFreshContentHandler,
     loadTrendingContent: loadTrendingContentHandler,
+    skipToNext,
+    skipToPrevious,
     handlePlaybackStatusUpdate,
     handleAudioError,
     audioPlayerRef,
@@ -655,6 +693,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     speeches,
     favorites,
     currentSpeech,
+    currentPlaylist,
     isPlaying,
     listeningHistory,
     userProfile,
@@ -662,9 +701,12 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     duration,
     isLoading,
     audioError,
+    isMinimized,
     toggleFavorite,
     playPause,
     setCurrentSpeech,
+    setCurrentPlaylist,
+    setIsMinimized,
     searchSpeeches,
     getSpeechesByCategory,
     updateListeningTime,
@@ -675,6 +717,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     loadFreshContent,
     searchFreshContentHandler,
     loadTrendingContentHandler,
+    skipToNext,
+    skipToPrevious,
     handlePlaybackStatusUpdate,
     handleAudioError,
   ]);

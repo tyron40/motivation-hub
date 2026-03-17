@@ -7,51 +7,76 @@ import {
   Image,
   SafeAreaView,
   Animated,
+  Linking,
+  Share,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2, Youtube, MoreVertical } from 'lucide-react-native';
-import { useCurrentSpeech, useSpeechContext } from '@/hooks/speech-context';
-import { Speech } from '@/types/speech';
+import { ChevronDown, Heart, Share2, MoreVertical, Youtube } from 'lucide-react-native';
+import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
+import * as Haptics from 'expo-haptics';
 
+const CHANNEL_URL = 'https://youtube.com/@motivation-fueled?si=xCshMxUUCjdd4W19';
 
 export default function PlayerScreen() {
   const { colors } = useTheme();
-  const { currentSpeech } = useCurrentSpeech();
-  const { toggleFavorite, speeches, setCurrentSpeech } = useSpeechContext();
+  const { 
+    currentSpeech, 
+    toggleFavorite, 
+    skipToNext, 
+    skipToPrevious, 
+    setIsMinimized,
+    currentPlaylist,
+  } = useSpeechContext();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const styles = getStyles(colors);
 
+  useEffect(() => {
+    setIsMinimized(false);
+  }, [setIsMinimized]);
+
+  const handleMinimize = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsMinimized(true);
+    router.back();
+  };
+
   const handleNext = () => {
-    if (!currentSpeech || !speeches || speeches.length === 0) return;
-    
-    const currentIndex = speeches.findIndex((s: Speech) => s.id === currentSpeech.id);
-    if (currentIndex === -1) return;
-    
-    const nextIndex = (currentIndex + 1) % speeches.length;
-    const nextSpeech = speeches[nextIndex];
-    
-    if (nextSpeech) {
-      console.log('⏭️ Skipping to next video:', nextSpeech.title);
-      setCurrentSpeech(nextSpeech);
-    }
+    skipToNext();
   };
 
   const handlePrevious = () => {
-    if (!currentSpeech || !speeches || speeches.length === 0) return;
-    
-    const currentIndex = speeches.findIndex((s: Speech) => s.id === currentSpeech.id);
-    if (currentIndex === -1) return;
-    
-    const previousIndex = currentIndex === 0 ? speeches.length - 1 : currentIndex - 1;
-    const previousSpeech = speeches[previousIndex];
-    
-    if (previousSpeech) {
-      console.log('⏮️ Skipping to previous video:', previousSpeech.title);
-      setCurrentSpeech(previousSpeech);
+    skipToPrevious();
+  };
+
+  const handleSubscribe = () => {
+    console.log('Opening Motivation Fuel channel:', CHANNEL_URL);
+    Linking.openURL(CHANNEL_URL).catch(err => {
+      console.error('Error opening channel:', err);
+    });
+  };
+
+  const handleShare = async () => {
+    if (!currentSpeech) return;
+    try {
+      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Hub!`;
+      const url = currentSpeech.youtubeId 
+        ? `https://youtube.com/watch?v=${currentSpeech.youtubeId}` 
+        : undefined;
+      
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ title: currentSpeech.title, text: message, url });
+        }
+      } else {
+        await Share.share({ message, url });
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
     }
   };
 
@@ -91,7 +116,7 @@ export default function PlayerScreen() {
       />
       <SafeAreaView style={styles.safeArea}>
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+          <TouchableOpacity onPress={handleMinimize} style={styles.closeButton}>
             <ChevronDown color="#FFFFFF" size={30} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>NOW PLAYING</Text>
@@ -119,8 +144,8 @@ export default function PlayerScreen() {
                   console.log('Audio playback ended');
                   handleNext();
                 }}
-                onNext={handleNext}
-                onPrevious={handlePrevious}
+                onNext={currentPlaylist.length > 1 ? handleNext : undefined}
+                onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
               />
             </View>
           ) : (
@@ -171,18 +196,27 @@ export default function PlayerScreen() {
                 {currentSpeech.isFavorite ? 'Saved' : 'Save'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={handleShare}>
               <Share2 color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
               <Text style={styles.actionLabel}>Share</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.subscribeButton}
+            onPress={handleSubscribe}
+            activeOpacity={0.8}
+          >
+            <Youtube color="#FFFFFF" size={18} />
+            <Text style={styles.subscribeText}>Subscribe to Motivation Fuel</Text>
+          </TouchableOpacity>
         </Animated.View>
       </SafeAreaView>
     </View>
   );
 }
 
-const getStyles = (colors: any) => StyleSheet.create({
+const getStyles = (_colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
@@ -352,5 +386,27 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   actionLabelActive: {
     color: '#FF3B30',
+  },
+  subscribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    backgroundColor: '#FF0000',
+    elevation: 4,
+    shadowColor: '#FF0000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  subscribeText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700' as const,
+    letterSpacing: 0.3,
   },
 });
