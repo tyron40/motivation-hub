@@ -7,7 +7,6 @@ import {
   Image,
   SafeAreaView,
   Animated,
-  Linking,
   Share,
   Platform,
 } from 'react-native';
@@ -19,7 +18,6 @@ import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 import * as Haptics from 'expo-haptics';
 
-const CHANNEL_URL = 'https://youtube.com/@motivation-fueled?si=xCshMxUUCjdd4W19';
 
 export default function PlayerScreen() {
   const { colors } = useTheme();
@@ -53,12 +51,7 @@ export default function PlayerScreen() {
     skipToPrevious();
   };
 
-  const handleSubscribe = () => {
-    console.log('Opening Motivation Fuel channel:', CHANNEL_URL);
-    Linking.openURL(CHANNEL_URL).catch(err => {
-      console.error('Error opening channel:', err);
-    });
-  };
+
 
   const handleShare = async () => {
     if (!currentSpeech) return;
@@ -202,14 +195,7 @@ export default function PlayerScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.subscribeButton}
-            onPress={handleSubscribe}
-            activeOpacity={0.8}
-          >
-            <Youtube color="#FFFFFF" size={18} />
-            <Text style={styles.subscribeText}>Subscribe to Motivation Fuel</Text>
-          </TouchableOpacity>
+
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -387,26 +373,5 @@ const getStyles = (_colors: any) => StyleSheet.create({
   actionLabelActive: {
     color: '#FF3B30',
   },
-  subscribeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-    backgroundColor: '#FF0000',
-    elevation: 4,
-    shadowColor: '#FF0000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  subscribeText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+
 });

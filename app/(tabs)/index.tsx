@@ -8,12 +8,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Quote, Sun, ChevronRight, Film, ImageIcon, Youtube } from 'lucide-react-native';
+import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
@@ -382,18 +381,7 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <TouchableOpacity
-            style={styles.subscribeSection}
-            onPress={() => {
-              Linking.openURL('https://youtube.com/@motivation-fueled?si=xCshMxUUCjdd4W19').catch(err => {
-                console.error('Error opening channel:', err);
-              });
-            }}
-            activeOpacity={0.8}
-          >
-            <Youtube size={20} color="#FFFFFF" />
-            <Text style={styles.subscribeText}>Subscribe to Motivation Fuel</Text>
-          </TouchableOpacity>
+
         </ScrollView>
       </View>
     </LinearGradient>
@@ -628,28 +616,5 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
-  subscribeSection: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 10,
-    marginHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 28,
-    backgroundColor: '#FF0000',
-    elevation: 4,
-    shadowColor: '#FF0000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  subscribeText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700' as const,
-    letterSpacing: 0.3,
-  },
+
 });
