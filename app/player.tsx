@@ -7,7 +7,6 @@ import {
   Image,
   SafeAreaView,
   Animated,
-  Linking,
   Share,
   Platform,
 } from 'react-native';
@@ -18,8 +17,6 @@ import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 import * as Haptics from 'expo-haptics';
-
-const CHANNEL_URL = 'https://youtube.com/@motivation-fueled?si=xCshMxUUCjdd4W19';
 
 export default function PlayerScreen() {
   const { colors } = useTheme();
@@ -51,13 +48,6 @@ export default function PlayerScreen() {
 
   const handlePrevious = () => {
     skipToPrevious();
-  };
-
-  const handleSubscribe = () => {
-    console.log('Opening Motivation Fuel channel:', CHANNEL_URL);
-    Linking.openURL(CHANNEL_URL).catch(err => {
-      console.error('Error opening channel:', err);
-    });
   };
 
   const handleShare = async () => {
@@ -202,14 +192,6 @@ export default function PlayerScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.subscribeButton}
-            onPress={handleSubscribe}
-            activeOpacity={0.8}
-          >
-            <Youtube color="#FFFFFF" size={18} />
-            <Text style={styles.subscribeText}>Subscribe to Motivation Fuel</Text>
-          </TouchableOpacity>
         </Animated.View>
       </SafeAreaView>
     </View>
