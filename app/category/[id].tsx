@@ -33,9 +33,8 @@ export default function CategoryScreen() {
   const { toggleFavorite, setCurrentSpeech, getSpeechesByCategory } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
-  const { showInterstitialAd } = useAdMob();
+  const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
-  const speechPlayCount = React.useRef(0);
   const styles = getStyles(colors);
 
   const [showEditBanner, setShowEditBanner] = useState(false);
@@ -145,19 +144,13 @@ export default function CategoryScreen() {
     void handleLoadOnlineSpeeches();
   }, [category, hasLoadedOnline]);
 
-  const handleSpeechPress = (speech: Speech) => {
+  const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);
-    speechPlayCount.current += 1;
-    
-    if (speechPlayCount.current % 3 === 0) {
-      void showInterstitialAd().then(() => {
-        setCurrentSpeech(speech);
-        router.push('/player');
-      });
-    } else {
-      setCurrentSpeech(speech);
-      router.push('/player');
-    }
+    try {
+      await tryShowInterstitialOnTransition();
+    } catch {}
+    setCurrentSpeech(speech);
+    router.push('/player');
   };
 
   const handleOpenEditBanner = useCallback(() => {
@@ -260,7 +253,6 @@ export default function CategoryScreen() {
               <Text style={styles.iconPlaceholder}>🎯</Text>
             </View>
             <Text style={styles.title}>{category.name}</Text>
-            <Text style={styles.speechCount}>{String(categorySpeeches.length)} YouTube speeches available</Text>
           </View>
 
           <View style={styles.speechList}>

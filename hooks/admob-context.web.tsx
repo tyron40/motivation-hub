@@ -12,10 +12,20 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     return false;
   }, []);
 
+  const tryShowInterstitialOnTransition = useCallback(async () => {
+    return false;
+  }, []);
+
+  const recordInteraction = useCallback(() => {
+    return false;
+  }, []);
+
   return useMemo(
     () => ({
       showRewardedAd,
       showInterstitialAd,
+      tryShowInterstitialOnTransition,
+      recordInteraction,
       isRewardedAdLoaded: false,
       isInterstitialAdLoaded: false,
       isLoadingRewardedAd: false,
@@ -23,6 +33,6 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       rewardAmount: 0,
       isShowingAd: false,
     }),
-    [showRewardedAd, showInterstitialAd]
+    [showRewardedAd, showInterstitialAd, tryShowInterstitialOnTransition, recordInteraction]
   );
 });

@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { profile } = useUserProfile();
   const insets = useSafeAreaInsets();
-  const { showInterstitialAd } = useAdMob();
+  const { tryShowInterstitialOnTransition } = useAdMob();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [shortClips, setShortClips] = React.useState<any[]>([]);
   const dailyQuote = React.useMemo(() => {
@@ -69,7 +69,7 @@ export default function HomeScreen() {
     const dayIndex = new Date().getDate() % quotes.length;
     return quotes[dayIndex];
   }, []);
-  const speechPlayCount = React.useRef(0);
+
   
   const styles = getStyles(colors);
 
@@ -150,7 +150,7 @@ export default function HomeScreen() {
   
   const { toggleFavorite, setCurrentSpeech } = speechContext;
 
-  const handleSpeechPress = React.useCallback((speech: any) => {
+  const handleSpeechPress = React.useCallback(async (speech: any) => {
     try {
       if (!speech || typeof speech !== 'object' || !speech.id) {
         console.warn('Invalid speech object:', speech);
@@ -158,22 +158,15 @@ export default function HomeScreen() {
       }
 
       console.log('🎵 Setting current speech:', speech.title);
-      speechPlayCount.current += 1;
-      
-      if (speechPlayCount.current % 3 === 0) {
-        console.log('📺 Showing interstitial ad before playing speech');
-        void showInterstitialAd().then(() => {
-          setCurrentSpeech(speech);
-          router.push('/player');
-        });
-      } else {
-        setCurrentSpeech(speech);
-        router.push('/player');
-      }
+      await tryShowInterstitialOnTransition();
+      setCurrentSpeech(speech);
+      router.push('/player');
     } catch (error) {
       console.error('Error handling speech press:', error);
+      setCurrentSpeech(speech);
+      router.push('/player');
     }
-  }, [showInterstitialAd, setCurrentSpeech]);
+  }, [tryShowInterstitialOnTransition, setCurrentSpeech]);
 
   const handleCategoryPress = (categoryId: string) => {
     try {
@@ -218,7 +211,7 @@ export default function HomeScreen() {
                 style={styles.playAllButton}
                 onPress={() => {
                   if (displaySpeeches.length > 0) {
-                    handleSpeechPress(displaySpeeches[0]);
+                    void handleSpeechPress(displaySpeeches[0]);
                   }
                 }}
               >

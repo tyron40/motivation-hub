@@ -65,8 +65,7 @@ function ChatScreenContent() {
   const { profile, updateProfile } = useUserProfile();
   const { useCredit: deductCredit, usageStats } = useIAP();
   const insets = useSafeAreaInsets();
-  const { showInterstitialAd } = useAdMob();
-  const chatMessageCount = useRef(0);
+  const { tryShowInterstitialOnTransition } = useAdMob();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
@@ -273,11 +272,7 @@ function ChatScreenContent() {
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
-    chatMessageCount.current += 1;
-    if (chatMessageCount.current % 5 === 0) {
-      console.log('📺 Showing interstitial ad in chat');
-      void showInterstitialAd();
-    }
+    void tryShowInterstitialOnTransition();
 
     // Check if user has credits (suggested questions are free)
     if (!isSuggestion && !usageStats.canUseAI) {
@@ -459,7 +454,7 @@ function ChatScreenContent() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, showInterstitialAd]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition]);
 
 
 

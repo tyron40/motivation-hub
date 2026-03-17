@@ -1,164 +1,59 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useIAP } from './iap-context';
-import { AD_UNIT_IDS, AD_CONFIG } from '@/constants/admob';
+import { AD_CONFIG } from '@/constants/admob';
+import AdManager from '@/lib/AdManager';
 
-// Dynamic imports for native platforms only
-// This prevents bundling errors on web while allowing native builds to work
-let RewardedAd: any = null;
-let InterstitialAd: any = null;
-let RewardedAdEventType: any = null;
-let InterstitialAdEventType: any = null;
-let mobileAds: any = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const admobModule = require('react-native-google-mobile-ads');
-    RewardedAd = admobModule.RewardedAd;
-    InterstitialAd = admobModule.InterstitialAd;
-    RewardedAdEventType = admobModule.RewardedAdEventType;
-    InterstitialAdEventType = admobModule.AdEventType;
-    mobileAds = admobModule.default;
-    console.log('✅ AdMob SDK loaded successfully');
-  } catch (error) {
-    console.log('📺 AdMob SDK not available - using simulation mode');
-    console.log('   This is normal in Expo Go. Real ads will work in production builds.');
-  }
-}
-
-const { REWARD_AMOUNT, INTERSTITIAL_COOLDOWN, requestOptions } = AD_CONFIG;
-
-
+const { REWARD_AMOUNT } = AD_CONFIG;
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const { addCredits, usageStats } = useIAP();
   const [isShowingAd, setIsShowingAd] = useState(false);
-  const [lastInterstitialTime, setLastInterstitialTime] = useState(0);
-  const [rewardedAdInstance, setRewardedAdInstance] = useState<any>(null);
-  const [interstitialAdInstance, setInterstitialAdInstance] = useState<any>(null);
   const [isRewardedAdLoaded, setIsRewardedAdLoaded] = useState(false);
   const [isInterstitialAdLoaded, setIsInterstitialAdLoaded] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const manager = useMemo(() => AdManager.getInstance(), []);
 
   useEffect(() => {
-    const initializeAdMob = async () => {
-      if (Platform.OS === 'web' || !mobileAds || !RewardedAd || !InterstitialAd) {
-        console.log('📺 Running in simulation mode (web or SDK not available)');
-        setIsInitialized(true);
-        return;
-      }
+    manager.setRewardCallback(async (reward: any) => {
+      console.log('🎁 [AdMob] Reward earned:', reward);
+      await addCredits(REWARD_AMOUNT);
+      Alert.alert(
+        '🎉 Reward Earned!',
+        `You earned ${REWARD_AMOUNT} credits!`,
+        [{ text: 'Awesome!' }]
+      );
+    });
 
-      try {
-        console.log('📺 Initializing AdMob SDK...');
-        await mobileAds().initialize();
-        console.log('✅ AdMob SDK initialized');
-        setIsInitialized(true);
-      } catch (error) {
-        console.error('❌ Error initializing AdMob:', error);
-        setIsInitialized(true);
-      }
+    manager.setEventCallback((_event: string) => {
+      const state = manager.getState();
+      setIsRewardedAdLoaded(state.isRewardedReady);
+      setIsInterstitialAdLoaded(state.isInterstitialReady);
+    });
+
+    const init = async () => {
+      await manager.initialize();
+      setIsInitialized(true);
+      const state = manager.getState();
+      setIsRewardedAdLoaded(state.isRewardedReady);
+      setIsInterstitialAdLoaded(state.isInterstitialReady);
     };
 
-    initializeAdMob();
-  }, []);
+    void init();
 
-  useEffect(() => {
-    if (!isInitialized || Platform.OS === 'web' || !RewardedAd) {
-      return;
-    }
+    pollRef.current = setInterval(() => {
+      const state = manager.getState();
+      setIsRewardedAdLoaded(state.isRewardedReady);
+      setIsInterstitialAdLoaded(state.isInterstitialReady);
+    }, 2000);
 
-    try {
-      console.log('📺 Creating rewarded ad instance...');
-      const rewarded = RewardedAd.createForAdRequest(AD_UNIT_IDS.rewarded, {
-        requestNonPersonalizedAdsOnly: false,
-      });
-
-      const loadedListener = rewarded.addAdEventListener(
-        RewardedAdEventType.LOADED,
-        () => {
-          console.log('✅ Rewarded ad loaded');
-          setIsRewardedAdLoaded(true);
-        }
-      );
-
-      const earnedListener = rewarded.addAdEventListener(
-        RewardedAdEventType.EARNED_REWARD,
-        async (reward: any) => {
-          console.log('🎁 Reward earned:', reward);
-          await addCredits(REWARD_AMOUNT);
-          Alert.alert(
-            '🎉 Reward Earned!',
-            `You earned ${REWARD_AMOUNT} credits!`,
-            [{ text: 'Awesome!' }]
-          );
-        }
-      );
-
-      const closedListener = rewarded.addAdEventListener(
-        RewardedAdEventType.CLOSED,
-        () => {
-          console.log('📺 Rewarded ad closed');
-          setIsShowingAd(false);
-          setIsRewardedAdLoaded(false);
-          rewarded.load();
-        }
-      );
-
-      rewarded.load();
-      setRewardedAdInstance(rewarded);
-
-      return () => {
-        loadedListener?.();
-        earnedListener?.();
-        closedListener?.();
-      };
-    } catch (error) {
-      console.error('❌ Error setting up rewarded ad:', error);
-    }
-  }, [isInitialized, addCredits]);
-
-  useEffect(() => {
-    if (!isInitialized || Platform.OS === 'web' || !InterstitialAd) {
-      return;
-    }
-
-    try {
-      console.log('📺 Creating interstitial ad instance...');
-      const interstitial = InterstitialAd.createForAdRequest(AD_UNIT_IDS.interstitial, {
-        requestNonPersonalizedAdsOnly: false,
-      });
-
-      const loadedListener = interstitial.addAdEventListener(
-        InterstitialAdEventType.LOADED,
-        () => {
-          console.log('✅ Interstitial ad loaded');
-          setIsInterstitialAdLoaded(true);
-        }
-      );
-
-      const closedListener = interstitial.addAdEventListener(
-        InterstitialAdEventType.CLOSED,
-        () => {
-          console.log('📺 Interstitial ad closed');
-          setIsShowingAd(false);
-          setIsInterstitialAdLoaded(false);
-          interstitial.load();
-        }
-      );
-
-      interstitial.load();
-      setInterstitialAdInstance(interstitial);
-
-      return () => {
-        loadedListener?.();
-        closedListener?.();
-      };
-    } catch (error) {
-      console.error('❌ Error setting up interstitial ad:', error);
-    }
-  }, [isInitialized]);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [manager, addCredits]);
 
   const canShowAds = useMemo(() => {
     return !usageStats.isAdFree;
@@ -180,8 +75,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Only show real ads - no simulation
-    if (!rewardedAdInstance || !isRewardedAdLoaded) {
+    if (!manager.rewardedReady) {
       console.log('⚠️ Rewarded ad not ready');
       Alert.alert(
         'Ad Not Ready',
@@ -192,34 +86,21 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     }
 
     try {
-      console.log('📺 Showing rewarded ad...');
       setIsShowingAd(true);
-      await rewardedAdInstance.show();
-      return true;
+      const shown = await manager.showRewarded();
+      setIsShowingAd(false);
+      return shown;
     } catch (error: any) {
       console.error('❌ Error showing rewarded ad:', error);
       setIsShowingAd(false);
-      
-      if (error?.code === 'ad-not-ready' || error?.message?.includes('not ready')) {
-        Alert.alert('Ad Not Ready', 'The ad is still loading. Please try again in a moment.');
-      } else {
-        Alert.alert('Error', 'Unable to show ad. Please try again later.');
-      }
+      Alert.alert('Error', 'Unable to show ad. Please try again later.');
       return false;
     }
-  }, [canShowAds, isShowingAd, addCredits, rewardedAdInstance, isRewardedAdLoaded]);
+  }, [canShowAds, isShowingAd, manager]);
 
   const showInterstitialAd = useCallback(async () => {
     if (!canShowAds) {
       console.log('📺 Ads disabled for premium user');
-      return false;
-    }
-
-    const now = Date.now();
-    const timeSinceLastAd = now - lastInterstitialTime;
-
-    if (timeSinceLastAd < INTERSTITIAL_COOLDOWN) {
-      console.log('⏰ Too soon to show another interstitial ad');
       return false;
     }
 
@@ -228,29 +109,50 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Only show real ads - no simulation
-    if (!interstitialAdInstance || !isInterstitialAdLoaded) {
-      console.log('⚠️ Interstitial ad not ready');
+    if (!manager.canShowInterstitial()) {
+      console.log('📺 Interstitial not available or cooldown active');
       return false;
     }
 
     try {
-      console.log('📺 Showing interstitial ad...');
       setIsShowingAd(true);
-      await interstitialAdInstance.show();
-      setLastInterstitialTime(now);
-      return true;
+      const shown = await manager.showInterstitial();
+      setIsShowingAd(false);
+      return shown;
     } catch (error: any) {
       console.error('❌ Error showing interstitial ad:', error);
       setIsShowingAd(false);
       return false;
     }
-  }, [canShowAds, isShowingAd, lastInterstitialTime, interstitialAdInstance, isInterstitialAdLoaded]);
+  }, [canShowAds, isShowingAd, manager]);
+
+  const recordInteraction = useCallback(() => {
+    return manager.recordInteraction();
+  }, [manager]);
+
+  const tryShowInterstitialOnTransition = useCallback(async () => {
+    if (!canShowAds || isShowingAd) return false;
+    const shouldShow = manager.recordInteraction();
+    if (shouldShow && manager.canShowInterstitial()) {
+      try {
+        setIsShowingAd(true);
+        const shown = await manager.showInterstitial();
+        setIsShowingAd(false);
+        return shown;
+      } catch {
+        setIsShowingAd(false);
+        return false;
+      }
+    }
+    return false;
+  }, [canShowAds, isShowingAd, manager]);
 
   return useMemo(
     () => ({
       showRewardedAd,
       showInterstitialAd,
+      tryShowInterstitialOnTransition,
+      recordInteraction,
       isRewardedAdLoaded,
       isInterstitialAdLoaded,
       isLoadingRewardedAd: !isRewardedAdLoaded && isInitialized && Platform.OS !== 'web',
@@ -261,6 +163,8 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     [
       showRewardedAd,
       showInterstitialAd,
+      tryShowInterstitialOnTransition,
+      recordInteraction,
       isShowingAd,
       canShowAds,
       isRewardedAdLoaded,
