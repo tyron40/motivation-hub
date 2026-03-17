@@ -39,7 +39,7 @@
         "appleTeamId": "SKYPA87B9L"
       },
       "android": {
-        "serviceAccountKeyPath": "./path-to-service-account.json",
+        "serviceAccountKeyPath": "./motivationalapp-471514-6b01ea99b9fb.json",
         "track": "internal"
       }
     }

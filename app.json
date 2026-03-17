@@ -53,7 +53,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.motivational-speech-app",
+      "package": "com.tyron40.motivationalapp",
       "versionCode": 120,
       "permissions": [
         "android.permission.RECORD_AUDIO",
