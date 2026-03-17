@@ -16,7 +16,7 @@ import {
   ViewToken,
   Linking,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -59,6 +59,8 @@ interface ClipItem {
 
 export default function ShortClipsScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
+  const initialVideoId = params.initialVideoId ? String(params.initialVideoId) : null;
   const { isAdmin, customVideos, addVideo, removeVideo } = useAdmin();
 
   const [clips, setClips] = useState<ClipItem[]>([]);
@@ -69,7 +71,9 @@ export default function ShortClipsScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoId, setNewVideoId] = useState('');
+  const [hasScrolledToInitial, setHasScrolledToInitial] = useState(false);
 
+  const flatListRef = useRef<FlatList>(null);
   const likeAnimations = useRef<Record<string, Animated.Value>>({}).current;
   const saveAnimations = useRef<Record<string, Animated.Value>>({}).current;
 
@@ -142,6 +146,18 @@ export default function ShortClipsScreen() {
         }
 
         console.log(`Loaded ${merged.length} short clips for TikTok view`);
+
+        if (initialVideoId && !hasScrolledToInitial) {
+          const targetIndex = merged.findIndex(
+            (c) => c.youtubeId === initialVideoId || c.id === initialVideoId
+          );
+          if (targetIndex > 0) {
+            const [target] = merged.splice(targetIndex, 1);
+            merged.unshift(target);
+            console.log(`Moved initial clip "${target.title}" to top`);
+          }
+        }
+
         setClips(merged);
       } catch (error) {
         console.error('Error fetching short clips:', error);
@@ -151,7 +167,14 @@ export default function ShortClipsScreen() {
     };
 
     void fetchClips();
-  }, [customVideos]);
+  }, [customVideos, initialVideoId, hasScrolledToInitial]);
+
+  useEffect(() => {
+    if (clips.length > 0 && initialVideoId && !hasScrolledToInitial) {
+      setHasScrolledToInitial(true);
+      setActiveIndex(0);
+    }
+  }, [clips, initialVideoId, hasScrolledToInitial]);
 
   const toggleLike = useCallback(async (clipId: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -273,6 +296,7 @@ export default function ShortClipsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <FlatList
+        ref={flatListRef}
         data={clips}
         renderItem={renderClipPage}
         keyExtractor={(item) => item.id}
@@ -395,17 +419,18 @@ const ClipPage = React.memo(function ClipPage({
 
   useEffect(() => {
     if (isActive) {
+      console.log('🎬 Clip became active, starting autoplay:', clip.youtubeId);
       const timer = setTimeout(() => {
         setShowPlayer(true);
         setIsPlaying(true);
-      }, 400);
+      }, 300);
       return () => clearTimeout(timer);
     } else {
       setIsPlaying(false);
       setShowPlayer(false);
       setPlayerReady(false);
     }
-  }, [isActive]);
+  }, [isActive, clip.youtubeId]);
 
   const onStateChange = useCallback((state: string) => {
     console.log('Clip player state:', state, clip.youtubeId);
@@ -419,8 +444,9 @@ const ClipPage = React.memo(function ClipPage({
   }, [clip.youtubeId]);
 
   const onPlayerReady = useCallback(() => {
-    console.log('Clip player ready:', clip.youtubeId);
+    console.log('Clip player ready, autoplay:', clip.youtubeId);
     setPlayerReady(true);
+    setIsPlaying(true);
   }, [clip.youtubeId]);
 
   const onPlayerError = useCallback((error: string) => {

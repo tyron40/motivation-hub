@@ -11,11 +11,14 @@ import {
   Animated,
   TextInput,
   Alert,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Share2, Heart, Quote, Plus, Trash2, X, ImagePlus } from 'lucide-react-native';
+import { ArrowLeft, Share2, Heart, Quote, Plus, Trash2, X, ImagePlus, Camera, Upload } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
@@ -34,7 +37,59 @@ export default function FlyersScreen() {
   const [newTitle, setNewTitle] = useState('');
   const [newQuote, setNewQuote] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+  const [isPickingImage, setIsPickingImage] = useState(false);
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
+
+  const pickImageFromGallery = useCallback(async () => {
+    try {
+      setIsPickingImage(true);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        console.log('Image picked:', result.assets[0].uri);
+        setNewImageUrl(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image from gallery');
+    } finally {
+      setIsPickingImage(false);
+    }
+  }, []);
+
+  const takePhoto = useCallback(async () => {
+    try {
+      setIsPickingImage(true);
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow camera access to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [3, 4],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        console.log('Photo taken:', result.assets[0].uri);
+        setNewImageUrl(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    } finally {
+      setIsPickingImage(false);
+    }
+  }, []);
 
   const allFlyers = [...motivationalFlyers, ...customFlyers];
 
@@ -218,7 +273,35 @@ export default function FlyersScreen() {
                   numberOfLines={3}
                 />
 
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Image URL</Text>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Image</Text>
+                <View style={styles.imagePickerRow}>
+                  <TouchableOpacity
+                    style={[styles.imagePickerBtn, { backgroundColor: colors.primary + '20', borderColor: colors.primary + '40' }]}
+                    onPress={pickImageFromGallery}
+                    activeOpacity={0.7}
+                    disabled={isPickingImage}
+                  >
+                    {isPickingImage ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Upload size={18} color={colors.primary} />
+                    )}
+                    <Text style={[styles.imagePickerBtnText, { color: colors.primary }]}>Gallery</Text>
+                  </TouchableOpacity>
+                  {Platform.OS !== 'web' && (
+                    <TouchableOpacity
+                      style={[styles.imagePickerBtn, { backgroundColor: colors.accent + '20', borderColor: colors.accent + '40' }]}
+                      onPress={takePhoto}
+                      activeOpacity={0.7}
+                      disabled={isPickingImage}
+                    >
+                      <Camera size={18} color={colors.accent || colors.primary} />
+                      <Text style={[styles.imagePickerBtnText, { color: colors.accent || colors.primary }]}>Camera</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <Text style={[styles.orText, { color: colors.textSecondary }]}>or paste URL</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.textSecondary + '30' }]}
                   value={newImageUrl}
@@ -463,6 +546,31 @@ const getStyles = (colors: any) => StyleSheet.create({
   previewImage: {
     width: '100%' as const,
     height: '100%' as const,
+  },
+  imagePickerRow: {
+    flexDirection: 'row' as const,
+    gap: 12,
+    marginBottom: 12,
+  },
+  imagePickerBtn: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  imagePickerBtnText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  orText: {
+    fontSize: 12,
+    fontWeight: '500' as const,
+    textAlign: 'center' as const,
+    marginBottom: 8,
   },
   addButton: {
     flexDirection: 'row' as const,

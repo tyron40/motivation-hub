@@ -10,11 +10,13 @@ import {
   TextInput,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { ArrowLeft, Edit3, X, Quote } from 'lucide-react-native';
+import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
 import { categories, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
@@ -40,6 +42,58 @@ export default function CategoryScreen() {
   const [editQuote, setEditQuote] = useState('');
   const [editAuthor, setEditAuthor] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
+  const [isPickingImage, setIsPickingImage] = useState(false);
+
+  const pickBannerImage = useCallback(async () => {
+    try {
+      setIsPickingImage(true);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        console.log('Banner image picked:', result.assets[0].uri);
+        setEditImageUrl(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking banner image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    } finally {
+      setIsPickingImage(false);
+    }
+  }, []);
+
+  const takeBannerPhoto = useCallback(async () => {
+    try {
+      setIsPickingImage(true);
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow camera access.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        console.log('Banner photo taken:', result.assets[0].uri);
+        setEditImageUrl(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking banner photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    } finally {
+      setIsPickingImage(false);
+    }
+  }, []);
   
   const allCategories = [...categories, churchCategory];
   const category = allCategories.find(c => c.id === id);
@@ -259,7 +313,34 @@ export default function CategoryScreen() {
               placeholder="Quote author..."
               placeholderTextColor="#666"
             />
-            <Text style={styles.inputLabel}>Image URL (optional)</Text>
+            <Text style={styles.inputLabel}>Banner Image</Text>
+            <View style={styles.imagePickerRow}>
+              <TouchableOpacity
+                style={styles.imagePickerBtn}
+                onPress={pickBannerImage}
+                activeOpacity={0.7}
+                disabled={isPickingImage}
+              >
+                {isPickingImage ? (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                ) : (
+                  <Upload size={18} color="#3B82F6" />
+                )}
+                <Text style={styles.imagePickerBtnText}>Gallery</Text>
+              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity
+                  style={styles.imagePickerBtn}
+                  onPress={takeBannerPhoto}
+                  activeOpacity={0.7}
+                  disabled={isPickingImage}
+                >
+                  <Camera size={18} color="#10B981" />
+                  <Text style={[styles.imagePickerBtnText, { color: '#10B981' }]}>Camera</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <Text style={styles.orText}>or paste URL</Text>
             <TextInput
               style={styles.input}
               value={editImageUrl}
@@ -473,9 +554,38 @@ const getStyles = (colors: any) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  imagePickerRow: {
+    flexDirection: 'row' as const,
+    gap: 12,
+    marginBottom: 12,
+  },
+  imagePickerBtn: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  imagePickerBtnText: {
+    color: '#3B82F6',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  orText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '500' as const,
+    textAlign: 'center' as const,
+    marginBottom: 8,
+  },
   saveButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingVertical: 14,
     borderRadius: 14,
     backgroundColor: colors.primary || '#3B82F6',
@@ -484,6 +594,6 @@ const getStyles = (colors: any) => StyleSheet.create({
   saveButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '700' as const,
   },
 });

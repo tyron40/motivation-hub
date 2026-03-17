@@ -321,7 +321,10 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   activeOpacity={0.88}
                   style={styles.clipPoster}
-                  onPress={() => router.push({ pathname: '/video-player', params: { videoId: item.youtubeId || item.id, title: item.title, thumbnail: item.imageUrl, channelTitle: item.speaker, autoplay: 'true' } })}
+                  onPress={() => {
+                    console.log('🎬 Opening short clip from homepage:', item.title, item.youtubeId || item.id);
+                    router.push({ pathname: '/short-clips', params: { initialVideoId: item.youtubeId || item.id } });
+                  }}
                 >
                   <Image
                     source={{ uri: item.imageUrl }}
