@@ -18,7 +18,7 @@ import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
@@ -94,7 +94,7 @@ export default function CategoryScreen() {
     }
   }, []);
   
-  const allCategories = [...categories, churchCategory];
+  const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === id);
   const contextSpeeches = category ? getSpeechesByCategory(category.name) : [];
   const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
@@ -163,8 +163,8 @@ export default function CategoryScreen() {
 
   const handleSaveBanner = useCallback(async () => {
     if (!category || !banner) return;
-    if (!editQuote.trim() || !editAuthor.trim()) {
-      Alert.alert('Missing Fields', 'Please fill in the quote and author.');
+    if (!editAuthor.trim()) {
+      Alert.alert('Missing Fields', 'Please fill in the author field.');
       return;
     }
     await updateBanner({
@@ -249,9 +249,6 @@ export default function CategoryScreen() {
           )}
 
           <View style={[styles.header, { backgroundColor: category.color + '20' }]}>
-            <View style={[styles.iconContainer, { backgroundColor: category.color }]}>
-              <Text style={styles.iconPlaceholder}>🎯</Text>
-            </View>
             <Text style={styles.title}>{category.name}</Text>
           </View>
 
@@ -431,25 +428,13 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingVertical: 24,
-    marginBottom: 16,
-  },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  iconPlaceholder: {
-    fontSize: 28,
+    paddingVertical: 14,
+    marginBottom: 8,
   },
   title: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 6,
   },
   speechCount: {
     color: colors.textSecondary,

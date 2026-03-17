@@ -56,6 +56,14 @@ export const defaultCategoryBanners: CategoryBanner[] = [
     quote: 'I can do all things through Christ who strengthens me.',
     author: 'Philippians 4:13',
   },
+  {
+    id: 'banner-athlete',
+    categoryId: 'athlete',
+    categoryName: 'Athlete Pump Up',
+    imageUrl: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1200&q=80',
+    quote: 'Hard work beats talent when talent doesn\'t work hard.',
+    author: 'Tim Notke',
+  },
 ];
 
 export function getDefaultBannerForCategory(categoryId: string, categoryName: string): CategoryBanner {

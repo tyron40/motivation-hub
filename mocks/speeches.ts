@@ -45,6 +45,7 @@ export const CATEGORY_KEYWORDS: Record<string, string[]> = {
   'Fitness': ['fitness', 'workout', 'gym', 'exercise', 'body', 'health', 'training', 'muscle', 'strength'],
   'Study': ['study', 'learn', 'education', 'read', 'knowledge', 'school', 'focus', 'concentration', 'productivity'],
   'Christian Motivation': ['christian', 'church', 'god', 'jesus', 'faith', 'prayer', 'sermon', 'gospel', 'bible', 'lord', 'scripture', 'worship', 'holy'],
+  'Athlete Pump Up': ['athlete', 'sports', 'game day', 'pump up', 'pregame', 'championship', 'competition', 'team', 'football', 'basketball', 'soccer', 'training', 'beast mode', 'warrior', 'win', 'champion', 'mvp', 'playoff'],
 };
 
 export function classifyVideoToCategory(title: string, description: string): string {
@@ -74,6 +75,14 @@ export const churchCategory: Category = {
   icon: 'church',
   color: '#FFD700',
   speechCount: 30,
+};
+
+export const athleteCategory: Category = {
+  id: 'athlete',
+  name: 'Athlete Pump Up',
+  icon: 'zap',
+  color: '#EF4444',
+  speechCount: 25,
 };
 
 export const speeches: Speech[] = [

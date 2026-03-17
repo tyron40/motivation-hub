@@ -245,6 +245,12 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_Y
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 60 * 12;
 
+const ADMIN_DATA_STORE: Record<string, any> = {
+  flyers: [],
+  videos: [],
+  banners: [],
+};
+
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
     'motivational speech 2024',
@@ -301,6 +307,13 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
     'greatest speeches',
     'legendary speeches',
     'iconic motivational speech',
+  ],
+  'athlete pump up': [
+    'athlete pump up motivation',
+    'pregame motivation speech',
+    'sports motivation beast mode',
+    'championship mindset speech',
+    'game day motivation football basketball',
   ],
 };
 
@@ -556,6 +569,112 @@ const handleYouTubeTrending = async (c: Context) => {
     }, 500);
   }
 };
+
+app.get('/api/admin/data', async (c: Context) => {
+  console.log('[Admin] GET admin data');
+  return c.json({
+    flyers: ADMIN_DATA_STORE.flyers,
+    videos: ADMIN_DATA_STORE.videos,
+    banners: ADMIN_DATA_STORE.banners,
+    updatedAt: ADMIN_DATA_STORE.updatedAt || null,
+  });
+});
+
+app.get('/admin/data', async (c: Context) => {
+  return c.json({
+    flyers: ADMIN_DATA_STORE.flyers,
+    videos: ADMIN_DATA_STORE.videos,
+    banners: ADMIN_DATA_STORE.banners,
+    updatedAt: ADMIN_DATA_STORE.updatedAt || null,
+  });
+});
+
+app.post('/api/admin/data', async (c: Context) => {
+  try {
+    const body = await c.req.json();
+    const { type, action, data } = body;
+    console.log(`[Admin] POST admin data: type=${type}, action=${action}`);
+
+    if (type === 'flyers') {
+      if (action === 'add') {
+        ADMIN_DATA_STORE.flyers.push(data);
+      } else if (action === 'remove') {
+        ADMIN_DATA_STORE.flyers = ADMIN_DATA_STORE.flyers.filter((f: any) => f.id !== data.id);
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.flyers = data;
+      }
+    } else if (type === 'videos') {
+      if (action === 'add') {
+        ADMIN_DATA_STORE.videos.push(data);
+      } else if (action === 'remove') {
+        ADMIN_DATA_STORE.videos = ADMIN_DATA_STORE.videos.filter((v: any) => v.id !== data.id);
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.videos = data;
+      }
+    } else if (type === 'banners') {
+      if (action === 'update') {
+        const idx = ADMIN_DATA_STORE.banners.findIndex((b: any) => b.categoryId === data.categoryId);
+        if (idx >= 0) {
+          ADMIN_DATA_STORE.banners[idx] = data;
+        } else {
+          ADMIN_DATA_STORE.banners.push(data);
+        }
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.banners = data;
+      }
+    }
+
+    ADMIN_DATA_STORE.updatedAt = new Date().toISOString();
+    console.log('[Admin] Data updated successfully');
+    return c.json({ ok: true, updatedAt: ADMIN_DATA_STORE.updatedAt });
+  } catch (error) {
+    console.error('[Admin] Error updating data:', error);
+    return c.json({ error: 'Failed to update admin data' }, 500);
+  }
+});
+
+app.post('/admin/data', async (c: Context) => {
+  try {
+    const body = await c.req.json();
+    const { type, action, data } = body;
+    console.log(`[Admin] POST admin data: type=${type}, action=${action}`);
+
+    if (type === 'flyers') {
+      if (action === 'add') {
+        ADMIN_DATA_STORE.flyers.push(data);
+      } else if (action === 'remove') {
+        ADMIN_DATA_STORE.flyers = ADMIN_DATA_STORE.flyers.filter((f: any) => f.id !== data.id);
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.flyers = data;
+      }
+    } else if (type === 'videos') {
+      if (action === 'add') {
+        ADMIN_DATA_STORE.videos.push(data);
+      } else if (action === 'remove') {
+        ADMIN_DATA_STORE.videos = ADMIN_DATA_STORE.videos.filter((v: any) => v.id !== data.id);
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.videos = data;
+      }
+    } else if (type === 'banners') {
+      if (action === 'update') {
+        const idx = ADMIN_DATA_STORE.banners.findIndex((b: any) => b.categoryId === data.categoryId);
+        if (idx >= 0) {
+          ADMIN_DATA_STORE.banners[idx] = data;
+        } else {
+          ADMIN_DATA_STORE.banners.push(data);
+        }
+      } else if (action === 'set') {
+        ADMIN_DATA_STORE.banners = data;
+      }
+    }
+
+    ADMIN_DATA_STORE.updatedAt = new Date().toISOString();
+    return c.json({ ok: true, updatedAt: ADMIN_DATA_STORE.updatedAt });
+  } catch (error) {
+    console.error('[Admin] Error updating data:', error);
+    return c.json({ error: 'Failed to update admin data' }, 500);
+  }
+});
 
 app.post('/api/youtube/category', handleYouTubeCategory);
 app.post('/youtube/category', handleYouTubeCategory);

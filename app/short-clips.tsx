@@ -420,11 +420,8 @@ const ClipPage = React.memo(function ClipPage({
   useEffect(() => {
     if (isActive) {
       console.log('🎬 Clip became active, starting autoplay:', clip.youtubeId);
-      const timer = setTimeout(() => {
-        setShowPlayer(true);
-        setIsPlaying(true);
-      }, 300);
-      return () => clearTimeout(timer);
+      setShowPlayer(true);
+      setIsPlaying(true);
     } else {
       setIsPlaying(false);
       setShowPlayer(false);
@@ -444,9 +441,9 @@ const ClipPage = React.memo(function ClipPage({
   }, [clip.youtubeId]);
 
   const onPlayerReady = useCallback(() => {
-    console.log('Clip player ready, autoplay:', clip.youtubeId);
+    console.log('Clip player ready, forcing play:', clip.youtubeId);
     setPlayerReady(true);
-    setIsPlaying(true);
+    setTimeout(() => setIsPlaying(true), 100);
   }, [clip.youtubeId]);
 
   const onPlayerError = useCallback((error: string) => {
@@ -482,11 +479,7 @@ const ClipPage = React.memo(function ClipPage({
       />
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
 
-      <TouchableOpacity
-        style={styles.playerWrapper}
-        activeOpacity={1}
-        onPress={handleTapToPlay}
-      >
+      <View style={styles.playerWrapper}>
         {showPlayer && isActive ? (
           <View style={styles.ytPlayerContainer}>
             <YoutubePlayer
@@ -515,25 +508,22 @@ const ClipPage = React.memo(function ClipPage({
                 <ActivityIndicator size="large" color="#fff" />
               </View>
             )}
-            {playerReady && !isPlaying && (
-              <View style={styles.pauseOverlay} pointerEvents="none">
-                <View style={styles.bigPlayBtn}>
-                  <Play size={40} color="#fff" fill="#fff" />
-                </View>
-              </View>
-            )}
           </View>
         ) : (
-          <View style={styles.thumbnailContainer}>
+          <TouchableOpacity
+            style={styles.thumbnailContainer}
+            activeOpacity={1}
+            onPress={handleTapToPlay}
+          >
             <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
             <View style={styles.playOverlay}>
               <View style={styles.bigPlayBtn}>
                 <Play size={40} color="#fff" fill="#fff" />
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
 
       <TouchableOpacity
         onPress={openInYouTube}

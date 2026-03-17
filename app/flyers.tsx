@@ -17,7 +17,8 @@ import {
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Share2, Heart, Quote, Plus, Trash2, X, ImagePlus, Camera, Upload } from 'lucide-react-native';
+import { ArrowLeft, Share2, Heart, Quote, Plus, Trash2, X, ImagePlus, Camera, Upload, Download } from 'lucide-react-native';
+import { Paths, File as ExpoFile, Directory } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
@@ -121,8 +122,8 @@ export default function FlyersScreen() {
   }, []);
 
   const handleAddFlyer = useCallback(async () => {
-    if (!newTitle.trim() || !newQuote.trim() || !newImageUrl.trim()) {
-      Alert.alert('Missing Fields', 'Please fill in all fields');
+    if (!newTitle.trim() || !newImageUrl.trim()) {
+      Alert.alert('Missing Fields', 'Please fill in the title and image.');
       return;
     }
 
@@ -132,7 +133,7 @@ export default function FlyersScreen() {
     await addFlyer({
       id: `custom-flyer-${Date.now()}`,
       title: newTitle.trim(),
-      quote: newQuote.trim(),
+      quote: newQuote.trim() || '',
       imageUrl: newImageUrl.trim(),
       accent,
     });
@@ -142,6 +143,33 @@ export default function FlyersScreen() {
     setNewImageUrl('');
     setShowAddModal(false);
   }, [newTitle, newQuote, newImageUrl, addFlyer]);
+
+  const handleDownloadFlyer = useCallback(async (flyer: MotivationalFlyer) => {
+    try {
+      if (Platform.OS === 'web') {
+        const link = document.createElement('a');
+        link.href = flyer.imageUrl;
+        link.target = '_blank';
+        link.download = `${flyer.title.replace(/\s+/g, '_')}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      const destination = new Directory(Paths.cache, 'flyers');
+      try { destination.create(); } catch {}
+      console.log('Downloading flyer to cache...');
+
+      const output = await ExpoFile.downloadFileAsync(flyer.imageUrl, destination);
+      console.log('Download complete:', output.uri);
+
+      Alert.alert('Saved', `Flyer "${flyer.title}" has been saved to your device.`);
+    } catch (error) {
+      console.error('Error downloading flyer:', error);
+      Alert.alert('Error', 'Failed to download flyer. Please try again.');
+    }
+  }, []);
 
   const handleDeleteFlyer = useCallback((id: string) => {
     Alert.alert('Delete Flyer', 'Are you sure you want to remove this flyer?', [
@@ -231,6 +259,12 @@ export default function FlyersScreen() {
                           fill={likedIds.has(selectedFlyer.id) ? '#E84393' : 'transparent'}
                         />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.modalActionBtn}
+                        onPress={() => handleDownloadFlyer(selectedFlyer)}
+                      >
+                        <Download size={20} color="#fff" />
+                      </TouchableOpacity>
                       <TouchableOpacity style={styles.modalActionBtn}>
                         <Share2 size={20} color="#fff" />
                       </TouchableOpacity>
@@ -262,12 +296,12 @@ export default function FlyersScreen() {
                   placeholderTextColor={colors.textSecondary + '60'}
                 />
 
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Quote</Text>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Quote (optional)</Text>
                 <TextInput
                   style={[styles.input, styles.textArea, { backgroundColor: colors.background, color: colors.text, borderColor: colors.textSecondary + '30' }]}
                   value={newQuote}
                   onChangeText={setNewQuote}
-                  placeholder="Motivational quote text..."
+                  placeholder="Motivational quote text (leave blank if on image)..."
                   placeholderTextColor={colors.textSecondary + '60'}
                   multiline
                   numberOfLines={3}

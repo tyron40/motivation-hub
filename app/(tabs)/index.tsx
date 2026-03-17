@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
-import { featuredSpeech, categories, popularSpeeches, churchCategory, classifyVideoToCategory } from '@/mocks/speeches';
+import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
@@ -77,11 +77,12 @@ export default function HomeScreen() {
     const base = categories.filter(category => 
       category && typeof category === 'object' && category.id && category.name
     );
+    const withAthlete = [...base, athleteCategory];
     if (profile.includeChurchMotivation) {
-      const [first, ...rest] = base;
+      const [first, ...rest] = withAthlete;
       return [first, churchCategory, ...rest];
     }
-    return base;
+    return withAthlete;
   }, [profile.includeChurchMotivation]);
 
   React.useEffect(() => {
