@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
+import { Play, Quote, Sun, ChevronRight, Film, ImageIcon, Youtube } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
@@ -381,7 +382,18 @@ export default function HomeScreen() {
             ))}
           </View>
 
-
+          <TouchableOpacity
+            style={styles.subscribeSection}
+            onPress={() => {
+              Linking.openURL('https://youtube.com/@motivation-fueled?si=xCshMxUUCjdd4W19').catch(err => {
+                console.error('Error opening channel:', err);
+              });
+            }}
+            activeOpacity={0.8}
+          >
+            <Youtube size={20} color="#FFFFFF" />
+            <Text style={styles.subscribeText}>Subscribe to Motivation Fuel</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     </LinearGradient>
