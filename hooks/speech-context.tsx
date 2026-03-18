@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
 import { fetchRealSpeeches } from '@/services/speechService';
-import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent } from '@/services/contentService';
+import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent, getQuotaStatus } from '@/services/contentService';
 
 interface SpeechContextValue {
   speeches: Speech[];
@@ -117,90 +117,95 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   });
   const { mutate: mutateProfile } = saveProfileMutation;
 
-  // Load real speeches on app start with enhanced error handling
+  // Load real speeches on app start with quota-aware scheduled refresh
   useEffect(() => {
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    
-    const initializeSpeeches = async () => {
-      console.log('📺 Initializing app with YouTube API speeches...');
-      
+    let refreshIntervalId: ReturnType<typeof setInterval> | undefined;
+
+    const REFRESH_INTERVAL = 1000 * 60 * 60 * 3; // 3 hours
+
+    const validateSpeech = (speech: any): speech is Speech => {
+      return (
+        speech &&
+        typeof speech === 'object' &&
+        speech.id &&
+        speech.title &&
+        speech.speaker &&
+        typeof speech.id === 'string' &&
+        typeof speech.title === 'string' &&
+        typeof speech.speaker === 'string'
+      );
+    };
+
+    const loadContent = async (isInitial: boolean) => {
+      if (!isMounted) return;
+
+      if (isInitial) {
+        setIsLoading(true);
+      }
+
       try {
-        if (isMounted) {
-          setIsLoading(true);
-        }
-        
-        // Start with mock data immediately for better UX
-        if (isMounted && Array.isArray(mockSpeeches) && mockSpeeches.length > 0) {
-          console.log(`📚 Setting ${mockSpeeches.length} mock speeches as fallback`);
-          setSpeeches(mockSpeeches);
-        }
-        
-        // Add timeout to prevent hanging on network requests
-        timeoutId = setTimeout(() => {
-          if (isMounted) {
-            console.warn('⚠️ YouTube API loading timeout, using mock data');
-            setIsLoading(false);
+        const quota = await getQuotaStatus();
+        console.log(
+          `YouTube quota status – searches: ${quota.searchRequestsUsed}/${quota.searchRequestsMax}, units: ${quota.unitsUsed}/${quota.unitsMax}, fetches: ${quota.fetchCount}/${quota.fetchMax}`
+        );
+
+        const trendingSpeeches = await fetchTrendingContent(20, true);
+
+        if (Array.isArray(trendingSpeeches) && trendingSpeeches.length > 0 && isMounted) {
+          const validSpeeches = trendingSpeeches.filter(validateSpeech);
+          if (validSpeeches.length > 0) {
+            console.log(`Loaded ${validSpeeches.length} YouTube speeches via ContentManager`);
+            setSpeeches(validSpeeches);
+          } else if (isInitial) {
+            console.log('No valid YouTube speeches, keeping mock data');
           }
-        }, 15000); // 15 second timeout
-        
-        // Load trending content from YouTube API via backend
-        try {
-          const trendingSpeeches = await fetchTrendingContent(20, true);
-          
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          
-          if (Array.isArray(trendingSpeeches) && trendingSpeeches.length > 0 && isMounted) {
-            // Validate speeches before setting them
-            const validSpeeches = trendingSpeeches.filter(speech => 
-              speech && 
-              typeof speech === 'object' && 
-              speech.id && 
-              speech.title && 
-              speech.speaker &&
-              typeof speech.id === 'string' &&
-              typeof speech.title === 'string' &&
-              typeof speech.speaker === 'string'
-            );
-            
-            if (validSpeeches.length > 0) {
-              console.log(`✅ Loaded ${validSpeeches.length} valid YouTube speeches from API`);
-              setSpeeches(validSpeeches);
-            } else {
-              console.log('⚠️ No valid YouTube speeches found, keeping mock data');
-            }
-          } else {
-            console.log('⚠️ No YouTube speeches found, keeping mock data');
-          }
-        } catch (fetchError) {
-          console.error('❌ Error loading YouTube speeches from API, keeping mock data:', fetchError);
-          // Mock data is already set, so no need to set it again
+        } else if (isInitial) {
+          console.log('No YouTube speeches returned, keeping mock data');
         }
       } catch (error) {
-        console.error('❌ Error in speech initialization:', error);
-        // Ensure we have some data even if everything fails
-        if (isMounted && Array.isArray(mockSpeeches) && mockSpeeches.length > 0) {
-          setSpeeches(mockSpeeches);
-        }
+        console.error('Error loading YouTube speeches:', error);
       } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        if (isMounted) {
+        if (isMounted && isInitial) {
           setIsLoading(false);
         }
       }
     };
-    
-    void initializeSpeeches();
-    
-    return () => {
-      isMounted = false;
+
+    const initializeSpeeches = async () => {
+      console.log('Initializing app with quota-aware YouTube content...');
+
+      if (isMounted && Array.isArray(mockSpeeches) && mockSpeeches.length > 0) {
+        setSpeeches(mockSpeeches);
+      }
+
+      timeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.warn('YouTube API loading timeout, using mock data');
+          setIsLoading(false);
+        }
+      }, 15000);
+
+      await loadContent(true);
+
       if (timeoutId) {
         clearTimeout(timeoutId);
+        timeoutId = undefined;
       }
+
+      refreshIntervalId = setInterval(() => {
+        console.log('Scheduled 3-hour content refresh triggered');
+        void loadContent(false);
+      }, REFRESH_INTERVAL);
+    };
+
+    void initializeSpeeches();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (refreshIntervalId) clearInterval(refreshIntervalId);
     };
   }, []);
 
