@@ -16,7 +16,6 @@ import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-na
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
-import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
@@ -30,8 +29,8 @@ export default function HomeScreen() {
   const { profile } = useUserProfile();
   const insets = useSafeAreaInsets();
   const { tryShowInterstitialOnTransition } = useAdMob();
-  const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [shortClips, setShortClips] = React.useState<any[]>([]);
+  const [isLoadingClips, setIsLoadingClips] = React.useState(true);
   const dailyQuote = React.useMemo(() => {
     const quotes = [
       { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -85,57 +84,55 @@ export default function HomeScreen() {
     return withAthlete;
   }, [profile.includeChurchMotivation]);
 
-  React.useEffect(() => {
-    const loadYouTubeSpeeches = async () => {
-      try {
-        console.log('🔄 Loading YouTube speeches from Motivation Fuel channel...');
-        const videos = await getTrendingVideos(50);
-        console.log(`✅ Loaded ${videos.length} YouTube videos`);
-        
-        const speeches = videos.map(video => {
-          const speech = convertVideoToSpeech(video);
-          const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
-          return { ...speech, category: assignedCategory };
-        });
-        
-        setYoutubeSpeeches(speeches);
-      } catch (error) {
-        console.error('❌ Failed to load YouTube speeches:', error);
-      }
-    };
+  const speeches = speechContext?.speeches;
+  const contextIsLoading = speechContext?.isLoading ?? false;
+  const speechesRef = React.useRef(speeches);
+  speechesRef.current = speeches;
 
-    const loadShortClips = async () => {
+  const speechesLength = speeches?.length ?? 0;
+
+  const youtubeSpeeches = React.useMemo(() => {
+    const list = speechesRef.current;
+    if (!list || list.length === 0) return [];
+    return list.map(speech => {
+      const assignedCategory = classifyVideoToCategory(speech.title, speech.description ?? '');
+      return { ...speech, category: assignedCategory };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speechesLength]);
+
+  React.useEffect(() => {
+    const list = speechesRef.current;
+    if (list && list.length > 0) {
       try {
-        console.log('🎬 Loading short clips for home page...');
-        const [searchResults, trending] = await Promise.all([
-          searchVideos('motivational short clips inspiration', 30),
-          getTrendingVideos(30),
-        ]);
-        const seenIds = new Set<string>();
+        console.log('🎬 Deriving short clips from context speeches...');
         const clips: any[] = [];
-        for (const v of [...searchResults, ...trending]) {
-          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 60) {
-            seenIds.add(v.id);
+        const seenIds = new Set<string>();
+        for (const s of list) {
+          if (s && s.id && !seenIds.has(s.id) && s.duration > 0 && s.duration <= 120) {
+            seenIds.add(s.id);
             clips.push({
-              id: v.id,
-              youtubeId: v.id,
-              title: v.title,
-              speaker: v.channelTitle,
-              imageUrl: v.thumbnail,
-              duration: v.duration,
+              id: s.id,
+              youtubeId: s.youtubeId || s.id,
+              title: s.title,
+              speaker: s.speaker,
+              imageUrl: s.imageUrl,
+              duration: s.duration,
             });
           }
         }
-        console.log(`✅ Found ${clips.length} actual short clips (≤60s)`);
+        console.log(`✅ Derived ${clips.length} short clips from context`);
         setShortClips(clips);
       } catch (error) {
-        console.error('❌ Failed to load short clips:', error);
+        console.error('❌ Failed to derive short clips:', error);
+      } finally {
+        setIsLoadingClips(false);
       }
-    };
-    
-    void loadYouTubeSpeeches();
-    void loadShortClips();
-  }, []);
+    } else if (!contextIsLoading) {
+      setIsLoadingClips(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speechesLength, contextIsLoading]);
   
   if (!speechContext) {
     console.error('Speech context not available');
@@ -153,6 +150,14 @@ export default function HomeScreen() {
 
   const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : popularSpeeches;
   const displayFeatured = youtubeSpeeches.length > 0 ? youtubeSpeeches[0] : featuredSpeech;
+  const displayShortClips = shortClips.length > 0 ? shortClips : popularSpeeches.filter(s => s.duration <= 600).map(s => ({
+    id: s.id,
+    youtubeId: s.youtubeId || s.id,
+    title: s.title,
+    speaker: s.speaker,
+    imageUrl: s.imageUrl,
+    duration: s.duration,
+  }));
 
   const handleSpeechPress = React.useCallback(async (speech: any, playlist?: any[]) => {
     try {
@@ -313,10 +318,16 @@ export default function HomeScreen() {
                 <ChevronRight size={16} color={colors.primary} />
               </View>
             </TouchableOpacity>
+            {isLoadingClips && displayShortClips.length === 0 && (
+              <View style={styles.loadingSection}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={styles.loadingSectionText}>Loading clips...</Text>
+              </View>
+            )}
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={shortClips.slice(0, 8)}
+              data={displayShortClips.slice(0, 8)}
               keyExtractor={(item) => `clip-${item.id}`}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
@@ -370,15 +381,22 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popular Speeches</Text>
-            {safeDisplaySpeeches.map((speech, index) => (
-              <SpeechCard
-                key={`speech-${speech.id}-${index}`}
-                speech={speech}
-                onPress={() => handleSpeechPress(speech)}
-                onFavorite={() => toggleFavorite(speech.id)}
-              />
-            ))}
+            <Text style={[styles.sectionTitle, { paddingHorizontal: 20, marginBottom: 12 }]}>Popular Speeches</Text>
+            {contextIsLoading && safeDisplaySpeeches.length === 0 ? (
+              <View style={styles.loadingSection}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.loadingSectionText}>Loading speeches...</Text>
+              </View>
+            ) : (
+              safeDisplaySpeeches.map((speech, index) => (
+                <SpeechCard
+                  key={`speech-${speech.id}-${index}`}
+                  speech={speech}
+                  onPress={() => handleSpeechPress(speech)}
+                  onFavorite={() => toggleFavorite(speech.id)}
+                />
+              ))
+            )}
           </View>
 
 
@@ -616,5 +634,16 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
-
+  loadingSection: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 24,
+    gap: 10,
+  },
+  loadingSectionText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
 });
