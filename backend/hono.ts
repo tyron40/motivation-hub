@@ -243,7 +243,45 @@ app.post("/chat", handleChat);
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 1000 * 60 * 60 * 12;
+const CACHE_DURATION = 1000 * 60 * 60 * 3; // 3 hours cache
+
+// Backend quota tracker
+const QUOTA_TRACKER = {
+  date: new Date().toISOString().split('T')[0],
+  searchCount: 0,
+  totalUnits: 0,
+  maxSearches: 80,
+  maxUnits: 10000,
+};
+
+function resetQuotaIfNewDay(): void {
+  const today = new Date().toISOString().split('T')[0];
+  if (QUOTA_TRACKER.date !== today) {
+    console.log('[QuotaManager] New day detected, resetting backend quota counter');
+    QUOTA_TRACKER.date = today;
+    QUOTA_TRACKER.searchCount = 0;
+    QUOTA_TRACKER.totalUnits = 0;
+  }
+}
+
+function canMakeBackendSearch(): boolean {
+  resetQuotaIfNewDay();
+  if (QUOTA_TRACKER.searchCount >= QUOTA_TRACKER.maxSearches) {
+    console.log('[QuotaManager] ⛔ Backend daily search limit reached');
+    return false;
+  }
+  if (QUOTA_TRACKER.totalUnits + 100 > QUOTA_TRACKER.maxUnits) {
+    console.log('[QuotaManager] ⛔ Backend daily quota units would be exceeded');
+    return false;
+  }
+  return true;
+}
+
+function trackBackendQuota(searchCalls: number, detailCalls: number): void {
+  QUOTA_TRACKER.searchCount += searchCalls;
+  QUOTA_TRACKER.totalUnits += (searchCalls * 100) + (detailCalls * 1);
+  console.log(`[QuotaManager] Backend quota: ${QUOTA_TRACKER.searchCount} searches, ${QUOTA_TRACKER.totalUnits} units used today`);
+}
 
 const ADMIN_DATA_STORE: Record<string, any> = {
   flyers: [],
@@ -339,15 +377,17 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
 
   if (!YOUTUBE_API_KEY) {
     console.error('[YouTube] ❌ API key not configured!');
-    console.error('[YouTube] Please set YOUTUBE_API_KEY in Vercel environment variables');
-    console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
-    
     if (cached) {
       console.warn('[YouTube] ⚠️ Using expired cache as fallback');
       return cached.data;
     }
-    
-    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY in Vercel environment variables.');
+    throw new Error('YouTube API key not configured.');
+  }
+
+  if (!canMakeBackendSearch()) {
+    console.log('[YouTube] Quota limit reached – using cached content');
+    if (cached) return cached.data;
+    return [];
   }
 
   try {
@@ -355,88 +395,58 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
     searchUrl.searchParams.set('part', 'snippet');
     searchUrl.searchParams.set('q', query);
     searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', maxResults.toString());
+    searchUrl.searchParams.set('maxResults', Math.min(maxResults, 25).toString());
     searchUrl.searchParams.set('order', 'relevance');
     searchUrl.searchParams.set('videoDuration', 'medium');
     searchUrl.searchParams.set('videoEmbeddable', 'true');
     searchUrl.searchParams.set('videoSyndicated', 'true');
     searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
-    console.log('[YouTube] Fetching search results...');
-    console.log('[YouTube] API Key present:', YOUTUBE_API_KEY ? `Yes (${YOUTUBE_API_KEY.substring(0, 10)}...)` : 'No');
+    console.log('[YouTube] YouTube request executed: search');
     const searchResponse = await fetch(searchUrl.toString());
     if (!searchResponse.ok) {
       const errorText = await searchResponse.text();
       console.error('[YouTube] Search API error:', searchResponse.status, errorText);
-      
-      let errorDetails = errorText;
-      try {
-        const errorJson = JSON.parse(errorText);
-        if (errorJson.error) {
-          errorDetails = errorJson.error.message || errorJson.error;
-          console.error('[YouTube] Error details:', errorJson.error);
-          
-          if (searchResponse.status === 403) {
-            if (errorDetails.includes('quotaExceeded') || errorDetails.includes('quota')) {
-              errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
-            } else if (errorDetails.includes('API key')) {
-              errorDetails = `YouTube API key is invalid or restricted. Please check:
-1. API key is correct in Vercel environment variables
-2. YouTube Data API v3 is enabled in Google Cloud Console
-3. API key restrictions (if any) allow requests from your server`;
-            } else {
-              errorDetails = `YouTube API forbidden (403). Possible reasons:
-1. Invalid API key
-2. YouTube Data API v3 not enabled
-3. API key has restrictions
-4. Daily quota exceeded
 
-Details: ${errorDetails}`;
-            }
-          }
-        }
-      } catch {
-        // Not JSON, use raw error
+      if (searchResponse.status === 403 && errorText.includes('quota')) {
+        console.error('[YouTube] ⛔ Quota limit reached – using cached content');
       }
-      
-      throw new Error(`YouTube API error: ${searchResponse.status} - ${errorDetails}`);
+
+      if (cached) {
+        console.warn('[YouTube] ⚠️ Using expired cache as fallback');
+        return cached.data;
+      }
+      throw new Error(`YouTube API error: ${searchResponse.status}`);
     }
 
     const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    const videoIds = searchData.items?.map((item: any) => item.id.videoId).join(',');
 
-    if (!videoIds) {
-      return [];
-    }
+    if (!videoIds) return [];
 
     const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
     detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
     detailsUrl.searchParams.set('id', videoIds);
     detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
 
-    console.log('[YouTube] Fetching video details...');
+    console.log('[YouTube] YouTube request executed: video details');
     const detailsResponse = await fetch(detailsUrl.toString());
     if (!detailsResponse.ok) {
       const errorText = await detailsResponse.text();
       console.error('[YouTube] Videos API error:', detailsResponse.status, errorText);
+      if (cached) return cached.data;
       throw new Error(`YouTube API error: ${detailsResponse.status}`);
     }
 
     const detailsData = await detailsResponse.json();
+
+    trackBackendQuota(1, 1);
 
     const videos = detailsData.items
       .filter((item: any) => {
         const isEmbeddable = item.status?.embeddable !== false;
         const isPublic = item.status?.privacyStatus === 'public';
         const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
-        
-        if (!isEmbeddable) {
-          console.log(`[YouTube] ⏭️ Skipping non-embeddable: ${item.snippet.title}`);
-        }
-        if (!isPublic) {
-          console.log(`[YouTube] ⏭️ Skipping non-public: ${item.snippet.title}`);
-        }
-        
         return isEmbeddable && isPublic && hasValidDuration;
       })
       .map((item: any) => ({
@@ -460,20 +470,15 @@ Details: ${errorDetails}`;
       REQUEST_CACHE.delete(oldestKey);
     }
 
-    console.log(`[YouTube] ✅ Successfully fetched ${videos.length} embeddable videos (from ${detailsData.items.length} total)`);
-    
-    if (videos.length === 0 && detailsData.items.length > 0) {
-      console.warn(`[YouTube] ⚠️ All videos were filtered out - none were embeddable`);
-    }
+    console.log(`[YouTube] ✅ Successfully fetched ${videos.length} embeddable videos`);
+    console.log('[QuotaManager] Video cache updated');
     return videos;
   } catch (error) {
     console.error('[YouTube] Error fetching videos:', error);
-    
     if (cached) {
       console.warn('[YouTube] ⚠️ Using expired cache as fallback due to API error');
       return cached.data;
     }
-    
     throw error;
   }
 }
@@ -682,6 +687,54 @@ app.post('/api/youtube/search', handleYouTubeSearch);
 app.post('/youtube/search', handleYouTubeSearch);
 app.post('/api/youtube/trending', handleYouTubeTrending);
 app.post('/youtube/trending', handleYouTubeTrending);
+
+const handleQuotaStatus = (c: Context) => {
+  resetQuotaIfNewDay();
+  return c.json({
+    date: QUOTA_TRACKER.date,
+    searchesUsed: QUOTA_TRACKER.searchCount,
+    searchesRemaining: QUOTA_TRACKER.maxSearches - QUOTA_TRACKER.searchCount,
+    unitsUsed: QUOTA_TRACKER.totalUnits,
+    unitsRemaining: QUOTA_TRACKER.maxUnits - QUOTA_TRACKER.totalUnits,
+    canSearch: canMakeBackendSearch(),
+    cacheSize: REQUEST_CACHE.size,
+  });
+};
+
+app.get('/api/youtube/quota', handleQuotaStatus);
+app.get('/youtube/quota', handleQuotaStatus);
+
+const handleCachedVideos = async (c: Context) => {
+  try {
+    const category = c.req.query('category') || '';
+    const cacheEntries: any[] = [];
+    
+    for (const [key, value] of REQUEST_CACHE.entries()) {
+      if (!category || key.toLowerCase().includes(category.toLowerCase())) {
+        if (Array.isArray(value.data)) {
+          cacheEntries.push(...value.data);
+        }
+      }
+    }
+    
+    const uniqueVideos = cacheEntries.filter((video, index, self) =>
+      index === self.findIndex((v) => v.id === video.id)
+    );
+    
+    return c.json({
+      videos: uniqueVideos,
+      fromCache: true,
+      count: uniqueVideos.length,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[YouTube] Cached videos error:', error);
+    return c.json({ videos: [], fromCache: true, count: 0 }, 200);
+  }
+};
+
+app.get('/api/youtube/cached', handleCachedVideos);
+app.get('/youtube/cached', handleCachedVideos);
 
 app.all("/trpc/*", async (c: Context) => {
   console.log("[Hono] tRPC request:", c.req.method, c.req.url);
