@@ -249,7 +249,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Today&apos;s Featured</Text>
+            <Text style={styles.sectionTitlePadded}>Today&apos;s Featured</Text>
             <SpeechCard
               speech={displayFeatured}
               variant="featured"
@@ -348,7 +348,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Categories</Text>
+            <Text style={styles.sectionTitlePadded}>Categories</Text>
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -370,7 +370,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popular Speeches</Text>
+            <Text style={styles.sectionTitlePadded}>Popular Speeches</Text>
             {safeDisplaySpeeches.map((speech, index) => (
               <SpeechCard
                 key={`speech-${speech.id}-${index}`}
@@ -503,8 +503,16 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     fontSize: 19,
     fontWeight: '700' as const,
-    marginBottom: 0,
+    marginBottom: 12,
     letterSpacing: -0.3,
+  },
+  sectionTitlePadded: {
+    color: colors.text,
+    fontSize: 19,
+    fontWeight: '700' as const,
+    marginBottom: 12,
+    letterSpacing: -0.3,
+    paddingHorizontal: 20,
   },
   sectionHeaderLeft: {
     flexDirection: 'row' as const,
