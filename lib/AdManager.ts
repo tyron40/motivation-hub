@@ -15,8 +15,8 @@ interface AdManagerState {
 
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 5000;
-const INTERSTITIAL_COOLDOWN_MS = 30 * 1000;
-const INTERACTIONS_BETWEEN_ADS = 2;
+const INTERSTITIAL_COOLDOWN_MS = 75 * 1000;
+const INTERACTIONS_BETWEEN_ADS = 3;
 
 let RewardedAd: any = null;
 let InterstitialAd: any = null;

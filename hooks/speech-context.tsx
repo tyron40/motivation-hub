@@ -6,7 +6,6 @@ import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
 import { fetchRealSpeeches } from '@/services/speechService';
 import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent } from '@/services/contentService';
-import { getQuotaStatus } from '@/services/youtubeContentManager';
 
 interface SpeechContextValue {
   speeches: Speech[];
@@ -124,29 +123,29 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     const initializeSpeeches = async () => {
-      console.log('📺 Initializing app with cached/YouTube speeches...');
+      console.log('📺 Initializing app with YouTube API speeches...');
       
       try {
         if (isMounted) {
           setIsLoading(true);
         }
         
+        // Start with mock data immediately for better UX
         if (isMounted && Array.isArray(mockSpeeches) && mockSpeeches.length > 0) {
           console.log(`📚 Setting ${mockSpeeches.length} mock speeches as fallback`);
           setSpeeches(mockSpeeches);
         }
         
+        // Add timeout to prevent hanging on network requests
         timeoutId = setTimeout(() => {
           if (isMounted) {
-            console.warn('⚠️ Loading timeout, using current data');
+            console.warn('⚠️ YouTube API loading timeout, using mock data');
             setIsLoading(false);
           }
-        }, 15000);
+        }, 15000); // 15 second timeout
         
+        // Load trending content from YouTube API via backend
         try {
-          const quotaStatus = await getQuotaStatus();
-          console.log(`[QuotaManager] Status: ${quotaStatus.searchesUsed} searches used, ${quotaStatus.unitsUsed} units, canSearch: ${quotaStatus.canSearch}`);
-
           const trendingSpeeches = await fetchTrendingContent(20, true);
           
           if (timeoutId) {
@@ -154,6 +153,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
           }
           
           if (Array.isArray(trendingSpeeches) && trendingSpeeches.length > 0 && isMounted) {
+            // Validate speeches before setting them
             const validSpeeches = trendingSpeeches.filter(speech => 
               speech && 
               typeof speech === 'object' && 
@@ -166,19 +166,21 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
             );
             
             if (validSpeeches.length > 0) {
-              console.log(`✅ Loaded ${validSpeeches.length} valid speeches (cached or fresh)`);
+              console.log(`✅ Loaded ${validSpeeches.length} valid YouTube speeches from API`);
               setSpeeches(validSpeeches);
             } else {
-              console.log('⚠️ No valid speeches found, keeping mock data');
+              console.log('⚠️ No valid YouTube speeches found, keeping mock data');
             }
           } else {
-            console.log('⚠️ No speeches found, keeping mock data');
+            console.log('⚠️ No YouTube speeches found, keeping mock data');
           }
         } catch (fetchError) {
-          console.error('❌ Error loading speeches, keeping mock data:', fetchError);
+          console.error('❌ Error loading YouTube speeches from API, keeping mock data:', fetchError);
+          // Mock data is already set, so no need to set it again
         }
       } catch (error) {
         console.error('❌ Error in speech initialization:', error);
+        // Ensure we have some data even if everything fails
         if (isMounted && Array.isArray(mockSpeeches) && mockSpeeches.length > 0) {
           setSpeeches(mockSpeeches);
         }
