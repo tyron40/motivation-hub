@@ -56,6 +56,9 @@ export const AD_CONFIG = {
   
   // Cooldown between interstitial ads (75 seconds - managed by AdManager)
   INTERSTITIAL_COOLDOWN: 75 * 1000,
+
+  // Interval for showing interstitial ads during speech playback (5 minutes)
+  PLAYBACK_AD_INTERVAL_SECONDS: 300,
   
   // Request options for ads
   requestOptions: {

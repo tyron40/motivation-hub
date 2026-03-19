@@ -19,6 +19,7 @@ import {
   RotateCcw,
   RotateCw,
 } from 'lucide-react-native';
+import { usePlaybackAdTimer } from '@/hooks/usePlaybackAdTimer';
 
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
@@ -68,6 +69,12 @@ export default function AudioOnlyVideoPlayer({
   const progressInterval = useRef<any>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  const { resetTimer: resetAdTimer } = usePlaybackAdTimer({
+    isPlaying,
+    currentTime,
+    enabled: true,
+  });
+
   useEffect(() => {
     if (isPlaying) {
       Animated.loop(
@@ -101,6 +108,10 @@ export default function AudioOnlyVideoPlayer({
       }
     };
   }, []);
+
+  useEffect(() => {
+    resetAdTimer();
+  }, [videoId, resetAdTimer]);
 
   useEffect(() => {
     const fetchVideoMetadata = async () => {

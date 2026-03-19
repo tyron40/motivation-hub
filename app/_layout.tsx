@@ -21,6 +21,7 @@ import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { usePlaybackAdTimer } from '@/hooks/usePlaybackAdTimer';
 
 
 // Prevent splash screen from auto-hiding with error handling
@@ -137,7 +138,13 @@ function AudioPlayerWrapper() {
     return null;
   }
 
-  const { currentSpeech, isPlaying, handlePlaybackStatusUpdate, handleAudioError, audioPlayerRef } = speechContext;
+  const { currentSpeech, isPlaying, handlePlaybackStatusUpdate, handleAudioError, audioPlayerRef, currentTime } = speechContext;
+
+  usePlaybackAdTimer({
+    isPlaying,
+    currentTime,
+    enabled: !currentSpeech?.youtubeId,
+  });
 
   // Don't render AudioPlayer for YouTube videos or if no valid audio URL
   if (!audioUrl || 
