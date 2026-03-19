@@ -205,6 +205,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     activeVideoIdRef.current = videoId;
     onEndCalledRef.current = false;
     autoplayTriggeredRef.current = false;
+    autoplayAttemptRef.current = 0;
+    if (autoplayRetryTimerRef.current) {
+      clearTimeout(autoplayRetryTimerRef.current);
+      autoplayRetryTimerRef.current = null;
+    }
 
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
@@ -286,7 +291,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       isPlayingRef.current = false;
       void fetchVideoMetadata();
     }
-  }, [videoId]);
+  }, [videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
@@ -315,6 +320,50 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayAttemptRef = useRef(0);
+
+  const clearAutoplayTimer = useCallback(() => {
+    if (autoplayRetryTimerRef.current) {
+      clearTimeout(autoplayRetryTimerRef.current);
+      autoplayRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleAutoplayRetry = useCallback(() => {
+    clearAutoplayTimer();
+    autoplayAttemptRef.current += 1;
+    const attempt = autoplayAttemptRef.current;
+    if (attempt > 12 || !mountedRef.current || !autoplay) return;
+
+    const delay = attempt <= 3 ? 500 : attempt <= 6 ? 1000 : 1500;
+    console.log(`Scheduling autoplay retry #${attempt} in ${delay}ms`);
+
+    autoplayRetryTimerRef.current = setTimeout(async () => {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      if (!playerRef.current || !playerReadyRef.current) {
+        scheduleAutoplayRetry();
+        return;
+      }
+      try {
+        const state = await playerRef.current.getState();
+        console.log(`Autoplay retry #${attempt}, player state:`, state);
+        if (state === 'playing') {
+          if (!isPlayingRef.current) commitPlayState(true);
+          return;
+        }
+        commitPlayState(true);
+        scheduleAutoplayRetry();
+      } catch {
+        scheduleAutoplayRetry();
+      }
+    }, delay);
+  }, [autoplay, videoId, commitPlayState, clearAutoplayTimer]);
+
+  useEffect(() => {
+    return () => clearAutoplayTimer();
+  }, [clearAutoplayTimer]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('YouTube player ready for video:', activeVideoIdRef.current);
@@ -334,55 +383,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       
       if (autoplay && !autoplayTriggeredRef.current) {
         autoplayTriggeredRef.current = true;
+        autoplayAttemptRef.current = 0;
         console.log('Triggering auto-play for:', activeVideoIdRef.current);
-
-        const attemptAutoplay = async (attempt: number) => {
-          if (attempt > 8 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          
-          try {
-            const playerState = playerRef.current ? await playerRef.current.getState() : null;
-            console.log(`Autoplay attempt ${attempt}, player state:`, playerState);
-            
-            if (playerState === 'playing') {
-              console.log('Player is already playing, autoplay success');
-              if (!isPlayingRef.current) commitPlayState(true);
-              return;
-            }
-
-            commitPlayState(false);
-            await new Promise(r => setTimeout(r, 100));
-            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-            commitPlayState(true);
-            
-            const delay = attempt <= 2 ? 800 : attempt <= 4 ? 1200 : 2000;
-            setTimeout(() => {
-              if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-              if (playerRef.current) {
-                void playerRef.current.getState().then((state: string) => {
-                  console.log(`Autoplay check after attempt ${attempt}, state:`, state);
-                  if (state !== 'playing') {
-                    void attemptAutoplay(attempt + 1);
-                  } else if (!isPlayingRef.current) {
-                    commitPlayState(true);
-                  }
-                }).catch(() => {
-                  void attemptAutoplay(attempt + 1);
-                });
-              }
-            }, delay);
-          } catch (err) {
-            console.error(`Autoplay attempt ${attempt} error:`, err);
-            setTimeout(() => void attemptAutoplay(attempt + 1), 1000);
-          }
-        };
-
-        setTimeout(() => {
-          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          void attemptAutoplay(1);
-        }, 600);
+        commitPlayState(true);
+        scheduleAutoplayRetry();
       }
     }
-  }, [autoplay, commitPlayState, videoId]);
+  }, [autoplay, commitPlayState, scheduleAutoplayRetry]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -412,21 +419,29 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'playing') {
+      clearAutoplayTimer();
       if (!isPlayingRef.current) {
         commitPlayState(true);
       }
       startProgressTracking();
     } else if (state === 'paused') {
-      if (isPlayingRef.current) {
+      if (autoplayTriggeredRef.current && autoplayAttemptRef.current > 0 && autoplayAttemptRef.current <= 12) {
+        console.log('Player paused during autoplay sequence, retrying...');
+        commitPlayState(true);
+        scheduleAutoplayRetry();
+      } else if (isPlayingRef.current) {
         commitPlayState(false);
       }
       stopProgressTracking();
     } else if (state === 'buffering') {
       // keep current state during buffering
     } else if (state === 'unstarted') {
-      // initial state, do nothing
+      if (autoplay && autoplayTriggeredRef.current && autoplayAttemptRef.current <= 12) {
+        console.log('Player unstarted during autoplay, scheduling retry...');
+        scheduleAutoplayRetry();
+      }
     }
-  }, [commitPlayState, startProgressTracking, stopProgressTracking]);
+  }, [commitPlayState, startProgressTracking, stopProgressTracking, autoplay, clearAutoplayTimer, scheduleAutoplayRetry]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
