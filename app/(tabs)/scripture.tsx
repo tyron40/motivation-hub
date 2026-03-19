@@ -181,7 +181,7 @@ export default function ScriptureScreen() {
 
 ${scripture.reference}
 
-Shared from Motivation Hub`;
+Shared from Motivation Fuel`;
       
       if (Platform.OS === 'web') {
         try {
@@ -293,11 +293,11 @@ Shared from Motivation Hub`;
           useNativeDriver: true,
         }),
       ]).start();
-      toggleFavorite(scripture);
+      void toggleFavorite(scripture);
     };
 
     const handleSharePress = () => {
-      handleShare(scripture);
+      void handleShare(scripture);
     };
 
     const handleInspire = async () => {

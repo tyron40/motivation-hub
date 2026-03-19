@@ -143,7 +143,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
         
         <View style={styles.textContainer}>
           <Text style={styles.title}>MOTIVATION</Text>
-          <Text style={styles.subtitle}>HUB</Text>
+          <Text style={styles.subtitle}>FUEL</Text>
         </View>
         
         <View style={[styles.loadingContainer, { width: width * 0.7 }]}>

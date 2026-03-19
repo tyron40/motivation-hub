@@ -85,7 +85,7 @@ export default function PlayerScreen() {
   const handleShare = async () => {
     if (!currentSpeech) return;
     try {
-      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Hub!`;
+      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Fuel!`;
       const url = currentSpeech.youtubeId 
         ? `https://youtube.com/watch?v=${currentSpeech.youtubeId}` 
         : undefined;

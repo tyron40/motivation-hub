@@ -145,7 +145,7 @@ export default function HomeScreen() {
       <LinearGradient colors={[colors.background, colors.card]} style={styles.container}>
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading Motivation Hub...</Text>
+          <Text style={styles.loadingText}>Loading Motivation Fuel...</Text>
         </View>
       </LinearGradient>
     );
@@ -216,7 +216,7 @@ export default function HomeScreen() {
             <View style={styles.headerTop}>
               <View>
                 <Text style={styles.greeting}>Welcome to</Text>
-                <Text style={styles.title}>Motivation Hub</Text>
+                <Text style={styles.title}>Motivation Fuel</Text>
               </View>
               <TouchableOpacity 
                 style={styles.playAllButton}

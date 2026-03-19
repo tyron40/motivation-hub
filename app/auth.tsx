@@ -146,7 +146,7 @@ export default function AuthScreen() {
                       resizeMode="cover"
                     />
                   </View>
-                  <Text style={styles.heroTitle}>Motivation Hub</Text>
+                  <Text style={styles.heroTitle}>Motivation Fuel</Text>
                   <Text style={styles.heroSubtitle}>
                     Transform your life with powerful motivational speeches, AI coaching, and scripture wisdom
                   </Text>
