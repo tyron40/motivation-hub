@@ -335,11 +335,19 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       if (autoplay && !autoplayTriggeredRef.current) {
         autoplayTriggeredRef.current = true;
         console.log('Triggering auto-play for:', activeVideoIdRef.current);
-        setTimeout(() => {
-          if (mountedRef.current && playerRef.current && activeVideoIdRef.current === videoId) {
-            commitPlayState(true);
-          }
-        }, 600);
+        commitPlayState(true);
+        
+        const retryAutoplay = (attempt: number) => {
+          if (attempt > 3 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          setTimeout(() => {
+            if (mountedRef.current && playerRef.current && activeVideoIdRef.current === videoId && !isPlayingRef.current) {
+              console.log(`Autoplay retry attempt ${attempt} for:`, activeVideoIdRef.current);
+              commitPlayState(true);
+              retryAutoplay(attempt + 1);
+            }
+          }, 500 * attempt);
+        };
+        retryAutoplay(1);
       }
     }
   }, [autoplay, commitPlayState, videoId]);

@@ -38,8 +38,8 @@ export const motivationalFlyers: MotivationalFlyer[] = [
   {
     id: 'flyer-featured-5',
     title: 'No Sacrifice, No Victory',
-    quote: 'Nothing great comes without a sacrifice.',
-    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/ithqe2zy1hoahpgzz0pd2',
+    quote: '',
+    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/f1wpgpun1sw6icrkx6wc9',
     accent: '#E84393',
   },
   {

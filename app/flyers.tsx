@@ -283,14 +283,24 @@ export default function FlyersScreen() {
               testID={`flyer-grid-${flyer.id}`}
             >
               <Image source={{ uri: flyer.imageUrl }} style={styles.cardImage} />
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
-                style={styles.cardGradient}
-              >
-                <View style={[styles.accentDot, { backgroundColor: flyer.accent }]} />
-                <Text style={styles.cardQuote} numberOfLines={3}>{flyer.quote}</Text>
-                <Text style={styles.cardTitle}>{flyer.title}</Text>
-              </LinearGradient>
+              {flyer.quote ? (
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
+                  style={styles.cardGradient}
+                >
+                  <View style={[styles.accentDot, { backgroundColor: flyer.accent }]} />
+                  <Text style={styles.cardQuote} numberOfLines={3}>{flyer.quote}</Text>
+                  <Text style={styles.cardTitle}>{flyer.title}</Text>
+                </LinearGradient>
+              ) : (
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.3)']}
+                  style={styles.cardGradient}
+                >
+                  <View style={[styles.accentDot, { backgroundColor: flyer.accent }]} />
+                  <Text style={styles.cardTitle}>{flyer.title}</Text>
+                </LinearGradient>
+              )}
               {likedIds.has(flyer.id) && (
                 <View style={styles.likedBadge}>
                   <Heart size={12} color="#E84393" fill="#E84393" />
@@ -318,11 +328,15 @@ export default function FlyersScreen() {
                 <View style={styles.modalCard}>
                   <Image source={{ uri: selectedFlyer.imageUrl }} style={styles.modalImage} />
                   <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)']}
+                    colors={selectedFlyer.quote ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)'] : ['transparent', 'rgba(0,0,0,0.35)']}
                     style={styles.modalGradient}
                   >
-                    <Quote size={24} color={selectedFlyer.accent} fill={selectedFlyer.accent} />
-                    <Text style={styles.modalQuote}>{selectedFlyer.quote}</Text>
+                    {selectedFlyer.quote ? (
+                      <>
+                        <Quote size={24} color={selectedFlyer.accent} fill={selectedFlyer.accent} />
+                        <Text style={styles.modalQuote}>{selectedFlyer.quote}</Text>
+                      </>
+                    ) : null}
                     <View style={[styles.modalAccentLine, { backgroundColor: selectedFlyer.accent }]} />
                     <Text style={styles.modalTitle}>{selectedFlyer.title}</Text>
                     <View style={styles.modalActions}>

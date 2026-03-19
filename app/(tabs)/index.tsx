@@ -295,17 +295,27 @@ export default function HomeScreen() {
                     source={{ uri: item.imageUrl }}
                     style={styles.flyerPosterImage}
                   />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.92)']}
-                    style={styles.flyerPosterGradient}
-                  >
-                    <View style={styles.flyerQuoteRow}>
-                      <Quote size={14} color={item.accent} fill={item.accent} />
-                    </View>
-                    <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
-                    <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
-                    <Text style={styles.flyerPosterTitle}>{item.title}</Text>
-                  </LinearGradient>
+                  {item.quote ? (
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.92)']}
+                      style={styles.flyerPosterGradient}
+                    >
+                      <View style={styles.flyerQuoteRow}>
+                        <Quote size={14} color={item.accent} fill={item.accent} />
+                      </View>
+                      <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
+                      <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
+                      <Text style={styles.flyerPosterTitle}>{item.title}</Text>
+                    </LinearGradient>
+                  ) : (
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.35)']}
+                      style={styles.flyerPosterGradient}
+                    >
+                      <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
+                      <Text style={styles.flyerPosterTitle}>{item.title}</Text>
+                    </LinearGradient>
+                  )}
                 </TouchableOpacity>
               )}
             />
