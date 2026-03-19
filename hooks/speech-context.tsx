@@ -299,7 +299,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       return;
     }
     playPauseLockedRef.current = true;
-    setTimeout(() => { playPauseLockedRef.current = false; }, 600);
+    setTimeout(() => { playPauseLockedRef.current = false; }, 800);
 
     console.log('🎵 Toggle play/pause, current state:', isPlayingRef.current);
     if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
@@ -307,7 +307,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       audioPlayerRef.current.togglePlay();
     } else {
       console.log('🎵 No active player ref, toggling state directly');
-      setIsPlaying(prev => !prev);
+      const newState = !isPlayingRef.current;
+      setIsPlaying(newState);
     }
   }, [audioPlayerRef]);
 

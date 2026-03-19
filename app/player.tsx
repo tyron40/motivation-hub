@@ -44,7 +44,6 @@ export default function PlayerScreen() {
 
   useEffect(() => {
     setIsMinimized(false);
-    audioPlayerRef.current = localPlayerRef.current;
     return () => {
       audioPlayerRef.current = null;
     };
@@ -54,7 +53,7 @@ export default function PlayerScreen() {
     if (localPlayerRef.current) {
       audioPlayerRef.current = localPlayerRef.current;
     }
-  });
+  }, [audioPlayerRef, currentSpeech]);
 
   const handleMinimize = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

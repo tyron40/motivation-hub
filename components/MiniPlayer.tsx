@@ -70,7 +70,7 @@ export default function MiniPlayer() {
     playPause();
     setTimeout(() => {
       playPauseDebounceRef.current = false;
-    }, 600);
+    }, 1000);
   };
 
   const handleSkipNext = () => {
