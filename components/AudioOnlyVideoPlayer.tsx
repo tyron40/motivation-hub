@@ -322,7 +322,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, [onPlayingChange]);
 
   const onStateChange = useCallback((state: string) => {
-    console.log('Player state:', state, '| UI isPlaying:', isPlayingRef.current);
+    console.log('Player state:', state);
 
     if (state === 'ended') {
       userIntentRef.current = null;
@@ -337,33 +337,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
 
-    if (state === 'buffering' || state === 'unstarted' || state === 'video cued') {
-      return;
-    }
-
-    if (Date.now() < ignoreStateChangesUntilRef.current) {
-      if (state === 'playing') {
-        startProgressTracking();
-      } else if (state === 'paused') {
-        stopProgressTracking();
-      }
-      return;
-    }
-
     if (state === 'playing') {
       startProgressTracking();
-      if (!lastCommittedPlayState.current) {
-        lastCommittedPlayState.current = true;
-        setIsPlaying(true);
-        onPlayingChange?.(true);
-      }
     } else if (state === 'paused') {
       stopProgressTracking();
-      if (lastCommittedPlayState.current) {
-        lastCommittedPlayState.current = false;
-        setIsPlaying(false);
-        onPlayingChange?.(false);
-      }
     }
   }, [startProgressTracking, stopProgressTracking, onEnd, onPlayingChange]);
 
