@@ -335,17 +335,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       if (autoplay && !autoplayTriggeredRef.current) {
         autoplayTriggeredRef.current = true;
         console.log('Triggering auto-play for:', activeVideoIdRef.current);
-        commitPlayState(true);
+        setTimeout(() => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          console.log('Auto-play: setting play state after ready delay');
+          commitPlayState(true);
+        }, 300);
         
         const retryAutoplay = (attempt: number) => {
-          if (attempt > 3 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (attempt > 5 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
           setTimeout(() => {
             if (mountedRef.current && playerRef.current && activeVideoIdRef.current === videoId && !isPlayingRef.current) {
               console.log(`Autoplay retry attempt ${attempt} for:`, activeVideoIdRef.current);
               commitPlayState(true);
               retryAutoplay(attempt + 1);
             }
-          }, 500 * attempt);
+          }, 800 * attempt);
         };
         retryAutoplay(1);
       }
@@ -480,9 +484,34 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
+  const hiddenPlayerElement = (
+    <View style={styles.hiddenPlayer}>
+      <YoutubePlayer
+        ref={playerRef}
+        videoId={videoId}
+        height={1}
+        width={1}
+        play={isPlaying}
+        forceAndroidAutoplay={true}
+        onReady={onPlayerReady}
+        onError={onPlayerError}
+        onChangeState={onStateChange}
+        initialPlayerParams={{
+          controls: false,
+          modestbranding: true,
+          rel: false,
+          playsinline: true,
+          preventFullScreen: true,
+        }}
+        webViewStyle={styles.hiddenWebView}
+      />
+    </View>
+  );
+
   if (isLoading) {
     return (
       <View style={styles.container}>
+        {hiddenPlayerElement}
         <View style={styles.coverImageContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImage} blurRadius={2} />
           <View style={styles.coverOverlay}>
@@ -497,6 +526,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   if (error || !metadata) {
     return (
       <View style={styles.container}>
+        {hiddenPlayerElement}
         <View style={styles.coverImageContainer}>
           <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
           <View style={styles.coverOverlay}>
@@ -524,26 +554,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         </View>
       </Animated.View>
 
-      <View style={styles.hiddenPlayer}>
-        <YoutubePlayer
-          ref={playerRef}
-          videoId={videoId}
-          height={1}
-          width={1}
-          play={isPlaying}
-          onReady={onPlayerReady}
-          onError={onPlayerError}
-          onChangeState={onStateChange}
-          initialPlayerParams={{
-            controls: false,
-            modestbranding: true,
-            rel: false,
-            playsinline: true,
-            preventFullScreen: true,
-          }}
-          webViewStyle={styles.hiddenWebView}
-        />
-      </View>
+      {hiddenPlayerElement}
 
       <View style={styles.infoSection}>
         <Text style={styles.title} numberOfLines={2}>{metadata.title}</Text>
