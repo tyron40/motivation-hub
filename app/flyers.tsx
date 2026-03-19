@@ -157,10 +157,9 @@ export default function FlyersScreen() {
         return;
       }
 
+      console.log('Downloading flyer to cache...');
       const destination = new Directory(Paths.cache, 'flyers');
       try { destination.create(); } catch {}
-      console.log('Downloading flyer to cache...');
-
       const output = await ExpoFile.downloadFileAsync(flyer.imageUrl, destination);
       console.log('Download complete:', output.uri);
 
