@@ -21,6 +21,7 @@ import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { motivationalFlyers } from '@/mocks/motivationalFlyers';
+import { fallbackShortClips } from '@/mocks/shortClips';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 
@@ -33,7 +34,7 @@ export default function HomeScreen() {
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { customFlyers } = useAdmin();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
-  const [shortClips, setShortClips] = React.useState<any[]>([]);
+  const [shortClips, setShortClips] = React.useState<any[]>(fallbackShortClips);
   const dailyQuote = React.useMemo(() => {
     const quotes = [
       { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -116,7 +117,7 @@ export default function HomeScreen() {
         const seenIds = new Set<string>();
         const clips: any[] = [];
         for (const v of [...searchResults, ...trending]) {
-          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 60) {
+          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 180) {
             seenIds.add(v.id);
             clips.push({
               id: v.id,
@@ -128,10 +129,16 @@ export default function HomeScreen() {
             });
           }
         }
-        console.log(`✅ Found ${clips.length} actual short clips (≤60s)`);
-        setShortClips(clips);
+        console.log(`✅ Found ${clips.length} short clips (≤3min)`);
+        if (clips.length > 0) {
+          setShortClips(clips);
+        } else {
+          console.log('⚠️ No clips from API, using fallback clips');
+          setShortClips(fallbackShortClips);
+        }
       } catch (error) {
         console.error('❌ Failed to load short clips:', error);
+        setShortClips(fallbackShortClips);
       }
     };
     

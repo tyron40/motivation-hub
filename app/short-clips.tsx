@@ -41,6 +41,7 @@ import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
 import { useAdMob } from '@/hooks/admob-context';
+import { fallbackShortClips } from '@/mocks/shortClips';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -134,7 +135,7 @@ export default function ShortClipsScreen() {
         }
 
         for (const v of [...searchResults, ...trending]) {
-          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 60) {
+          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 180) {
             seenIds.add(v.id);
             merged.push({
               id: v.id,
@@ -163,9 +164,29 @@ export default function ShortClipsScreen() {
           }
         }
 
-        setClips(merged);
+        if (merged.length > 0) {
+          setClips(merged);
+        } else {
+          console.log('No clips from API, using fallback clips');
+          setClips(fallbackShortClips.map(c => ({
+            id: c.id,
+            youtubeId: c.youtubeId,
+            title: c.title,
+            channelTitle: c.speaker,
+            thumbnail: c.imageUrl,
+            duration: c.duration,
+          })));
+        }
       } catch (error) {
         console.error('Error fetching short clips:', error);
+        setClips(fallbackShortClips.map(c => ({
+          id: c.id,
+          youtubeId: c.youtubeId,
+          title: c.title,
+          channelTitle: c.speaker,
+          thumbnail: c.imageUrl,
+          duration: c.duration,
+        })));
       } finally {
         setIsLoading(false);
       }
