@@ -151,8 +151,8 @@ export default function HomeScreen() {
   
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext;
 
-  const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : popularSpeeches;
-  const displayFeatured = youtubeSpeeches.length > 0 ? youtubeSpeeches[0] : featuredSpeech;
+  const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches.filter(s => s.duration > 60) : popularSpeeches.filter(s => s.duration > 60);
+  const displayFeatured = displaySpeeches.length > 0 ? displaySpeeches[0] : featuredSpeech;
 
   const handleSpeechPress = React.useCallback(async (speech: any, playlist?: any[]) => {
     try {

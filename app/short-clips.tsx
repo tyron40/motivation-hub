@@ -131,7 +131,7 @@ export default function ShortClipsScreen() {
         }
 
         for (const v of [...searchResults, ...trending]) {
-          if (!seenIds.has(v.id) && v.duration <= 600) {
+          if (!seenIds.has(v.id) && v.duration > 0 && v.duration <= 60) {
             seenIds.add(v.id);
             merged.push({
               id: v.id,

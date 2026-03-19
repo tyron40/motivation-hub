@@ -96,7 +96,7 @@ export default function CategoryScreen() {
   
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === id);
-  const contextSpeeches = category ? getSpeechesByCategory(category.name) : [];
+  const contextSpeeches = category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : [];
   const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
@@ -126,7 +126,7 @@ export default function CategoryScreen() {
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
         for (const s of [...channelSpeeches, ...catSpeeches]) {
-          if (!seenIds.has(s.id)) {
+          if (!seenIds.has(s.id) && s.duration > 60) {
             seenIds.add(s.id);
             merged.push(s);
           }
