@@ -28,12 +28,13 @@ export default function MiniPlayer() {
     isMinimized,
     setIsMinimized,
     currentPlaylist,
+    currentTime,
+    duration,
   } = useSpeechContext();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const slideAnim = useRef(new Animated.Value(100)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
 
   const isOnPlayerScreen = pathname === '/player';
   const shouldShow = currentSpeech && isMinimized && !isOnPlayerScreen;
@@ -47,25 +48,13 @@ export default function MiniPlayer() {
     }).start();
   }, [shouldShow, slideAnim]);
 
-  useEffect(() => {
-    if (isPlaying) {
-      Animated.loop(
-        Animated.timing(progressAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: false,
-        })
-      ).start();
-    } else {
-      progressAnim.stopAnimation();
-    }
-  }, [isPlaying, progressAnim]);
-
   if (!currentSpeech) return null;
 
   const thumbnailUrl = currentSpeech.youtubeId
     ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/hqdefault.jpg`
     : currentSpeech.imageUrl;
+
+  const progressPercent = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
 
   const handleExpand = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -109,11 +98,12 @@ export default function MiniPlayer() {
         activeOpacity={0.95}
       >
         <View style={styles.progressBar}>
-          <Animated.View
+          <View
             style={[
               styles.progressFill,
               {
                 backgroundColor: colors.primary || '#667eea',
+                width: `${progressPercent}%`,
               },
             ]}
           />
@@ -204,7 +194,6 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%' as const,
-    width: '40%' as const,
     borderRadius: 1,
   },
   content: {

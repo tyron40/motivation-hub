@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import {
   RotateCcw,
   RotateCw,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
@@ -30,6 +31,18 @@ interface AudioOnlyVideoPlayerProps {
   onError?: (error: string) => void;
   onNext?: () => void;
   onPrevious?: () => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
+  onProgressChange?: (currentTime: number, duration: number) => void;
+}
+
+export interface AudioOnlyVideoPlayerRef {
+  togglePlay: () => void;
+  play: () => void;
+  pause: () => void;
+  seekForward: (seconds?: number) => void;
+  seekBackward: (seconds?: number) => void;
+  seekTo: (position: number) => void;
+  getIsPlaying: () => boolean;
 }
 
 interface VideoMetadata {
@@ -43,7 +56,7 @@ interface VideoMetadata {
   publishedAt: string;
 }
 
-export default function AudioOnlyVideoPlayer({
+const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoPlayerProps>(({
   videoId,
   title: _title,
   thumbnail,
@@ -52,8 +65,10 @@ export default function AudioOnlyVideoPlayer({
   onEnd,
   onError,
   onNext,
-  onPrevious
-}: AudioOnlyVideoPlayerProps) {
+  onPrevious,
+  onPlayingChange,
+  onProgressChange,
+}, ref) => {
   const [isLoading, setIsLoading] = useState(true);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +82,64 @@ export default function AudioOnlyVideoPlayer({
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<any>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const isPlayingRef = useRef(isPlaying);
+  const currentTimeRef = useRef(currentTime);
+  const durationRef = useRef(duration);
+  const playerReadyRef = useRef(playerReady);
+  const playerErrorRef = useRef(playerError);
+
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { playerReadyRef.current = playerReady; }, [playerReady]);
+  useEffect(() => { playerErrorRef.current = playerError; }, [playerError]);
+
+  useImperativeHandle(ref, () => ({
+    togglePlay: () => {
+      if (!playerReadyRef.current || playerErrorRef.current) {
+        console.log('Player not ready for toggle');
+        return;
+      }
+      console.log('Ref togglePlay called, current:', isPlayingRef.current);
+      const newState = !isPlayingRef.current;
+      setIsPlaying(newState);
+      onPlayingChange?.(newState);
+    },
+    play: () => {
+      if (!playerReadyRef.current || playerErrorRef.current) return;
+      console.log('Ref play called');
+      setIsPlaying(true);
+      onPlayingChange?.(true);
+    },
+    pause: () => {
+      if (!playerReadyRef.current || playerErrorRef.current) return;
+      console.log('Ref pause called');
+      setIsPlaying(false);
+      onPlayingChange?.(false);
+    },
+    seekForward: (seconds = 15) => {
+      if (!playerReadyRef.current || !playerRef.current) return;
+      const newPos = Math.min(currentTimeRef.current + seconds, durationRef.current);
+      void playerRef.current.seekTo(newPos, true);
+      setCurrentTime(newPos);
+    },
+    seekBackward: (seconds = 15) => {
+      if (!playerReadyRef.current || !playerRef.current) return;
+      const newPos = Math.max(currentTimeRef.current - seconds, 0);
+      void playerRef.current.seekTo(newPos, true);
+      setCurrentTime(newPos);
+    },
+    seekTo: async (position: number) => {
+      if (!playerReadyRef.current || !playerRef.current) return;
+      try {
+        await playerRef.current.seekTo(position, true);
+        setCurrentTime(position);
+      } catch (err) {
+        console.error('Error seeking:', err);
+      }
+    },
+    getIsPlaying: () => isPlayingRef.current,
+  }), [onPlayingChange]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -167,6 +240,10 @@ export default function AudioOnlyVideoPlayer({
     };
 
     if (videoId) {
+      setPlayerReady(false);
+      setPlayerError(false);
+      setCurrentTime(0);
+      setIsPlaying(false);
       void fetchVideoMetadata();
     }
   }, [videoId, onError]);
@@ -181,12 +258,13 @@ export default function AudioOnlyVideoPlayer({
         try {
           const time = await playerRef.current.getCurrentTime();
           setCurrentTime(time);
+          onProgressChange?.(time, durationRef.current);
         } catch (err) {
           console.error('Error getting current time:', err);
         }
       }
     }, 500);
-  }, [isSeeking, playerReady]);
+  }, [isSeeking, playerReady, onProgressChange]);
 
   const stopProgressTracking = useCallback(() => {
     if (progressInterval.current) {
@@ -218,34 +296,40 @@ export default function AudioOnlyVideoPlayer({
             playerRef.current.seekTo(0, true);
           }
           setIsPlaying(true);
+          onPlayingChange?.(true);
         }, 300);
       }
     }
-  }, [autoplay]);
+  }, [autoplay, onPlayingChange]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
     setPlayerError(true);
     setPlayerReady(false);
-  }, []);
+    setIsPlaying(false);
+    onPlayingChange?.(false);
+  }, [onPlayingChange]);
 
   const onStateChange = useCallback((state: string) => {
     console.log('Player state:', state);
     
     if (state === 'playing') {
       setIsPlaying(true);
+      onPlayingChange?.(true);
       startProgressTracking();
     } else if (state === 'paused') {
       setIsPlaying(false);
+      onPlayingChange?.(false);
       stopProgressTracking();
     } else if (state === 'ended') {
       setIsPlaying(false);
+      onPlayingChange?.(false);
       stopProgressTracking();
       setCurrentTime(0);
       console.log('Video ended');
       onEnd?.();
     }
-  }, [startProgressTracking, stopProgressTracking, onEnd]);
+  }, [startProgressTracking, stopProgressTracking, onEnd, onPlayingChange]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -257,61 +341,78 @@ export default function AudioOnlyVideoPlayer({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handlePlayPause = () => {
+  const handlePlayPause = useCallback(() => {
     if (playerError) {
-      console.log('Player error state');
+      console.log('Player error state, cannot play/pause');
       return;
     }
-
     if (!playerReady) {
       console.log('Player not ready yet');
       return;
     }
-
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const newState = !isPlaying;
     console.log(isPlaying ? 'Pausing video' : 'Playing video');
-    setIsPlaying(!isPlaying);
-  };
+    setIsPlaying(newState);
+    onPlayingChange?.(newState);
+  }, [playerReady, playerError, isPlaying, onPlayingChange]);
 
-  const handleSkipForward = async () => {
+  const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
-    
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const newPosition = Math.min(currentTime + 15, duration);
       await playerRef.current.seekTo(newPosition, true);
       setCurrentTime(newPosition);
+      onProgressChange?.(newPosition, duration);
     } catch (err) {
       console.error('Error skipping forward:', err);
     }
-  };
+  }, [playerReady, currentTime, duration, onProgressChange]);
 
-  const handleSkipBackward = async () => {
+  const handleSkipBackward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
-    
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const newPosition = Math.max(currentTime - 15, 0);
       await playerRef.current.seekTo(newPosition, true);
       setCurrentTime(newPosition);
+      onProgressChange?.(newPosition, duration);
     } catch (err) {
       console.error('Error skipping backward:', err);
     }
-  };
+  }, [playerReady, currentTime, duration, onProgressChange]);
 
-  const handleSliderChange = async (value: number) => {
+  const handleNext = useCallback(() => {
+    if (!onNext) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    console.log('Next speech requested');
+    onNext();
+  }, [onNext]);
+
+  const handlePrevious = useCallback(() => {
+    if (!onPrevious) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    console.log('Previous speech requested');
+    onPrevious();
+  }, [onPrevious]);
+
+  const handleSliderChange = useCallback((value: number) => {
     if (!playerReady || !playerRef.current) return;
     setCurrentTime(value);
-  };
+  }, [playerReady]);
 
-  const handleSliderComplete = async (value: number) => {
+  const handleSliderComplete = useCallback(async (value: number) => {
     if (!playerReady || !playerRef.current) return;
-    
     try {
       await playerRef.current.seekTo(value, true);
       setIsSeeking(false);
+      onProgressChange?.(value, duration);
     } catch (err) {
       console.error('Error seeking:', err);
       setIsSeeking(false);
     }
-  };
+  }, [playerReady, duration, onProgressChange]);
 
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
@@ -407,7 +508,7 @@ export default function AudioOnlyVideoPlayer({
 
       <View style={styles.controls}>
         <TouchableOpacity 
-          onPress={onPrevious} 
+          onPress={handlePrevious} 
           style={[styles.navButton, !onPrevious && styles.buttonDisabled]} 
           disabled={!onPrevious}
           activeOpacity={0.7}
@@ -416,7 +517,7 @@ export default function AudioOnlyVideoPlayer({
         </TouchableOpacity>
 
         <TouchableOpacity 
-          onPress={handleSkipBackward} 
+          onPress={() => void handleSkipBackward()} 
           style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
           disabled={!playerReady}
           activeOpacity={0.7}
@@ -440,7 +541,7 @@ export default function AudioOnlyVideoPlayer({
         </TouchableOpacity>
 
         <TouchableOpacity 
-          onPress={handleSkipForward} 
+          onPress={() => void handleSkipForward()} 
           style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
           disabled={!playerReady}
           activeOpacity={0.7}
@@ -450,7 +551,7 @@ export default function AudioOnlyVideoPlayer({
         </TouchableOpacity>
 
         <TouchableOpacity 
-          onPress={onNext} 
+          onPress={handleNext} 
           style={[styles.navButton, !onNext && styles.buttonDisabled]} 
           disabled={!onNext}
           activeOpacity={0.7}
@@ -466,7 +567,11 @@ export default function AudioOnlyVideoPlayer({
       )}
     </View>
   );
-}
+});
+
+AudioOnlyVideoPlayer.displayName = 'AudioOnlyVideoPlayer';
+
+export default AudioOnlyVideoPlayer;
 
 const { width } = Dimensions.get('window');
 const coverSize = Math.min(width - 80, 280);
@@ -477,7 +582,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-
   coverImageContainer: {
     width: coverSize,
     height: coverSize,
@@ -491,12 +595,10 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     backgroundColor: '#1C1C1E',
   },
-
   coverImage: {
     width: '100%',
     height: '100%',
   },
-
   coverGradient: {
     position: 'absolute',
     bottom: 0,
@@ -507,43 +609,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
-
   coverOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-
   nowPlayingIndicator: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 3,
     height: 20,
   },
-
   soundBar: {
     width: 3,
     backgroundColor: '#667eea',
     borderRadius: 2,
   },
-
-  soundBar1: {
-    height: 8,
-  },
-
-  soundBar2: {
-    height: 16,
-  },
-
-  soundBar3: {
-    height: 12,
-  },
-
-  soundBar4: {
-    height: 18,
-  },
-
+  soundBar1: { height: 8 },
+  soundBar2: { height: 16 },
+  soundBar3: { height: 12 },
+  soundBar4: { height: 18 },
   hiddenPlayer: {
     width: 1,
     height: 1,
@@ -552,20 +638,17 @@ const styles = StyleSheet.create({
     top: -9999,
     left: -9999,
   },
-
   hiddenWebView: {
     backgroundColor: 'transparent',
     width: 1,
     height: 1,
   },
-
   infoSection: {
     width: '100%',
     alignItems: 'center',
     marginBottom: 24,
     paddingHorizontal: 10,
   },
-
   title: {
     fontSize: 20,
     fontWeight: '700' as const,
@@ -574,37 +657,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 26,
   },
-
   subtitle: {
     fontSize: 15,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '500' as const,
     textAlign: 'center',
   },
-
   progressSection: {
     width: '100%',
     marginBottom: 24,
   },
-
   slider: {
     width: '100%',
     height: 40,
   },
-
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
     marginTop: -8,
   },
-
   timeText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
     fontWeight: '500' as const,
   },
-
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -612,7 +689,6 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 24,
   },
-
   navButton: {
     width: 44,
     height: 44,
@@ -621,7 +697,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   seekButton: {
     width: 52,
     height: 52,
@@ -630,7 +705,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   playButton: {
     width: 72,
     height: 72,
@@ -645,11 +719,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 16,
   },
-
   buttonDisabled: {
     opacity: 0.35,
   },
-
   seekLabel: {
     position: 'absolute',
     fontSize: 9,
@@ -658,14 +730,12 @@ const styles = StyleSheet.create({
     bottom: 6,
     letterSpacing: -0.3,
   },
-
   loadingText: {
     textAlign: 'center',
     color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
     marginTop: 16,
   },
-
   errorText: {
     fontSize: 18,
     color: '#ff6b6b',
@@ -673,21 +743,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-
   errorSub: {
     textAlign: 'center',
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
     marginBottom: 16,
   },
-
   fallbackButton: {
     marginTop: 16,
     padding: 12,
     backgroundColor: 'rgba(255, 107, 107, 0.2)',
     borderRadius: 8,
   },
-
   fallbackText: {
     color: '#ff6b6b',
     fontSize: 13,

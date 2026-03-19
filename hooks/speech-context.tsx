@@ -45,6 +45,9 @@ interface SpeechContextValue {
   }) => void;
   handleAudioError: (error: string) => void;
   audioPlayerRef: React.MutableRefObject<any>;
+  setIsPlaying: (playing: boolean) => void;
+  setCurrentTime: (time: number) => void;
+  setDuration: (duration: number) => void;
 }
 
 const defaultUserProfile: UserProfile = {
@@ -287,8 +290,14 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
 
   const playPause = useCallback(() => {
     console.log('🎵 Toggle play/pause, current state:', isPlaying);
-    setIsPlaying(prev => !prev);
-  }, [isPlaying]);
+    if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
+      console.log('🎵 Using audioPlayerRef to toggle play');
+      audioPlayerRef.current.togglePlay();
+    } else {
+      console.log('🎵 No active player ref, toggling state directly');
+      setIsPlaying(prev => !prev);
+    }
+  }, [isPlaying, audioPlayerRef]);
 
   const skipToNext = useCallback(() => {
     if (!currentSpeech || currentPlaylist.length === 0) return;
@@ -649,14 +658,11 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         setDuration(0);
       }
       
-      setIsPlaying(false);
       setAudioError(null);
     } catch (error) {
       console.error('Error resetting audio state:', error);
-      // Set safe defaults
       setCurrentTime(0);
       setDuration(0);
-      setIsPlaying(false);
       setAudioError(null);
     }
   }, [currentSpeech]);
@@ -694,6 +700,9 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     handlePlaybackStatusUpdate,
     handleAudioError,
     audioPlayerRef,
+    setIsPlaying,
+    setCurrentTime,
+    setDuration,
   }), [
     speeches,
     favorites,
@@ -726,6 +735,9 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     skipToPrevious,
     handlePlaybackStatusUpdate,
     handleAudioError,
+    setIsPlaying,
+    setCurrentTime,
+    setDuration,
   ]);
 });
 

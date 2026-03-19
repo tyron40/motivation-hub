@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -11,10 +11,11 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2, MoreVertical, Youtube } from 'lucide-react-native';
+import { ChevronDown, Heart, Share2 } from 'lucide-react-native';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
+import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 import * as Haptics from 'expo-haptics';
 
@@ -28,14 +29,29 @@ export default function PlayerScreen() {
     skipToPrevious, 
     setIsMinimized,
     currentPlaylist,
+    audioPlayerRef,
+    setIsPlaying,
+    setCurrentTime,
+    setDuration,
   } = useSpeechContext();
+  const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const styles = getStyles(colors);
 
   useEffect(() => {
     setIsMinimized(false);
-  }, [setIsMinimized]);
+    audioPlayerRef.current = localPlayerRef.current;
+    return () => {
+      audioPlayerRef.current = null;
+    };
+  }, [setIsMinimized, audioPlayerRef]);
+
+  useEffect(() => {
+    if (localPlayerRef.current) {
+      audioPlayerRef.current = localPlayerRef.current;
+    }
+  });
 
   const handleMinimize = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -43,15 +59,25 @@ export default function PlayerScreen() {
     router.back();
   };
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     skipToNext();
-  };
+  }, [skipToNext]);
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     skipToPrevious();
-  };
+  }, [skipToPrevious]);
 
+  const handlePlayingChange = useCallback((playing: boolean) => {
+    console.log('Player playing state changed:', playing);
+    setIsPlaying(playing);
+  }, [setIsPlaying]);
 
+  const handleProgressChange = useCallback((time: number, dur: number) => {
+    setCurrentTime(time);
+    if (dur > 0) {
+      setDuration(dur);
+    }
+  }, [setCurrentTime, setDuration]);
 
   const handleShare = async () => {
     if (!currentSpeech) return;
@@ -113,15 +139,14 @@ export default function PlayerScreen() {
             <ChevronDown color="#FFFFFF" size={30} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>NOW PLAYING</Text>
-          <TouchableOpacity style={styles.moreButton}>
-            <MoreVertical color="#FFFFFF" size={24} />
-          </TouchableOpacity>
+          <View style={styles.closeButton} />
         </Animated.View>
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {currentSpeech.youtubeId ? (
             <View style={styles.playerWrapper}>
               <AudioOnlyVideoPlayer
+                ref={localPlayerRef}
                 videoId={currentSpeech.youtubeId}
                 title={currentSpeech.title}
                 thumbnail={currentSpeech.youtubeId 
@@ -139,6 +164,8 @@ export default function PlayerScreen() {
                 }}
                 onNext={currentPlaylist.length > 1 ? handleNext : undefined}
                 onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
+                onPlayingChange={handlePlayingChange}
+                onProgressChange={handleProgressChange}
               />
             </View>
           ) : (
@@ -149,12 +176,6 @@ export default function PlayerScreen() {
                   colors={['transparent', 'rgba(0,0,0,0.4)']}
                   style={styles.imageGradient}
                 />
-                <View style={styles.imageOverlay}>
-                  <View style={styles.noVideoOverlay}>
-                    <Youtube color="#FFFFFF" size={36} />
-                    <Text style={styles.noVideoText}>No audio available</Text>
-                  </View>
-                </View>
               </Animated.View>
               
               <View style={styles.info}>
@@ -194,8 +215,6 @@ export default function PlayerScreen() {
               <Text style={styles.actionLabel}>Share</Text>
             </TouchableOpacity>
           </View>
-
-
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -239,14 +258,6 @@ const getStyles = (_colors: any) => StyleSheet.create({
     letterSpacing: 1.5,
     opacity: 0.9,
   },
-  moreButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   content: {
     flex: 1,
     paddingHorizontal: 24,
@@ -284,15 +295,6 @@ const getStyles = (_colors: any) => StyleSheet.create({
     bottom: 0,
     height: '30%',
   },
-  imageOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   info: {
     alignItems: 'center',
     marginBottom: 48,
@@ -328,22 +330,6 @@ const getStyles = (_colors: any) => StyleSheet.create({
     letterSpacing: 1,
     opacity: 0.9,
   },
-  noVideoOverlay: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  noVideoText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-    opacity: 0.9,
-  },
   bottomActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,5 +359,4 @@ const getStyles = (_colors: any) => StyleSheet.create({
   actionLabelActive: {
     color: '#FF3B30',
   },
-
 });

@@ -15,7 +15,9 @@ import {
   Platform,
   ViewToken,
   Linking,
+  Share,
 } from 'react-native';
+
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -461,6 +463,22 @@ const ClipPage = React.memo(function ClipPage({
     Linking.openURL(url).catch(err => console.error('Error opening YouTube:', err));
   }, [clip.youtubeId]);
 
+  const handleShare = useCallback(async () => {
+    try {
+      const message = `Check out this motivational clip: "${clip.title}"\nhttps://youtube.com/watch?v=${clip.youtubeId}`;
+      const url = `https://youtube.com/watch?v=${clip.youtubeId}`;
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && navigator.share) {
+          await navigator.share({ title: clip.title, text: message, url });
+        }
+      } else {
+        await Share.share({ message, url });
+      }
+    } catch (error) {
+      console.error('Error sharing clip:', error);
+    }
+  }, [clip.title, clip.youtubeId]);
+
   const formatViews = (count?: number) => {
     if (!count) return '';
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
@@ -564,7 +582,7 @@ const ClipPage = React.memo(function ClipPage({
           <Text style={styles.sideBtnLabel}>{isSaved ? 'Saved' : 'Save'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.7} style={styles.sideBtn}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.sideBtn} onPress={handleShare}>
           <Share2 size={26} color="#fff" />
           <Text style={styles.sideBtnLabel}>Share</Text>
         </TouchableOpacity>
