@@ -40,6 +40,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
+import { useAdMob } from '@/hooks/admob-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -64,6 +65,8 @@ export default function ShortClipsScreen() {
   const params = useLocalSearchParams();
   const initialVideoId = params.initialVideoId ? String(params.initialVideoId) : null;
   const { isAdmin, customVideos, addVideo, removeVideo } = useAdmin();
+  const { showInterstitialAd, canShowAds } = useAdMob();
+  const clipViewCountRef = useRef(0);
 
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -249,7 +252,13 @@ export default function ShortClipsScreen() {
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length > 0 && viewableItems[0].index != null) {
-      setActiveIndex(viewableItems[0].index);
+      const newIndex = viewableItems[0].index;
+      setActiveIndex(newIndex);
+      clipViewCountRef.current += 1;
+      if (canShowAds && clipViewCountRef.current > 0 && clipViewCountRef.current % 4 === 0) {
+        console.log('\ud83c\udfaf [Ad] Every 4 clips swiped \u2014 showing interstitial');
+        void showInterstitialAd();
+      }
     }
   }).current;
 

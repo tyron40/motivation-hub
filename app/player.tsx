@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
+import { useAdMob } from '@/hooks/admob-context';
 import * as Haptics from 'expo-haptics';
 
 
@@ -34,9 +35,12 @@ export default function PlayerScreen() {
     setCurrentTime,
     setDuration,
   } = useSpeechContext();
+  const { showInterstitialAd, canShowAds } = useAdMob();
   const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const midpointAdShownRef = useRef(false);
+  const speechEndCountRef = useRef(0);
   const styles = getStyles(colors);
 
   useEffect(() => {
@@ -158,14 +162,33 @@ export default function PlayerScreen() {
                 onError={(error: string) => {
                   console.error('Audio playback error:', error);
                 }}
-                onEnd={() => {
+                onEnd={async () => {
                   console.log('Audio playback ended');
+                  speechEndCountRef.current += 1;
+                  midpointAdShownRef.current = false;
+                  if (canShowAds && speechEndCountRef.current % 2 === 0) {
+                    console.log('🎯 [Ad] Speech ended — showing interstitial (every 2 speeches)');
+                    await showInterstitialAd();
+                  }
                   handleNext();
                 }}
                 onNext={currentPlaylist.length > 1 ? handleNext : undefined}
                 onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
                 onPlayingChange={handlePlayingChange}
-                onProgressChange={handleProgressChange}
+                onProgressChange={(time: number, dur: number) => {
+                  handleProgressChange(time, dur);
+                  if (
+                    canShowAds &&
+                    !midpointAdShownRef.current &&
+                    dur >= 300 &&
+                    time >= dur * 0.5 &&
+                    time < dur * 0.55
+                  ) {
+                    midpointAdShownRef.current = true;
+                    console.log('🎯 [Ad] Midpoint reached on long speech — showing interstitial');
+                    void showInterstitialAd();
+                  }
+                }}
               />
             </View>
           ) : (

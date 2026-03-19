@@ -11,10 +11,12 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ChevronLeft, Share2, MoreVertical } from 'lucide-react-native';
 import VideoPlayer from '@/components/VideoPlayer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdMob } from '@/hooks/admob-context';
 
 export default function VideoPlayerScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const { showInterstitialAd, canShowAds } = useAdMob();
   
   const videoId = String(params.videoId || '');
   const title = String(params.title || 'Video');
@@ -40,8 +42,12 @@ export default function VideoPlayerScreen() {
     };
   }, []);
   
-  const handleBack = () => {
+  const handleBack = async () => {
     console.log('🔙 Closing video player');
+    if (canShowAds) {
+      console.log('🎯 [Ad] Leaving video player — showing interstitial');
+      await showInterstitialAd();
+    }
     router.back();
   };
   
