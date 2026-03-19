@@ -40,6 +40,7 @@ export default function PlayerScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const midpointAdShownRef = useRef(false);
+  const onEndLockedRef = useRef(false);
   const styles = getStyles(colors);
 
   useEffect(() => {
@@ -161,6 +162,11 @@ export default function PlayerScreen() {
                   console.error('Audio playback error:', error);
                 }}
                 onEnd={async () => {
+                  if (onEndLockedRef.current) {
+                    console.log('onEnd already processing, skipping');
+                    return;
+                  }
+                  onEndLockedRef.current = true;
                   console.log('Audio playback ended');
                   midpointAdShownRef.current = false;
                   if (canShowAds) {
@@ -170,6 +176,7 @@ export default function PlayerScreen() {
                     }
                   }
                   handleNext();
+                  setTimeout(() => { onEndLockedRef.current = false; }, 2000);
                 }}
                 onNext={currentPlaylist.length > 1 ? handleNext : undefined}
                 onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}

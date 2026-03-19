@@ -91,6 +91,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const userIntentTimestamp = useRef(0);
   const ignoreStateChangesUntilRef = useRef(0);
   const lastCommittedPlayState = useRef(false);
+  const activeVideoIdRef = useRef(videoId);
+  const onEndCalledRef = useRef(false);
+  const autoplayTriggeredRef = useRef(false);
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
@@ -188,6 +191,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, []);
 
   useEffect(() => {
+    activeVideoIdRef.current = videoId;
+    onEndCalledRef.current = false;
+    autoplayTriggeredRef.current = false;
+
     const fetchVideoMetadata = async () => {
       console.log(`Fetching metadata for video: ${videoId}`);
       setIsLoading(true);
@@ -286,7 +293,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, []);
 
   const onPlayerReady = useCallback(() => {
-    console.log('YouTube player ready');
+    console.log('YouTube player ready for video:', activeVideoIdRef.current);
     setPlayerReady(true);
     setPlayerError(false);
     setError(null);
@@ -301,17 +308,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         console.error('Error getting duration:', err);
       });
       
-      if (autoplay) {
-        console.log('Triggering auto-play');
+      if (autoplay && !autoplayTriggeredRef.current) {
+        autoplayTriggeredRef.current = true;
+        console.log('Triggering auto-play for:', activeVideoIdRef.current);
         setTimeout(() => {
-          if (playerRef.current) {
+          if (playerRef.current && activeVideoIdRef.current === videoId) {
             playerRef.current.seekTo(0, true);
+            applyUserIntent(true);
           }
-          applyUserIntent(true);
         }, 500);
       }
     }
-  }, [autoplay, applyUserIntent]);
+  }, [autoplay, applyUserIntent, videoId]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -322,9 +330,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, [onPlayingChange]);
 
   const onStateChange = useCallback((state: string) => {
-    console.log('Player state:', state);
+    console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
     if (state === 'ended') {
+      if (onEndCalledRef.current) {
+        console.log('onEnd already called for this video, ignoring duplicate ended event');
+        return;
+      }
+      onEndCalledRef.current = true;
       userIntentRef.current = null;
       ignoreStateChangesUntilRef.current = 0;
       lastCommittedPlayState.current = false;
@@ -332,7 +345,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       onPlayingChange?.(false);
       stopProgressTracking();
       setCurrentTime(0);
-      console.log('Video ended');
+      console.log('Video ended:', activeVideoIdRef.current);
       onEnd?.();
       return;
     }
