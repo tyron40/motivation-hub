@@ -474,7 +474,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyerPoster: {
     width: 220,
-    height: 300,
+    height: 340,
     borderRadius: 18,
     overflow: 'hidden' as const,
     elevation: 6,
@@ -487,6 +487,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     width: '100%' as const,
     height: '100%' as const,
     position: 'absolute' as const,
+    resizeMode: 'cover' as const,
   },
   flyerPosterGradient: {
     flex: 1,
