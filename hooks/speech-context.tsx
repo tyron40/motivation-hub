@@ -288,8 +288,11 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, [speeches, mutateFavorites, mutateProfile]);
 
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
   const playPause = useCallback(() => {
-    console.log('🎵 Toggle play/pause, current state:', isPlaying);
+    console.log('🎵 Toggle play/pause, current state:', isPlayingRef.current);
     if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
       console.log('🎵 Using audioPlayerRef to toggle play');
       audioPlayerRef.current.togglePlay();
@@ -297,7 +300,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       console.log('🎵 No active player ref, toggling state directly');
       setIsPlaying(prev => !prev);
     }
-  }, [isPlaying, audioPlayerRef]);
+  }, [audioPlayerRef]);
 
   const skipToNext = useCallback(() => {
     if (!currentSpeech || currentPlaylist.length === 0) return;

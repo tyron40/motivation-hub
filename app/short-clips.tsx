@@ -427,6 +427,8 @@ const ClipPage = React.memo(function ClipPage({
   const [isPlaying, setIsPlaying] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const playerRef = useRef<any>(null);
+  const userIntentRef = useRef<boolean | null>(null);
+  const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isActive) {
@@ -442,13 +444,35 @@ const ClipPage = React.memo(function ClipPage({
 
   const onStateChange = useCallback((state: string) => {
     console.log('Clip player state:', state, clip.youtubeId);
-    if (state === 'ended') {
-      setIsPlaying(true);
-    } else if (state === 'paused') {
-      setIsPlaying(false);
-    } else if (state === 'playing') {
-      setIsPlaying(true);
+
+    if (stateDebounceRef.current) {
+      clearTimeout(stateDebounceRef.current);
+      stateDebounceRef.current = null;
     }
+
+    if (state === 'ended') {
+      userIntentRef.current = true;
+      setIsPlaying(true);
+      return;
+    }
+
+    stateDebounceRef.current = setTimeout(() => {
+      if (state === 'paused') {
+        if (userIntentRef.current === true) {
+          console.log('Ignoring clip paused event — user intended play');
+          return;
+        }
+        userIntentRef.current = null;
+        setIsPlaying(false);
+      } else if (state === 'playing') {
+        if (userIntentRef.current === false) {
+          console.log('Ignoring clip playing event — user intended pause');
+          return;
+        }
+        userIntentRef.current = null;
+        setIsPlaying(true);
+      }
+    }, 150);
   }, [clip.youtubeId]);
 
   const onPlayerReady = useCallback(() => {
@@ -463,7 +487,11 @@ const ClipPage = React.memo(function ClipPage({
 
   const handleTapToPlay = useCallback(() => {
     if (playerReady) {
-      setIsPlaying(prev => !prev);
+      setIsPlaying(prev => {
+        const next = !prev;
+        userIntentRef.current = next;
+        return next;
+      });
     }
   }, [playerReady]);
 

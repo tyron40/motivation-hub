@@ -87,6 +87,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const durationRef = useRef(duration);
   const playerReadyRef = useRef(playerReady);
   const playerErrorRef = useRef(playerError);
+  const userIntentRef = useRef<boolean | null>(null);
+  const stateChangeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
@@ -100,22 +102,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         console.log('Player not ready for toggle');
         return;
       }
-      console.log('Ref togglePlay called, current:', isPlayingRef.current);
       const newState = !isPlayingRef.current;
+      console.log('Ref togglePlay called, current:', isPlayingRef.current, '-> next:', newState);
+      userIntentRef.current = newState;
       setIsPlaying(newState);
-      onPlayingChange?.(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
       console.log('Ref play called');
+      userIntentRef.current = true;
       setIsPlaying(true);
-      onPlayingChange?.(true);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
       console.log('Ref pause called');
+      userIntentRef.current = false;
       setIsPlaying(false);
-      onPlayingChange?.(false);
     },
     seekForward: (seconds = 15) => {
       if (!playerReadyRef.current || !playerRef.current) return;
@@ -139,7 +141,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     },
     getIsPlaying: () => isPlayingRef.current,
-  }), [onPlayingChange]);
+  }), []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -291,6 +293,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       
       if (autoplay) {
         console.log('Triggering auto-play');
+        userIntentRef.current = true;
         setTimeout(() => {
           if (playerRef.current) {
             playerRef.current.seekTo(0, true);
@@ -312,22 +315,47 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const onStateChange = useCallback((state: string) => {
     console.log('Player state:', state);
+
+    if (stateChangeDebounceRef.current) {
+      clearTimeout(stateChangeDebounceRef.current);
+      stateChangeDebounceRef.current = null;
+    }
     
-    if (state === 'playing') {
-      setIsPlaying(true);
-      onPlayingChange?.(true);
-      startProgressTracking();
-    } else if (state === 'paused') {
-      setIsPlaying(false);
-      onPlayingChange?.(false);
-      stopProgressTracking();
-    } else if (state === 'ended') {
+    if (state === 'ended') {
+      userIntentRef.current = null;
       setIsPlaying(false);
       onPlayingChange?.(false);
       stopProgressTracking();
       setCurrentTime(0);
       console.log('Video ended');
       onEnd?.();
+      return;
+    }
+
+    if (state === 'playing') {
+      startProgressTracking();
+      if (isPlayingRef.current) return;
+      stateChangeDebounceRef.current = setTimeout(() => {
+        if (userIntentRef.current === false) {
+          console.log('Ignoring player playing event — user intended pause');
+          return;
+        }
+        userIntentRef.current = null;
+        setIsPlaying(true);
+        onPlayingChange?.(true);
+      }, 150);
+    } else if (state === 'paused') {
+      stopProgressTracking();
+      if (!isPlayingRef.current) return;
+      stateChangeDebounceRef.current = setTimeout(() => {
+        if (userIntentRef.current === true) {
+          console.log('Ignoring player paused event — user intended play');
+          return;
+        }
+        userIntentRef.current = null;
+        setIsPlaying(false);
+        onPlayingChange?.(false);
+      }, 150);
     }
   }, [startProgressTracking, stopProgressTracking, onEnd, onPlayingChange]);
 
@@ -353,6 +381,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newState = !isPlaying;
     console.log(isPlaying ? 'Pausing video' : 'Playing video');
+    userIntentRef.current = newState;
     setIsPlaying(newState);
     onPlayingChange?.(newState);
   }, [playerReady, playerError, isPlaying, onPlayingChange]);
