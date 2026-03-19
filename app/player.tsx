@@ -35,12 +35,11 @@ export default function PlayerScreen() {
     setCurrentTime,
     setDuration,
   } = useSpeechContext();
-  const { showInterstitialAd, canShowAds } = useAdMob();
+  const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition } = useAdMob();
   const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const midpointAdShownRef = useRef(false);
-  const speechEndCountRef = useRef(0);
   const styles = getStyles(colors);
 
   useEffect(() => {
@@ -164,11 +163,12 @@ export default function PlayerScreen() {
                 }}
                 onEnd={async () => {
                   console.log('Audio playback ended');
-                  speechEndCountRef.current += 1;
                   midpointAdShownRef.current = false;
-                  if (canShowAds && speechEndCountRef.current % 2 === 0) {
-                    console.log('🎯 [Ad] Speech ended — showing interstitial (every 2 speeches)');
-                    await showInterstitialAd();
+                  if (canShowAds) {
+                    const shown = await tryShowInterstitialOnTransition();
+                    if (shown) {
+                      console.log('🎯 [Ad] Speech ended — showed interstitial (every 3 speeches)');
+                    }
                   }
                   handleNext();
                 }}
