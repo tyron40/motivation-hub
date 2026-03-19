@@ -335,23 +335,51 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       if (autoplay && !autoplayTriggeredRef.current) {
         autoplayTriggeredRef.current = true;
         console.log('Triggering auto-play for:', activeVideoIdRef.current);
+
+        const attemptAutoplay = async (attempt: number) => {
+          if (attempt > 8 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          
+          try {
+            const playerState = playerRef.current ? await playerRef.current.getState() : null;
+            console.log(`Autoplay attempt ${attempt}, player state:`, playerState);
+            
+            if (playerState === 'playing') {
+              console.log('Player is already playing, autoplay success');
+              if (!isPlayingRef.current) commitPlayState(true);
+              return;
+            }
+
+            commitPlayState(false);
+            await new Promise(r => setTimeout(r, 100));
+            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+            commitPlayState(true);
+            
+            const delay = attempt <= 2 ? 800 : attempt <= 4 ? 1200 : 2000;
+            setTimeout(() => {
+              if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+              if (playerRef.current) {
+                void playerRef.current.getState().then((state: string) => {
+                  console.log(`Autoplay check after attempt ${attempt}, state:`, state);
+                  if (state !== 'playing') {
+                    void attemptAutoplay(attempt + 1);
+                  } else if (!isPlayingRef.current) {
+                    commitPlayState(true);
+                  }
+                }).catch(() => {
+                  void attemptAutoplay(attempt + 1);
+                });
+              }
+            }, delay);
+          } catch (err) {
+            console.error(`Autoplay attempt ${attempt} error:`, err);
+            setTimeout(() => void attemptAutoplay(attempt + 1), 1000);
+          }
+        };
+
         setTimeout(() => {
           if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          console.log('Auto-play: setting play state after ready delay');
-          commitPlayState(true);
-        }, 300);
-        
-        const retryAutoplay = (attempt: number) => {
-          if (attempt > 5 || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          setTimeout(() => {
-            if (mountedRef.current && playerRef.current && activeVideoIdRef.current === videoId && !isPlayingRef.current) {
-              console.log(`Autoplay retry attempt ${attempt} for:`, activeVideoIdRef.current);
-              commitPlayState(true);
-              retryAutoplay(attempt + 1);
-            }
-          }, 800 * attempt);
-        };
-        retryAutoplay(1);
+          void attemptAutoplay(1);
+        }, 600);
       }
     }
   }, [autoplay, commitPlayState, videoId]);
