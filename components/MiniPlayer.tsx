@@ -62,9 +62,16 @@ export default function MiniPlayer() {
     router.push('/player');
   };
 
+  const playPauseDebounceRef = React.useRef(false);
+
   const handlePlayPause = () => {
+    if (playPauseDebounceRef.current) return;
+    playPauseDebounceRef.current = true;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     playPause();
+    setTimeout(() => {
+      playPauseDebounceRef.current = false;
+    }, 600);
   };
 
   const handleSkipNext = () => {

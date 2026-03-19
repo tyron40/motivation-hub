@@ -89,7 +89,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const playerErrorRef = useRef(playerError);
   const userIntentRef = useRef<boolean | null>(null);
   const userIntentTimestamp = useRef(0);
-  const stateChangeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateChangeLockRef = useRef(false);
+  const lastStateRef = useRef<string>('');
 
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
@@ -107,20 +108,28 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('Ref togglePlay called, current:', isPlayingRef.current, '-> next:', newState);
       userIntentRef.current = newState;
       userIntentTimestamp.current = Date.now();
+      stateChangeLockRef.current = false;
+      lastStateRef.current = '';
       setIsPlaying(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      if (isPlayingRef.current) return;
       console.log('Ref play called');
       userIntentRef.current = true;
       userIntentTimestamp.current = Date.now();
+      stateChangeLockRef.current = false;
+      lastStateRef.current = '';
       setIsPlaying(true);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      if (!isPlayingRef.current) return;
       console.log('Ref pause called');
       userIntentRef.current = false;
       userIntentTimestamp.current = Date.now();
+      stateChangeLockRef.current = false;
+      lastStateRef.current = '';
       setIsPlaying(false);
     },
     seekForward: (seconds = 15) => {
@@ -298,13 +307,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       if (autoplay) {
         console.log('Triggering auto-play');
         userIntentRef.current = true;
+        userIntentTimestamp.current = Date.now();
+        stateChangeLockRef.current = false;
+        lastStateRef.current = '';
         setTimeout(() => {
           if (playerRef.current) {
             playerRef.current.seekTo(0, true);
           }
           setIsPlaying(true);
           onPlayingChange?.(true);
-        }, 300);
+        }, 500);
       }
     }
   }, [autoplay, onPlayingChange]);
@@ -318,15 +330,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, [onPlayingChange]);
 
   const onStateChange = useCallback((state: string) => {
-    console.log('Player state:', state);
+    console.log('Player state:', state, '| UI isPlaying:', isPlayingRef.current);
 
-    if (stateChangeDebounceRef.current) {
-      clearTimeout(stateChangeDebounceRef.current);
-      stateChangeDebounceRef.current = null;
-    }
+    if (state === lastStateRef.current) return;
+    lastStateRef.current = state;
 
     if (state === 'ended') {
       userIntentRef.current = null;
+      stateChangeLockRef.current = false;
       setIsPlaying(false);
       onPlayingChange?.(false);
       stopProgressTracking();
@@ -336,40 +347,42 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
 
+    if (state === 'buffering' || state === 'unstarted' || state === 'video cued') {
+      return;
+    }
+
     const timeSinceIntent = Date.now() - userIntentTimestamp.current;
-    const hasRecentUserIntent = timeSinceIntent < 1500;
+    const hasRecentUserIntent = timeSinceIntent < 4000;
+
+    if (hasRecentUserIntent && userIntentRef.current !== null) {
+      if (state === 'playing') {
+        startProgressTracking();
+      } else if (state === 'paused') {
+        stopProgressTracking();
+      }
+      return;
+    }
+
+    if (stateChangeLockRef.current) return;
+    stateChangeLockRef.current = true;
 
     if (state === 'playing') {
       startProgressTracking();
-      if (isPlayingRef.current) return;
-      if (hasRecentUserIntent && userIntentRef.current === false) {
-        console.log('Ignoring player playing event — user intended pause');
-        return;
-      }
-      stateChangeDebounceRef.current = setTimeout(() => {
-        if (userIntentRef.current === false && (Date.now() - userIntentTimestamp.current) < 1500) {
-          return;
-        }
-        userIntentRef.current = null;
+      if (!isPlayingRef.current) {
         setIsPlaying(true);
         onPlayingChange?.(true);
-      }, 300);
+      }
     } else if (state === 'paused') {
       stopProgressTracking();
-      if (!isPlayingRef.current) return;
-      if (hasRecentUserIntent && userIntentRef.current === true) {
-        console.log('Ignoring player paused event — user intended play');
-        return;
-      }
-      stateChangeDebounceRef.current = setTimeout(() => {
-        if (userIntentRef.current === true && (Date.now() - userIntentTimestamp.current) < 1500) {
-          return;
-        }
-        userIntentRef.current = null;
+      if (isPlayingRef.current) {
         setIsPlaying(false);
         onPlayingChange?.(false);
-      }, 300);
+      }
     }
+
+    setTimeout(() => {
+      stateChangeLockRef.current = false;
+    }, 500);
   }, [startProgressTracking, stopProgressTracking, onEnd, onPlayingChange]);
 
   const formatDuration = (seconds: number): string => {
@@ -392,13 +405,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newState = !isPlaying;
-    console.log(isPlaying ? 'Pausing video' : 'Playing video');
+    const newState = !isPlayingRef.current;
+    console.log(isPlayingRef.current ? 'Pausing video' : 'Playing video');
     userIntentRef.current = newState;
     userIntentTimestamp.current = Date.now();
+    stateChangeLockRef.current = false;
+    lastStateRef.current = '';
     setIsPlaying(newState);
     onPlayingChange?.(newState);
-  }, [playerReady, playerError, isPlaying, onPlayingChange]);
+  }, [playerReady, playerError, onPlayingChange]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;

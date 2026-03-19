@@ -291,7 +291,16 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
+  const playPauseLockedRef = useRef(false);
+
   const playPause = useCallback(() => {
+    if (playPauseLockedRef.current) {
+      console.log('🎵 Play/pause locked, ignoring rapid tap');
+      return;
+    }
+    playPauseLockedRef.current = true;
+    setTimeout(() => { playPauseLockedRef.current = false; }, 600);
+
     console.log('🎵 Toggle play/pause, current state:', isPlayingRef.current);
     if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
       console.log('🎵 Using audioPlayerRef to toggle play');
@@ -618,6 +627,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
 
     if (status.didJustFinish) {
       console.log('🏁 Audio finished playing');
+      playPauseLockedRef.current = false;
       setIsPlaying(false);
       setCurrentTime(0);
     }
