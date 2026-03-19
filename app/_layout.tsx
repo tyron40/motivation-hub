@@ -19,6 +19,7 @@ import { AdMobProvider } from "@/hooks/admob-context";
 import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
+import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoadingScreen } from '@/components/LoadingScreen';
 
@@ -45,107 +46,92 @@ function AudioPlayerWrapper() {
   const [audioUrl, setAudioUrl] = React.useState<string>('');
   const [isLoadingAudio, setIsLoadingAudio] = React.useState(false);
   
-  // Always call hooks at the top level
   const speechContext = useSpeechContext();
+  const currentSpeech = speechContext?.currentSpeech ?? null;
+  const isPlaying = speechContext?.isPlaying ?? false;
+  const handlePlaybackStatusUpdate = speechContext?.handlePlaybackStatusUpdate;
+  const handleAudioError = speechContext?.handleAudioError;
+  const audioPlayerRef = speechContext?.audioPlayerRef;
 
-  // Get audio URL when speech changes
+  const handleAudioErrorRef = React.useRef(handleAudioError);
+  React.useEffect(() => { handleAudioErrorRef.current = handleAudioError; }, [handleAudioError]);
+
+  const currentSpeechId = currentSpeech?.id ?? null;
+  const currentSpeechYoutubeId = currentSpeech?.youtubeId;
+  const currentSpeechAudioUrl = currentSpeech?.audioUrl;
+  const currentSpeechTitle = currentSpeech?.title;
+
   React.useEffect(() => {
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    
+
     const loadAudioUrl = async () => {
-      if (!speechContext) {
-        console.warn('AudioPlayerWrapper: Speech context not available');
+      if (!currentSpeechId || !currentSpeechTitle) {
+        setAudioUrl('');
+        setIsLoadingAudio(false);
         return;
       }
 
-      const { currentSpeech, handleAudioError } = speechContext;
-      
-      if (currentSpeech && typeof currentSpeech === 'object' && currentSpeech.title) {
-        // Skip YouTube videos - they should use AudioOnlyVideoPlayer in the player screen
-        if (currentSpeech.youtubeId) {
-          console.log('🎵 Skipping global AudioPlayer for YouTube video:', currentSpeech.title);
-          setAudioUrl('');
-          setIsLoadingAudio(false);
-          return;
-        }
-        
-        // Only handle speeches with actual audio URLs (podcasts, etc.)
-        if (!currentSpeech.audioUrl) {
-          console.log('🎵 No audioUrl found for speech:', currentSpeech.title);
-          setAudioUrl('');
-          setIsLoadingAudio(false);
-          return;
-        }
-        
-        try {
-          setIsLoadingAudio(true);
-          console.log('🎵 Loading audio URL for global player:', currentSpeech.title);
-          
-          // Add timeout to prevent hanging
-          timeoutId = setTimeout(() => {
-            if (isMounted) {
-              console.warn('⚠️ Audio URL loading timeout');
-              setIsLoadingAudio(false);
-              handleAudioError?.('Audio loading timeout');
-            }
-          }, 10000);
-          
-          const url = await getWorkingAudioUrl(currentSpeech);
-          
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          
-          if (isMounted && url && typeof url === 'string' && url.trim().length > 0) {
-            console.log('✅ Setting audio URL for global player:', url);
-            setAudioUrl(url);
-          } else {
-            console.warn('⚠️ Invalid audio URL received:', url);
-            setAudioUrl('');
-          }
-        } catch (error) {
-          console.error('❌ Error loading audio URL:', error);
-          if (isMounted && handleAudioError) {
-            handleAudioError('Failed to load audio');
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoadingAudio(false);
-          }
-        }
-      } else {
-        // Clear audio URL when no speech is selected
+      if (currentSpeechYoutubeId) {
+        console.log('🎵 Skipping global AudioPlayer for YouTube video:', currentSpeechTitle);
         setAudioUrl('');
         setIsLoadingAudio(false);
+        return;
+      }
+
+      if (!currentSpeechAudioUrl) {
+        console.log('🎵 No audioUrl found for speech:', currentSpeechTitle);
+        setAudioUrl('');
+        setIsLoadingAudio(false);
+        return;
+      }
+
+      try {
+        setIsLoadingAudio(true);
+        console.log('🎵 Loading audio URL for global player:', currentSpeechTitle);
+
+        timeoutId = setTimeout(() => {
+          if (isMounted) {
+            console.warn('⚠️ Audio URL loading timeout');
+            setIsLoadingAudio(false);
+            handleAudioErrorRef.current?.('Audio loading timeout');
+          }
+        }, 10000);
+
+        const speechForUrl = { id: currentSpeechId, title: currentSpeechTitle, audioUrl: currentSpeechAudioUrl } as Speech;
+        const url = await getWorkingAudioUrl(speechForUrl);
+
+        if (timeoutId) clearTimeout(timeoutId);
+
+        if (isMounted && url && typeof url === 'string' && url.trim().length > 0) {
+          console.log('✅ Setting audio URL for global player:', url);
+          setAudioUrl(url);
+        } else {
+          console.warn('⚠️ Invalid audio URL received:', url);
+          setAudioUrl('');
+        }
+      } catch (error) {
+        console.error('❌ Error loading audio URL:', error);
+        if (isMounted) {
+          handleAudioErrorRef.current?.('Failed to load audio');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAudio(false);
+        }
       }
     };
-    
+
     void loadAudioUrl();
-    
+
     return () => {
       isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [speechContext]);
+  }, [currentSpeechId, currentSpeechYoutubeId, currentSpeechAudioUrl, currentSpeechTitle]);
 
-  // Safety checks after hooks
-  if (!speechContext) {
-    console.warn('AudioPlayerWrapper: Speech context not available');
-    return null;
-  }
-
-  const { currentSpeech, isPlaying, handlePlaybackStatusUpdate, handleAudioError, audioPlayerRef } = speechContext;
-
-  // Don't render AudioPlayer for YouTube videos or if no valid audio URL
-  if (!audioUrl || 
-      !currentSpeech || 
-      isLoadingAudio || 
-      currentSpeech.youtubeId || // Skip YouTube videos
-      typeof audioUrl !== 'string' || 
-      audioUrl.trim().length === 0) {
+  if (!speechContext || !audioUrl || !currentSpeech || isLoadingAudio ||
+      currentSpeech.youtubeId || typeof audioUrl !== 'string' || audioUrl.trim().length === 0) {
     return null;
   }
 
