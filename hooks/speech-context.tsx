@@ -603,17 +603,19 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, []);
 
-  // Handle audio playback status updates
   const handlePlaybackStatusUpdate = useCallback((status: {
     isPlaying: boolean;
     currentTime: number;
     duration: number;
     didJustFinish: boolean;
   }) => {
-    setCurrentTime(status.currentTime);
-    setDuration(status.duration);
-    setIsPlaying(status.isPlaying);
-    
+    if (status.currentTime >= 0) {
+      setCurrentTime(status.currentTime);
+    }
+    if (status.duration > 0) {
+      setDuration(status.duration);
+    }
+
     if (status.didJustFinish) {
       console.log('🏁 Audio finished playing');
       setIsPlaying(false);

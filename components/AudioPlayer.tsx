@@ -29,6 +29,8 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
   const [isLoading, setIsLoading] = useState(false);
   const [safeAudioUrl, setSafeAudioUrl] = useState<string>('');
   const [webReady, setWebReady] = useState(false);
+  const lastIsPlayingProp = useRef(isPlaying);
+  const playPauseInFlight = useRef(false);
   
   // Validation after hooks to comply with React rules
   const isValidAudioUrl = audioUrl && typeof audioUrl === 'string' && audioUrl.trim().length > 0;
@@ -74,7 +76,7 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
     };
 
     if (audioUrl && typeof audioUrl === 'string' && audioUrl.trim().length > 0) {
-      getSafeUrl();
+      void getSafeUrl();
     } else {
       console.log('⚠️ No valid audioUrl provided, using fallback');
       // Set a fallback URL instead of empty string
@@ -162,7 +164,7 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
           audio.addEventListener('timeupdate', () => {
             if (isMounted) {
               onPlaybackStatusUpdate?.({
-                isPlaying: !audio.paused,
+                isPlaying: false,
                 currentTime: audio.currentTime || 0,
                 duration: audio.duration || 0,
                 didJustFinish: false,
@@ -182,7 +184,7 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
             }
           });
 
-          audio.addEventListener('error', (event: any) => {
+          audio.addEventListener('error', (_event: any) => {
             const err = (audio as any).error;
             const errorDetails = {
               code: err?.code || 'unknown',
@@ -330,19 +332,17 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
             soundRef.current = sound;
             console.log('✅ Native sound created successfully');
 
-            // Additional status update handler for ongoing playback
             sound.setOnPlaybackStatusUpdate((status) => {
               if (!isMounted) return;
-              
+
               try {
                 if (status.isLoaded) {
                   const currentTime = Math.floor((status.positionMillis || 0) / 1000);
                   const duration = Math.floor((status.durationMillis || 0) / 1000);
-                  
-                  // Validate values before updating
+
                   if (currentTime >= 0 && duration >= 0) {
                     onPlaybackStatusUpdate?.({
-                      isPlaying: status.isPlaying || false,
+                      isPlaying: false,
                       currentTime,
                       duration,
                       didJustFinish: status.didJustFinish || false,
@@ -354,7 +354,6 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
                 }
               } catch (statusError) {
                 console.error('❌ Error in playback status update:', statusError);
-                // Don't call onError here to avoid infinite loops
               }
             });
           } catch (soundCreationError) {
@@ -376,7 +375,7 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
       }
     };
 
-    initializeAudio();
+    void initializeAudio();
 
     return () => {
       isMounted = false;
@@ -408,14 +407,19 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
         }
       };
       
-      cleanup();
+      void cleanup();
     };
   }, [safeAudioUrl, isLoading, onPlaybackStatusUpdate, onError]);
 
-  // Handle play/pause with enhanced error handling
   useEffect(() => {
+    if (isPlaying === lastIsPlayingProp.current && playPauseInFlight.current) {
+      return;
+    }
+    lastIsPlayingProp.current = isPlaying;
+
+    let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    
+
     const waitForCanPlay = (audio: HTMLAudioElement) => new Promise<void>((resolve, reject) => {
       if (webReady || audio.readyState >= 3) {
         resolve();
@@ -436,13 +440,15 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
     });
 
     const handlePlayPause = async () => {
+      if (playPauseInFlight.current) return;
+      playPauseInFlight.current = true;
+
       try {
-        // Add timeout for play/pause operations
         timeoutId = setTimeout(() => {
           console.warn('⚠️ Play/pause operation timeout');
-          onError?.('Audio control timeout');
+          playPauseInFlight.current = false;
         }, 8000);
-        
+
         if (Platform.OS === 'web') {
           const el = webAudioRef.current;
           if (el) {
@@ -452,6 +458,7 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
               } catch (e) {
                 console.warn('canplay wait failed:', e);
               }
+              if (cancelled) return;
               const playPromise = el.play();
               if (playPromise !== undefined) {
                 await playPromise;
@@ -459,75 +466,47 @@ export const AudioPlayer = forwardRef<any, AudioPlayerProps>((
             } else {
               el.pause();
             }
-          } else {
-            console.log('⚠️ Web audio element not ready');
           }
         } else {
           if (soundRef.current) {
             try {
-              // First check if the sound object exists and has the method
-              if (!soundRef.current.getStatusAsync) {
-                console.log('⚠️ Sound object not fully initialized');
-                return;
-              }
-              
+              if (!soundRef.current.getStatusAsync) return;
               const status = await soundRef.current.getStatusAsync();
-              
-              // Check if status is valid
-              if (!status) {
-                console.log('⚠️ No status returned from sound');
-                return;
-              }
-              
+              if (!status || cancelled) return;
+
               if (status.isLoaded) {
                 if (isPlaying) {
-                  console.log('🎵 Starting playback');
                   await soundRef.current.playAsync();
                 } else {
-                  console.log('⏸️ Pausing playback');
                   await soundRef.current.pauseAsync();
                 }
-              } else {
-                console.log('⚠️ Sound not loaded yet');
-                // Don't treat this as an error, just wait for it to load
-                if ((status as any).error) {
-                  console.error('❌ Sound has error:', (status as any).error);
-                  onError?.('Audio failed to load');
-                }
+              } else if ((status as any).error) {
+                onError?.('Audio failed to load');
               }
             } catch (statusError) {
-              // Only log error if it's not a "sound not loaded" error
               const errorMessage = statusError?.toString() || '';
-              if (errorMessage.includes('not loaded') || errorMessage.includes('loading')) {
-                console.log('⚠️ Sound still loading, will retry...');
-              } else {
+              if (!errorMessage.includes('not loaded') && !errorMessage.includes('loading')) {
                 console.error('Error controlling playback:', statusError);
-                // Don't call onError for transient issues
               }
             }
-          } else {
-            console.log('⚠️ Sound reference is null');
           }
         }
-        
+
         if (timeoutId) clearTimeout(timeoutId);
       } catch (error) {
         console.error('Error controlling playback:', error);
-        onError?.('Playback control failed');
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+      } finally {
+        playPauseInFlight.current = false;
       }
     };
 
     if (safeAudioUrl && !isLoading) {
-      handlePlayPause();
+      void handlePlayPause();
     }
-    
+
     return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [isPlaying, safeAudioUrl, isLoading, onError, webReady]);
 
