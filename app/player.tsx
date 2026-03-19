@@ -82,6 +82,39 @@ export default function PlayerScreen() {
     }
   }, [setCurrentTime, setDuration]);
 
+  const handleEnd = useCallback(async () => {
+    if (onEndLockedRef.current) {
+      console.log('onEnd already processing, skipping');
+      return;
+    }
+    onEndLockedRef.current = true;
+    console.log('Audio playback ended');
+    midpointAdShownRef.current = false;
+    if (canShowAds) {
+      const shown = await tryShowInterstitialOnTransition();
+      if (shown) {
+        console.log('[Ad] Speech ended — showed interstitial');
+      }
+    }
+    handleNext();
+    setTimeout(() => { onEndLockedRef.current = false; }, 2000);
+  }, [canShowAds, tryShowInterstitialOnTransition, handleNext]);
+
+  const handleProgressWithAds = useCallback((time: number, dur: number) => {
+    handleProgressChange(time, dur);
+    if (
+      canShowAds &&
+      !midpointAdShownRef.current &&
+      dur >= 300 &&
+      time >= dur * 0.5 &&
+      time < dur * 0.55
+    ) {
+      midpointAdShownRef.current = true;
+      console.log('[Ad] Midpoint reached on long speech — showing interstitial');
+      void showInterstitialAd();
+    }
+  }, [handleProgressChange, canShowAds, showInterstitialAd]);
+
   const handleShare = async () => {
     if (!currentSpeech) return;
     try {
@@ -161,40 +194,11 @@ export default function PlayerScreen() {
                 onError={(error: string) => {
                   console.error('Audio playback error:', error);
                 }}
-                onEnd={async () => {
-                  if (onEndLockedRef.current) {
-                    console.log('onEnd already processing, skipping');
-                    return;
-                  }
-                  onEndLockedRef.current = true;
-                  console.log('Audio playback ended');
-                  midpointAdShownRef.current = false;
-                  if (canShowAds) {
-                    const shown = await tryShowInterstitialOnTransition();
-                    if (shown) {
-                      console.log('🎯 [Ad] Speech ended — showed interstitial (every 3 speeches)');
-                    }
-                  }
-                  handleNext();
-                  setTimeout(() => { onEndLockedRef.current = false; }, 2000);
-                }}
+                onEnd={handleEnd}
                 onNext={currentPlaylist.length > 1 ? handleNext : undefined}
                 onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
                 onPlayingChange={handlePlayingChange}
-                onProgressChange={(time: number, dur: number) => {
-                  handleProgressChange(time, dur);
-                  if (
-                    canShowAds &&
-                    !midpointAdShownRef.current &&
-                    dur >= 300 &&
-                    time >= dur * 0.5 &&
-                    time < dur * 0.55
-                  ) {
-                    midpointAdShownRef.current = true;
-                    console.log('🎯 [Ad] Midpoint reached on long speech — showing interstitial');
-                    void showInterstitialAd();
-                  }
-                }}
+                onProgressChange={handleProgressWithAds}
               />
             </View>
           ) : (
