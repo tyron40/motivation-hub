@@ -252,8 +252,15 @@ export default function SettingsScreen() {
           
           <TouchableOpacity
             style={[styles.settingItem, styles.signOutItem]}
-            onPress={async () => {
-              await signOut();
+            onPress={() => {
+              Alert.alert(
+                'Sign Out',
+                'Are you sure you want to sign out?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+                ]
+              );
             }}
           >
             <View style={styles.settingLeft}>

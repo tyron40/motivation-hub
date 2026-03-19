@@ -262,11 +262,25 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       });
       
       setSpeeches(updatedSpeeches);
+
+      setCurrentSpeech(prev => {
+        if (prev && prev.id === speechId) {
+          return { ...prev, isFavorite: !prev.isFavorite };
+        }
+        return prev;
+      });
       
       const newFavoriteIds = updatedSpeeches
         .filter(s => s && s.isFavorite)
         .map(s => s.id)
         .filter(id => id && typeof id === 'string');
+
+      if (currentSpeech && currentSpeech.id === speechId) {
+        const isNowFavorite = !currentSpeech.isFavorite;
+        if (isNowFavorite && !newFavoriteIds.includes(speechId)) {
+          newFavoriteIds.push(speechId);
+        }
+      }
       
       mutateFavorites(newFavoriteIds);
       
@@ -286,7 +300,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     } catch (error) {
       console.error('Error in toggleFavorite:', error);
     }
-  }, [speeches, mutateFavorites, mutateProfile]);
+  }, [speeches, currentSpeech, mutateFavorites, mutateProfile]);
 
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);

@@ -190,7 +190,7 @@ export default function FlyersScreen() {
       }
 
       const MediaLibrary = require('expo-media-library');
-      const { Paths, File: ExpoFile, Directory } = require('expo-file-system');
+      const FileSystem = require('expo-file-system');
 
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -199,13 +199,17 @@ export default function FlyersScreen() {
       }
 
       console.log('Downloading flyer to cache...');
-      const destination = new Directory(Paths.cache, 'flyers');
-      try { destination.create(); } catch {}
+      const fileName = `flyer_${flyer.id}_${Date.now()}.jpg`;
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
 
-      const output = await ExpoFile.downloadFileAsync(flyer.imageUrl, new Directory(Paths.cache, 'flyers'));
-      console.log('Download complete:', output.uri);
+      const downloadResult = await FileSystem.downloadAsync(flyer.imageUrl, fileUri);
+      console.log('Download complete:', downloadResult.uri);
 
-      const asset = await MediaLibrary.createAssetAsync(output.uri);
+      if (!downloadResult.uri) {
+        throw new Error('Download failed - no URI returned');
+      }
+
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
       console.log('Saved to photos:', asset.uri);
 
       Alert.alert('Saved to Photos', `"${flyer.title}" has been saved to your photo library.`);
