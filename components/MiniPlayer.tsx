@@ -35,6 +35,7 @@ export default function MiniPlayer() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const slideAnim = useRef(new Animated.Value(100)).current;
+  const playPauseDebounceRef = useRef(false);
 
   const isOnPlayerScreen = pathname === '/player';
   const shouldShow = currentSpeech && isMinimized && !isOnPlayerScreen;
@@ -61,8 +62,6 @@ export default function MiniPlayer() {
     setIsMinimized(false);
     router.push('/player');
   };
-
-  const playPauseDebounceRef = React.useRef(false);
 
   const handlePlayPause = () => {
     if (playPauseDebounceRef.current) return;
