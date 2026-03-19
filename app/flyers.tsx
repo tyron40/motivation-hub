@@ -189,14 +189,8 @@ export default function FlyersScreen() {
         return;
       }
 
-      const MediaLibrary = require('expo-media-library');
       const FileSystem = require('expo-file-system');
-
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to save photos to your library.');
-        return;
-      }
+      const Sharing = require('expo-sharing');
 
       console.log('Downloading flyer to cache...');
       const fileName = `flyer_${flyer.id}_${Date.now()}.jpg`;
@@ -209,10 +203,15 @@ export default function FlyersScreen() {
         throw new Error('Download failed - no URI returned');
       }
 
-      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-      console.log('Saved to photos:', asset.uri);
-
-      Alert.alert('Saved to Photos', `"${flyer.title}" has been saved to your photo library.`);
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: 'image/jpeg',
+          dialogTitle: `Save "${flyer.title}"`,
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device.');
+      }
     } catch (error) {
       console.error('Error downloading flyer:', error);
       Alert.alert('Error', 'Failed to save flyer to photos. Please try again.');
