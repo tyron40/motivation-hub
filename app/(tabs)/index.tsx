@@ -22,6 +22,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { motivationalFlyers } from '@/mocks/motivationalFlyers';
 import { useAdMob } from '@/hooks/admob-context';
+import { useAdmin } from '@/hooks/admin-context';
 
 
 export default function HomeScreen() {
@@ -30,6 +31,7 @@ export default function HomeScreen() {
   const { profile } = useUserProfile();
   const insets = useSafeAreaInsets();
   const { tryShowInterstitialOnTransition } = useAdMob();
+  const { customFlyers } = useAdmin();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [shortClips, setShortClips] = React.useState<any[]>([]);
   const dailyQuote = React.useMemo(() => {
@@ -272,7 +274,7 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={motivationalFlyers}
+              data={[...motivationalFlyers, ...customFlyers]}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (

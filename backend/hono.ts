@@ -249,7 +249,83 @@ const ADMIN_DATA_STORE: Record<string, any> = {
   flyers: [],
   videos: [],
   banners: [],
+  updatedAt: null,
+  _loaded: false,
 };
+
+import { supabaseBackend } from './lib/supabase';
+
+const ADMIN_SUPABASE_TABLE = 'admin_content';
+
+async function loadAdminDataFromSupabase(): Promise<void> {
+  try {
+    console.log('[Admin] Loading admin data from Supabase...');
+    const { data, error } = await supabaseBackend
+      .from(ADMIN_SUPABASE_TABLE)
+      .select('*')
+      .eq('id', 'global_admin_data')
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log('[Admin] No admin data row found in Supabase, will create on first write');
+      } else {
+        console.warn('[Admin] Supabase load error:', error.message);
+      }
+      return;
+    }
+
+    if (data) {
+      ADMIN_DATA_STORE.flyers = Array.isArray(data.flyers) ? data.flyers : [];
+      ADMIN_DATA_STORE.videos = Array.isArray(data.videos) ? data.videos : [];
+      ADMIN_DATA_STORE.banners = Array.isArray(data.banners) ? data.banners : [];
+      ADMIN_DATA_STORE.updatedAt = data.updated_at || null;
+      ADMIN_DATA_STORE._loaded = true;
+      console.log('[Admin] Loaded admin data from Supabase:', {
+        flyers: ADMIN_DATA_STORE.flyers.length,
+        videos: ADMIN_DATA_STORE.videos.length,
+        banners: ADMIN_DATA_STORE.banners.length,
+      });
+    }
+  } catch (err) {
+    console.error('[Admin] Failed to load from Supabase:', err);
+  }
+}
+
+async function saveAdminDataToSupabase(): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    ADMIN_DATA_STORE.updatedAt = now;
+
+    const payload = {
+      id: 'global_admin_data',
+      flyers: ADMIN_DATA_STORE.flyers,
+      videos: ADMIN_DATA_STORE.videos,
+      banners: ADMIN_DATA_STORE.banners,
+      updated_at: now,
+    };
+
+    const { error } = await supabaseBackend
+      .from(ADMIN_SUPABASE_TABLE)
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('[Admin] Supabase save error:', error.message);
+      console.log('[Admin] Data is still in memory, will retry on next write');
+    } else {
+      console.log('[Admin] Admin data persisted to Supabase at', now);
+    }
+  } catch (err) {
+    console.error('[Admin] Failed to save to Supabase:', err);
+  }
+}
+
+async function ensureAdminDataLoaded(): Promise<void> {
+  if (!ADMIN_DATA_STORE._loaded) {
+    await loadAdminDataFromSupabase();
+    ADMIN_DATA_STORE._loaded = true;
+  }
+}
 
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
@@ -570,27 +646,23 @@ const handleYouTubeTrending = async (c: Context) => {
   }
 };
 
-app.get('/api/admin/data', async (c: Context) => {
+const handleGetAdminData = async (c: Context) => {
   console.log('[Admin] GET admin data');
+  await ensureAdminDataLoaded();
   return c.json({
     flyers: ADMIN_DATA_STORE.flyers,
     videos: ADMIN_DATA_STORE.videos,
     banners: ADMIN_DATA_STORE.banners,
     updatedAt: ADMIN_DATA_STORE.updatedAt || null,
   });
-});
+};
 
-app.get('/admin/data', async (c: Context) => {
-  return c.json({
-    flyers: ADMIN_DATA_STORE.flyers,
-    videos: ADMIN_DATA_STORE.videos,
-    banners: ADMIN_DATA_STORE.banners,
-    updatedAt: ADMIN_DATA_STORE.updatedAt || null,
-  });
-});
+app.get('/api/admin/data', handleGetAdminData);
+app.get('/admin/data', handleGetAdminData);
 
-app.post('/api/admin/data', async (c: Context) => {
+const handlePostAdminData = async (c: Context) => {
   try {
+    await ensureAdminDataLoaded();
     const body = await c.req.json();
     const { type, action, data } = body;
     console.log(`[Admin] POST admin data: type=${type}, action=${action}`);
@@ -624,57 +696,23 @@ app.post('/api/admin/data', async (c: Context) => {
       }
     }
 
-    ADMIN_DATA_STORE.updatedAt = new Date().toISOString();
-    console.log('[Admin] Data updated successfully');
-    return c.json({ ok: true, updatedAt: ADMIN_DATA_STORE.updatedAt });
+    await saveAdminDataToSupabase();
+    console.log('[Admin] Data updated and persisted successfully');
+    return c.json({
+      ok: true,
+      updatedAt: ADMIN_DATA_STORE.updatedAt,
+      flyers: ADMIN_DATA_STORE.flyers,
+      videos: ADMIN_DATA_STORE.videos,
+      banners: ADMIN_DATA_STORE.banners,
+    });
   } catch (error) {
     console.error('[Admin] Error updating data:', error);
     return c.json({ error: 'Failed to update admin data' }, 500);
   }
-});
+};
 
-app.post('/admin/data', async (c: Context) => {
-  try {
-    const body = await c.req.json();
-    const { type, action, data } = body;
-    console.log(`[Admin] POST admin data: type=${type}, action=${action}`);
-
-    if (type === 'flyers') {
-      if (action === 'add') {
-        ADMIN_DATA_STORE.flyers.push(data);
-      } else if (action === 'remove') {
-        ADMIN_DATA_STORE.flyers = ADMIN_DATA_STORE.flyers.filter((f: any) => f.id !== data.id);
-      } else if (action === 'set') {
-        ADMIN_DATA_STORE.flyers = data;
-      }
-    } else if (type === 'videos') {
-      if (action === 'add') {
-        ADMIN_DATA_STORE.videos.push(data);
-      } else if (action === 'remove') {
-        ADMIN_DATA_STORE.videos = ADMIN_DATA_STORE.videos.filter((v: any) => v.id !== data.id);
-      } else if (action === 'set') {
-        ADMIN_DATA_STORE.videos = data;
-      }
-    } else if (type === 'banners') {
-      if (action === 'update') {
-        const idx = ADMIN_DATA_STORE.banners.findIndex((b: any) => b.categoryId === data.categoryId);
-        if (idx >= 0) {
-          ADMIN_DATA_STORE.banners[idx] = data;
-        } else {
-          ADMIN_DATA_STORE.banners.push(data);
-        }
-      } else if (action === 'set') {
-        ADMIN_DATA_STORE.banners = data;
-      }
-    }
-
-    ADMIN_DATA_STORE.updatedAt = new Date().toISOString();
-    return c.json({ ok: true, updatedAt: ADMIN_DATA_STORE.updatedAt });
-  } catch (error) {
-    console.error('[Admin] Error updating data:', error);
-    return c.json({ error: 'Failed to update admin data' }, 500);
-  }
-});
+app.post('/api/admin/data', handlePostAdminData);
+app.post('/admin/data', handlePostAdminData);
 
 app.post('/api/youtube/category', handleYouTubeCategory);
 app.post('/youtube/category', handleYouTubeCategory);
