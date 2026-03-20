@@ -12,7 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Check, RefreshCw, Shield, Youtube, LogIn, Zap, Sparkles, Smartphone } from 'lucide-react-native';
+import { X, Check, RefreshCw, Shield, LogIn, Zap, Sparkles, Smartphone } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { IAP_PRODUCTS, IAPProductId } from '@/constants/iap';
@@ -92,11 +92,11 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
   };
 
   const openTerms = () => {
-    Linking.openURL('https://rork.com/terms');
+    void Linking.openURL('https://rork.com/terms');
   };
 
   const openPrivacy = () => {
-    Linking.openURL('https://rork.com/privacy');
+    void Linking.openURL('https://rork.com/privacy');
   };
 
   const creditProducts = IAP_PRODUCTS.filter(p => !p.isPremium);
@@ -203,7 +203,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 ]}
                 onPress={() => {
                   console.log('🔵 BUTTON PRESSED:', product.productId);
-                  handlePurchase(product.productId);
+                  void handlePurchase(product.productId);
                 }}
                 activeOpacity={0.7}
               >
@@ -264,7 +264,7 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
                 ]}
                 onPress={() => {
                   console.log('🔵 PREMIUM BUTTON PRESSED:', product.productId);
-                  handlePurchase(product.productId);
+                  void handlePurchase(product.productId);
                 }}
                 activeOpacity={0.7}
               >
@@ -319,12 +319,6 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
             </Text>
           </View>
 
-          <View style={styles.youtubeDisclaimer}>
-            <Youtube color={Colors.textSecondary} size={20} />
-            <Text style={styles.youtubeDisclaimerText}>
-              YouTube videos are provided by YouTube and remain free. Premium subscription only removes ads from the app experience and does not unlock or alter YouTube content.
-            </Text>
-          </View>
 
           <TouchableOpacity
             style={styles.restoreButton}
@@ -636,23 +630,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 22,
   },
-  youtubeDisclaimer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: 'rgba(255,59,48,0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,59,48,0.2)',
-  },
-  youtubeDisclaimerText: {
-    flex: 1,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
+
   restoreButton: {
     flexDirection: 'row',
     alignItems: 'center',

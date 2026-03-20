@@ -37,9 +37,9 @@ export const motivationalFlyers: MotivationalFlyer[] = [
   },
   {
     id: 'flyer-featured-5',
-    title: 'No Sacrifice, No Victory',
+    title: 'Give Him Thanks',
     quote: '',
-    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/f1wpgpun1sw6icrkx6wc9',
+    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/txtqp27uxh6o4vsply68l',
     accent: '#E84393',
   },
   {

@@ -14,7 +14,6 @@ import {
   Animated,
   Platform,
   ViewToken,
-  Linking,
   Share,
 } from 'react-native';
 
@@ -33,7 +32,6 @@ import {
   Youtube,
   Music2,
   Eye,
-  ExternalLink,
 } from 'lucide-react-native';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -444,8 +442,8 @@ const ClipPage = React.memo(function ClipPage({
   insets,
   height,
 }: ClipPageProps) {
-  const [showPlayer, setShowPlayer] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(isActive);
+  const [isPlaying, setIsPlaying] = useState(isActive);
   const [playerReady, setPlayerReady] = useState(false);
   const playerRef = useRef<any>(null);
   const userIntentRef = useRef<boolean | null>(null);
@@ -515,11 +513,6 @@ const ClipPage = React.memo(function ClipPage({
       });
     }
   }, [playerReady]);
-
-  const openInYouTube = useCallback(() => {
-    const url = `https://www.youtube.com/watch?v=${clip.youtubeId}`;
-    Linking.openURL(url).catch(err => console.error('Error opening YouTube:', err));
-  }, [clip.youtubeId]);
 
   const handleShare = useCallback(async () => {
     try {
@@ -601,14 +594,7 @@ const ClipPage = React.memo(function ClipPage({
         )}
       </View>
 
-      <TouchableOpacity
-        onPress={openInYouTube}
-        style={[styles.youtubeLink, { top: insets.top + 56 }]}
-        activeOpacity={0.7}
-      >
-        <ExternalLink size={14} color="#fff" />
-        <Text style={styles.youtubeLinkText}>YouTube</Text>
-      </TouchableOpacity>
+
 
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.85)']}
@@ -802,23 +788,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  youtubeLink: {
-    position: 'absolute' as const,
-    right: 12,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
-    backgroundColor: 'rgba(255,0,0,0.7)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    zIndex: 80,
-  },
-  youtubeLinkText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700' as const,
-  },
+
   bottomGradient: {
     position: 'absolute' as const,
     bottom: 0,
