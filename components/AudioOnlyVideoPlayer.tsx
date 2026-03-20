@@ -206,9 +206,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     onEndCalledRef.current = false;
     autoplayTriggeredRef.current = false;
     autoplayAttemptRef.current = 0;
+    mediaLoadedRef.current = false;
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
+    }
+    if (loadPollTimerRef.current) {
+      clearTimeout(loadPollTimerRef.current);
+      loadPollTimerRef.current = null;
     }
 
     if (progressInterval.current) {
@@ -322,49 +327,133 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayAttemptRef = useRef(0);
+  const mediaLoadedRef = useRef(false);
+  const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
     }
+    if (loadPollTimerRef.current) {
+      clearTimeout(loadPollTimerRef.current);
+      loadPollTimerRef.current = null;
+    }
   }, []);
 
   const scheduleAutoplayRetry = useCallback(() => {
-    clearAutoplayTimer();
+    if (autoplayRetryTimerRef.current) {
+      clearTimeout(autoplayRetryTimerRef.current);
+      autoplayRetryTimerRef.current = null;
+    }
     autoplayAttemptRef.current += 1;
     const attempt = autoplayAttemptRef.current;
-    if (attempt > 15 || !mountedRef.current || !autoplay) return;
+    if (attempt > 20 || !mountedRef.current || !autoplay) {
+      console.log(`[Autoplay] Giving up after ${attempt} attempts`);
+      return;
+    }
 
-    const delay = attempt <= 3 ? 400 : attempt <= 6 ? 800 : 1200;
-    console.log(`Scheduling autoplay retry #${attempt} in ${delay}ms`);
+    const delay = attempt <= 3 ? 500 : attempt <= 8 ? 800 : 1200;
+    console.log(`[Autoplay] Scheduling retry #${attempt} in ${delay}ms`);
 
     autoplayRetryTimerRef.current = setTimeout(async () => {
       if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
       if (!playerRef.current || !playerReadyRef.current) {
+        console.log(`[Autoplay] Player not ready on retry #${attempt}, retrying...`);
         scheduleAutoplayRetry();
         return;
       }
       try {
         const state = await playerRef.current.getState();
-        console.log(`Autoplay retry #${attempt}, player state:`, state);
+        console.log(`[Autoplay] Retry #${attempt}, player state: ${state}`);
         if (state === 'playing') {
+          console.log('[Autoplay] Already playing, success!');
           if (!isPlayingRef.current) commitPlayState(true);
           return;
         }
-        // Force a prop toggle: set false then true so YoutubePlayer sees a real change
         isPlayingRef.current = false;
         setIsPlaying(false);
         setTimeout(() => {
           if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          console.log(`[Autoplay] Force toggling play on retry #${attempt}`);
           commitPlayState(true);
           scheduleAutoplayRetry();
-        }, 150);
-      } catch {
+        }, 200);
+      } catch (err) {
+        console.log('[Autoplay] Error during retry:', err);
         scheduleAutoplayRetry();
       }
     }, delay);
-  }, [autoplay, videoId, commitPlayState, clearAutoplayTimer]);
+  }, [autoplay, videoId, commitPlayState]);
+
+  const waitForMediaLoadedThenPlay = useCallback(() => {
+    if (loadPollTimerRef.current) {
+      clearTimeout(loadPollTimerRef.current);
+      loadPollTimerRef.current = null;
+    }
+
+    let pollCount = 0;
+    const maxPolls = 30;
+
+    const poll = async () => {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      if (!playerRef.current || !playerReadyRef.current) {
+        pollCount++;
+        if (pollCount < maxPolls) {
+          console.log(`[Autoplay] Waiting for player ready... poll #${pollCount}`);
+          loadPollTimerRef.current = setTimeout(poll, 400);
+        }
+        return;
+      }
+
+      try {
+        const dur = await playerRef.current.getDuration();
+        const state = await playerRef.current.getState();
+        console.log(`[Autoplay] Poll #${pollCount} — duration: ${dur}, state: ${state}`);
+
+        if (state === 'playing') {
+          console.log('[Autoplay] Already playing after load poll!');
+          mediaLoadedRef.current = true;
+          if (!isPlayingRef.current) commitPlayState(true);
+          return;
+        }
+
+        if (dur > 0) {
+          console.log(`[Autoplay] Media loaded! Duration: ${dur}s. Starting playback after delay...`);
+          mediaLoadedRef.current = true;
+          setDuration(dur);
+
+          setTimeout(() => {
+            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+            console.log('[Autoplay] Triggering play after confirmed load');
+            commitPlayState(true);
+            autoplayAttemptRef.current = 0;
+            scheduleAutoplayRetry();
+          }, 400);
+          return;
+        }
+      } catch (err) {
+        console.log('[Autoplay] Error polling media state:', err);
+      }
+
+      pollCount++;
+      if (pollCount < maxPolls) {
+        const delay = pollCount <= 5 ? 300 : pollCount <= 15 ? 500 : 800;
+        console.log(`[Autoplay] Media not loaded yet, polling again in ${delay}ms (poll #${pollCount})`);
+        loadPollTimerRef.current = setTimeout(poll, delay);
+      } else {
+        console.log('[Autoplay] Max polls reached, force-attempting play anyway');
+        if (mountedRef.current && activeVideoIdRef.current === videoId) {
+          commitPlayState(true);
+          autoplayAttemptRef.current = 0;
+          scheduleAutoplayRetry();
+        }
+      }
+    };
+
+    console.log('[Autoplay] Starting media load polling...');
+    loadPollTimerRef.current = setTimeout(poll, 300);
+  }, [videoId, commitPlayState, scheduleAutoplayRetry]);
 
   useEffect(() => {
     return () => clearAutoplayTimer();
@@ -372,7 +461,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('YouTube player ready for video:', activeVideoIdRef.current);
+    console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
     setPlayerReady(true);
     setPlayerError(false);
     setError(null);
@@ -380,26 +469,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (playerRef.current) {
       void playerRef.current.getDuration().then((dur: number) => {
         if (dur > 0 && mountedRef.current) {
-          console.log('Video duration from player:', dur);
+          console.log('[Autoplay] Duration from onReady:', dur);
           setDuration(dur);
         }
       }).catch((err: any) => {
-        console.error('Error getting duration:', err);
+        console.error('[Autoplay] Error getting duration on ready:', err);
       });
       
       if (autoplay && !autoplayTriggeredRef.current) {
         autoplayTriggeredRef.current = true;
+        mediaLoadedRef.current = false;
         autoplayAttemptRef.current = 0;
-        console.log('Triggering auto-play for:', activeVideoIdRef.current);
-        // Small delay to let the iframe fully initialize before playing
-        setTimeout(() => {
-          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          commitPlayState(true);
-          scheduleAutoplayRetry();
-        }, 300);
+        console.log('[Autoplay] Player ready — waiting for media to fully load before playing:', activeVideoIdRef.current);
+        waitForMediaLoadedThenPlay();
       }
     }
-  }, [autoplay, videoId, commitPlayState, scheduleAutoplayRetry]);
+  }, [autoplay, waitForMediaLoadedThenPlay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -435,18 +520,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       startProgressTracking();
     } else if (state === 'paused') {
-      if (autoplayTriggeredRef.current && autoplayAttemptRef.current > 0 && autoplayAttemptRef.current <= 15) {
-        console.log('Player paused during autoplay sequence, retrying...');
+      if (autoplayTriggeredRef.current && autoplayAttemptRef.current > 0 && autoplayAttemptRef.current <= 20) {
+        console.log('[Autoplay] Player paused during autoplay sequence, retrying...');
         scheduleAutoplayRetry();
       } else if (isPlayingRef.current) {
         commitPlayState(false);
       }
       stopProgressTracking();
     } else if (state === 'buffering') {
-      // keep current state during buffering
+      console.log('[Autoplay] Player buffering...');
     } else if (state === 'unstarted') {
-      if (autoplay && autoplayTriggeredRef.current && autoplayAttemptRef.current <= 15) {
-        console.log('Player unstarted during autoplay, scheduling retry...');
+      if (autoplay && autoplayTriggeredRef.current && autoplayAttemptRef.current <= 20) {
+        console.log('[Autoplay] Player unstarted during autoplay, scheduling retry...');
         scheduleAutoplayRetry();
       }
     }
