@@ -334,9 +334,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     clearAutoplayTimer();
     autoplayAttemptRef.current += 1;
     const attempt = autoplayAttemptRef.current;
-    if (attempt > 12 || !mountedRef.current || !autoplay) return;
+    if (attempt > 15 || !mountedRef.current || !autoplay) return;
 
-    const delay = attempt <= 3 ? 500 : attempt <= 6 ? 1000 : 1500;
+    const delay = attempt <= 3 ? 400 : attempt <= 6 ? 800 : 1200;
     console.log(`Scheduling autoplay retry #${attempt} in ${delay}ms`);
 
     autoplayRetryTimerRef.current = setTimeout(async () => {
@@ -352,8 +352,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           if (!isPlayingRef.current) commitPlayState(true);
           return;
         }
-        commitPlayState(true);
-        scheduleAutoplayRetry();
+        // Force a prop toggle: set false then true so YoutubePlayer sees a real change
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setTimeout(() => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          commitPlayState(true);
+          scheduleAutoplayRetry();
+        }, 150);
       } catch {
         scheduleAutoplayRetry();
       }
@@ -385,11 +391,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         autoplayTriggeredRef.current = true;
         autoplayAttemptRef.current = 0;
         console.log('Triggering auto-play for:', activeVideoIdRef.current);
-        commitPlayState(true);
-        scheduleAutoplayRetry();
+        // Small delay to let the iframe fully initialize before playing
+        setTimeout(() => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          commitPlayState(true);
+          scheduleAutoplayRetry();
+        }, 300);
       }
     }
-  }, [autoplay, commitPlayState, scheduleAutoplayRetry]);
+  }, [autoplay, videoId, commitPlayState, scheduleAutoplayRetry]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -425,9 +435,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       startProgressTracking();
     } else if (state === 'paused') {
-      if (autoplayTriggeredRef.current && autoplayAttemptRef.current > 0 && autoplayAttemptRef.current <= 12) {
+      if (autoplayTriggeredRef.current && autoplayAttemptRef.current > 0 && autoplayAttemptRef.current <= 15) {
         console.log('Player paused during autoplay sequence, retrying...');
-        commitPlayState(true);
         scheduleAutoplayRetry();
       } else if (isPlayingRef.current) {
         commitPlayState(false);
@@ -436,7 +445,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } else if (state === 'buffering') {
       // keep current state during buffering
     } else if (state === 'unstarted') {
-      if (autoplay && autoplayTriggeredRef.current && autoplayAttemptRef.current <= 12) {
+      if (autoplay && autoplayTriggeredRef.current && autoplayAttemptRef.current <= 15) {
         console.log('Player unstarted during autoplay, scheduling retry...');
         scheduleAutoplayRetry();
       }
