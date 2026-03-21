@@ -19,6 +19,7 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
+import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
 
 
@@ -40,6 +41,7 @@ const voiceCharacters = [
 function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
+  const { isAuthenticated } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
   const [, setMessages] = useState<Message[]>([]);
@@ -1198,6 +1200,35 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
     outputRange: [1, 1.1],
   });
 
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen 
+          options={{ 
+            title: 'Voice Coach',
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.text,
+          }} 
+        />
+        <View style={styles.accountRequiredContainer}>
+          <View style={styles.accountRequiredIcon}>
+            <Mic color={colors.primary} size={48} />
+          </View>
+          <Text style={[styles.accountRequiredTitle, { color: colors.text }]}>Account Required</Text>
+          <Text style={[styles.accountRequiredText, { color: colors.textSecondary }]}>
+            Create an account to use the AI Voice Coach. An account is needed to track your AI credits and purchases.
+          </Text>
+          <TouchableOpacity
+            style={[styles.accountRequiredButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/auth')}
+          >
+            <Text style={styles.accountRequiredButtonText}>Sign Up / Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
@@ -1613,5 +1644,42 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   headerButton: {
     marginRight: 16,
+  },
+  accountRequiredContainer: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 40,
+  },
+  accountRequiredIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    marginBottom: 24,
+  },
+  accountRequiredTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    marginBottom: 12,
+    textAlign: 'center' as const,
+  },
+  accountRequiredText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center' as const,
+    marginBottom: 28,
+  },
+  accountRequiredButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 25,
+  },
+  accountRequiredButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });

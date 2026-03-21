@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
@@ -24,6 +24,7 @@ import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { sendChatMessage } from '@/lib/api-client';
 import { useAdMob } from '@/hooks/admob-context';
+import { useAuth } from '@/hooks/auth-context';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,6 +65,7 @@ function ChatScreenContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
   const { useCredit: deductCredit, usageStats } = useIAP();
+  const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
   const { tryShowInterstitialOnTransition } = useAdMob();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
@@ -756,6 +758,34 @@ function ChatScreenContent() {
       </Animated.View>
     );
   };
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <LinearGradient
+          colors={[colors.background, colors.card, colors.background]}
+          style={styles.container}
+        >
+          <View style={styles.accountRequiredContainer}>
+            <View style={styles.accountRequiredIcon}>
+              <MessageCircle color={Colors.primary} size={48} />
+            </View>
+            <Text style={styles.accountRequiredTitle}>Account Required</Text>
+            <Text style={styles.accountRequiredText}>
+              Create an account to use the AI Coach chat feature. An account is needed to track your AI credits and purchases.
+            </Text>
+            <TouchableOpacity
+              style={styles.accountRequiredButton}
+              onPress={() => router.push('/auth')}
+            >
+              <Text style={styles.accountRequiredButtonText}>Sign Up / Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </>
+    );
+  }
 
   return (
     <>
@@ -1680,5 +1710,45 @@ const getStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center' as const,
     marginTop: 16,
     lineHeight: 22,
+  },
+  accountRequiredContainer: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 40,
+  },
+  accountRequiredIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primary + '15',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    marginBottom: 24,
+  },
+  accountRequiredTitle: {
+    color: Colors.text,
+    fontSize: 22,
+    fontWeight: '700' as const,
+    marginBottom: 12,
+    textAlign: 'center' as const,
+  },
+  accountRequiredText: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center' as const,
+    marginBottom: 28,
+  },
+  accountRequiredButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 25,
+  },
+  accountRequiredButtonText: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });

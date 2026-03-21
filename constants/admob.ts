@@ -54,8 +54,8 @@ export const AD_CONFIG = {
   // Credits earned per rewarded ad
   REWARD_AMOUNT: 10,
   
-  // Cooldown between interstitial ads (75 seconds - managed by AdManager)
-  INTERSTITIAL_COOLDOWN: 75 * 1000,
+  // Cooldown between interstitial ads (30 seconds - managed by AdManager)
+  INTERSTITIAL_COOLDOWN: 30 * 1000,
   
   // Request options for ads
   requestOptions: {

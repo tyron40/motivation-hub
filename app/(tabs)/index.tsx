@@ -189,7 +189,7 @@ export default function HomeScreen() {
     }
   }, [tryShowInterstitialOnTransition, setCurrentSpeech, setCurrentPlaylist, displaySpeeches]);
 
-  const handleCategoryPress = (categoryId: string) => {
+  const handleCategoryPress = async (categoryId: string) => {
     try {
       if (!categoryId || typeof categoryId !== 'string') {
         console.warn('Invalid category ID:', categoryId);
@@ -197,9 +197,11 @@ export default function HomeScreen() {
       }
       
       console.log('📂 Opening category:', categoryId);
+      await tryShowInterstitialOnTransition();
       router.push(`/category/${categoryId}`);
     } catch (error) {
       console.error('Error handling category press:', error);
+      router.push(`/category/${categoryId}`);
     }
   };
   

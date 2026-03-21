@@ -40,20 +40,29 @@ export default function PlayerScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const midpointAdShownRef = useRef(false);
+  const quarterAdShownRef = useRef(false);
+  const openAdShownRef = useRef(false);
   const onEndLockedRef = useRef(false);
   const styles = getStyles(colors);
 
   useEffect(() => {
     setIsMinimized(false);
+    if (!openAdShownRef.current && canShowAds) {
+      openAdShownRef.current = true;
+      console.log('[Ad] Player opened — attempting interstitial');
+      void tryShowInterstitialOnTransition();
+    }
     return () => {
       audioPlayerRef.current = null;
     };
-  }, [setIsMinimized, audioPlayerRef]);
+  }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
 
   useEffect(() => {
     if (localPlayerRef.current) {
       audioPlayerRef.current = localPlayerRef.current;
     }
+    midpointAdShownRef.current = false;
+    quarterAdShownRef.current = false;
   }, [audioPlayerRef, currentSpeech]);
 
   const handleMinimize = () => {
@@ -102,16 +111,18 @@ export default function PlayerScreen() {
 
   const handleProgressWithAds = useCallback((time: number, dur: number) => {
     handleProgressChange(time, dur);
-    if (
-      canShowAds &&
-      !midpointAdShownRef.current &&
-      dur >= 300 &&
-      time >= dur * 0.5 &&
-      time < dur * 0.55
-    ) {
-      midpointAdShownRef.current = true;
-      console.log('[Ad] Midpoint reached on long speech — showing interstitial');
-      void showInterstitialAd();
+    if (canShowAds && dur > 0) {
+      const progress = time / dur;
+      if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
+        quarterAdShownRef.current = true;
+        console.log('[Ad] 25% reached — showing interstitial');
+        void showInterstitialAd();
+      }
+      if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
+        midpointAdShownRef.current = true;
+        console.log('[Ad] Midpoint reached — showing interstitial');
+        void showInterstitialAd();
+      }
     }
   }, [handleProgressChange, canShowAds, showInterstitialAd]);
 
