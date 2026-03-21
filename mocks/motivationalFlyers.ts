@@ -43,6 +43,13 @@ export const motivationalFlyers: MotivationalFlyer[] = [
     accent: '#E84393',
   },
   {
+    id: 'flyer-featured-6',
+    title: 'Surround Yourself With Greatness',
+    quote: 'Stand among masterpieces long enough and you\'ll start creating your own. Your environment shapes your vision.',
+    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/4b3t60vhs3fj84qm56tlw',
+    accent: '#C0392B',
+  },
+  {
     id: 'flyer-1',
     title: 'Discipline Over Mood',
     quote: 'You don\'t need to feel ready. You need to move anyway.',
