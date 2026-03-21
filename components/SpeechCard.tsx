@@ -290,12 +290,13 @@ const getStyles = (colors: any) => StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginHorizontal: 20,
-    marginVertical: 6,
+    marginVertical: 7,
+    alignItems: 'center' as const,
   },
   compactImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 80,
+    height: 80,
+    borderRadius: 10,
   },
   compactContent: {
     flex: 1,
