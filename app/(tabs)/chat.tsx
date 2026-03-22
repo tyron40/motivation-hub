@@ -22,7 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { sendChatMessage } from '@/lib/api-client';
+import { generateText } from '@rork-ai/toolkit-sdk';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
 
@@ -276,7 +276,6 @@ function ChatScreenContent() {
 
     void tryShowInterstitialOnTransition();
 
-    // Check if user has credits (suggested questions are free)
     if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
       if (Platform.OS !== 'web') {
@@ -308,7 +307,6 @@ function ChatScreenContent() {
         timestamp: new Date(),
       };
 
-      // Deduct 1 credit for chat message (suggested questions are free)
       if (!isSuggestion) {
         const creditUsed = await deductCredit();
         if (!creditUsed) {
@@ -353,47 +351,37 @@ function ChatScreenContent() {
         });
       }
 
-      // Prepare chat messages
-      const chatMessages = messages.map(msg => ({
-        role: msg.isUser ? 'user' as const : 'assistant' as const,
-        content: msg.text,
-      }));
-      
-      chatMessages.push({
-        role: 'user',
-        content: text.trim(),
-      });
+      const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-      // Add timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
-      try {
-        console.log('🤖 Sending chat message via Vercel API...');
-        
-        const systemMessage = {
-          role: 'system' as const,
-          content: `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`,
-        };
-
-        const formattedMessages = chatMessages.map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
+      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
+        .filter(msg => msg.id !== '1' || msg.isUser)
+        .map(msg => ({
+          role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: msg.text,
         }));
 
-        const result = await sendChatMessage({
-          messages: [systemMessage, ...formattedMessages],
+      chatHistory.push({ role: 'user', content: text.trim() });
+
+      const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
+        { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
+        { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
+        ...chatHistory,
+      ];
+
+      try {
+        console.log('🤖 Sending chat message via Rork Toolkit...');
+        console.log('📤 Messages count:', allMessages.length);
+
+        const completion = await generateText({
+          messages: allMessages,
         });
 
-        clearTimeout(timeoutId);
-
-        const completion = result.message;
         console.log('📥 Chat response received, length:', completion?.length);
-        
+
         if (!completion || typeof completion !== 'string') {
-          throw new Error('Invalid response format');
+          throw new Error('Invalid response format from AI');
         }
-        
+
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
           text: completion,
@@ -412,7 +400,6 @@ function ChatScreenContent() {
         }
 
         if (profile.voiceEnabled && completion) {
-          // Voice generation also uses credits, so check again
           if (usageStats.credits > 0) {
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
@@ -426,27 +413,21 @@ function ChatScreenContent() {
           }
         }
       } catch (fetchError) {
-        clearTimeout(timeoutId);
-        
-        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error('Request timeout - please try again');
-        }
+        console.error('🤖 AI generation error:', fetchError);
         throw fetchError;
       }
     } catch (error) {
       console.error('Chat error:', error);
-      
-      // Add fallback response
+
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         text: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Remember, you have the strength to overcome any challenge!",
         isUser: false,
         timestamp: new Date(),
       };
-      
+
       setMessages(prev => [...prev, errorMessage]);
-      
-      // Use console.error instead of Alert for web compatibility
+
       if (Platform.OS !== 'web') {
         Alert.alert('Connection Error', 'Failed to get response. Please check your internet connection and try again.');
       } else {
@@ -959,12 +940,31 @@ function ChatScreenContent() {
             onDeleteSession={async (sessionId) => {
               await deleteSession(sessionId);
               if (sessionId === currentSessionId) {
-                setMessages([]);
+                setCurrentSessionId(null);
+                setHasStartedChat(false);
+                const greeting = profile.name 
+                  ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
+                  : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
+                setMessages([{
+                  id: '1',
+                  text: greeting,
+                  isUser: false,
+                  timestamp: new Date(),
+                }]);
               }
             }}
             onNewSession={async () => {
               setCurrentSessionId(null);
-              setMessages([]);
+              setHasStartedChat(false);
+              const greeting = profile.name 
+                ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
+                : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
+              setMessages([{
+                id: '1',
+                text: greeting,
+                isUser: false,
+                timestamp: new Date(),
+              }]);
               setShowHistory(false);
             }}
             styles={styles}
