@@ -8,9 +8,9 @@ import {
   ActivityIndicator,
   Dimensions,
   Animated,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import YoutubePlayer from 'react-native-youtube-iframe';
 import {
   Play,
   Pause,
@@ -20,6 +20,15 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+
+let YoutubePlayer: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    YoutubePlayer = require('react-native-youtube-iframe').default;
+  } catch {
+    console.log('react-native-youtube-iframe not available');
+  }
+}
 
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
@@ -578,7 +587,112 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-  const hiddenPlayerElement = (
+  const webIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const webPlayerReadyRef = useRef(false);
+  const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const postMessageToWebPlayer = useCallback((command: string, args?: any) => {
+    try {
+      if (Platform.OS === 'web' && webIframeRef.current?.contentWindow) {
+        const msg = JSON.stringify({ event: 'command', func: command, args: args || [] });
+        webIframeRef.current.contentWindow.postMessage(msg, '*');
+      }
+    } catch (e) {
+      console.log('Error posting message to web player:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        if (typeof event.data !== 'string') return;
+        const data = JSON.parse(event.data);
+
+        if (data.event === 'onReady') {
+          console.log('[Web YT] Player ready for:', videoId);
+          webPlayerReadyRef.current = true;
+          if (!mountedRef.current) return;
+          setPlayerReady(true);
+          setPlayerError(false);
+          setError(null);
+
+          if (autoplay && !autoplayTriggeredRef.current) {
+            autoplayTriggeredRef.current = true;
+            setTimeout(() => {
+              if (mountedRef.current) {
+                postMessageToWebPlayer('playVideo');
+                commitPlayState(true);
+              }
+            }, 300);
+          }
+        } else if (data.event === 'onStateChange') {
+          const state = data.info;
+          if (state === 1) {
+            if (!isPlayingRef.current) commitPlayState(true);
+            if (!webProgressIntervalRef.current) {
+              webProgressIntervalRef.current = setInterval(() => {
+                postMessageToWebPlayer('getCurrentTime');
+                postMessageToWebPlayer('getDuration');
+              }, 500);
+            }
+          } else if (state === 2) {
+            if (isPlayingRef.current && !autoplayInProgressRef.current) commitPlayState(false);
+          } else if (state === 0) {
+            if (!onEndCalledRef.current) {
+              onEndCalledRef.current = true;
+              commitPlayState(false);
+              setCurrentTime(0);
+              setTimeout(() => { if (mountedRef.current) onEndRef.current?.(); }, 100);
+            }
+          }
+        } else if (data.event === 'infoDelivery') {
+          if (data.info?.currentTime !== undefined && mountedRef.current) {
+            const time = data.info.currentTime;
+            setCurrentTime(time);
+            onProgressChangeRef.current?.(time, durationRef.current);
+          }
+          if (data.info?.duration !== undefined && data.info.duration > 0 && mountedRef.current) {
+            setDuration(data.info.duration);
+          }
+        }
+      } catch {
+        // ignore non-JSON messages
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (webProgressIntervalRef.current) {
+        clearInterval(webProgressIntervalRef.current);
+        webProgressIntervalRef.current = null;
+      }
+    };
+  }, [videoId, autoplay, commitPlayState, postMessageToWebPlayer]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (isPlaying) {
+      postMessageToWebPlayer('playVideo');
+    } else {
+      postMessageToWebPlayer('pauseVideo');
+    }
+  }, [isPlaying, postMessageToWebPlayer]);
+
+  const webPlayerElement = Platform.OS === 'web' ? (
+    <View style={styles.hiddenPlayer}>
+      <iframe
+        ref={(el: any) => { webIframeRef.current = el; }}
+        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=${autoplay ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+        style={{ width: 1, height: 1, border: 'none', opacity: 0, position: 'absolute' as any }}
+        allow="autoplay; encrypted-media"
+      />
+    </View>
+  ) : null;
+
+  const nativePlayerElement = Platform.OS !== 'web' && YoutubePlayer ? (
     <View style={styles.hiddenPlayer}>
       <YoutubePlayer
         ref={playerRef}
@@ -600,7 +714,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webViewStyle={styles.hiddenWebView}
       />
     </View>
-  );
+  ) : null;
+
+  const hiddenPlayerElement = Platform.OS === 'web' ? webPlayerElement : nativePlayerElement;
 
   if (isLoading) {
     return (
@@ -617,7 +733,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     );
   }
 
-  if (error || !metadata) {
+  if (error && !metadata) {
     return (
       <View style={styles.container}>
         {hiddenPlayerElement}
@@ -651,8 +767,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       {hiddenPlayerElement}
 
       <View style={styles.infoSection}>
-        <Text style={styles.title} numberOfLines={2}>{metadata.title}</Text>
-        <Text style={styles.subtitle}>{metadata.channelTitle}</Text>
+        <Text style={styles.title} numberOfLines={2}>{metadata?.title ?? _title}</Text>
+        <Text style={styles.subtitle}>{metadata?.channelTitle ?? _channelTitle}</Text>
       </View>
 
       <View style={styles.progressSection}>

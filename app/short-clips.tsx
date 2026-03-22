@@ -33,13 +33,21 @@ import {
   Music2,
   Eye,
 } from 'lucide-react-native';
-import YoutubePlayer from 'react-native-youtube-iframe';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { fallbackShortClips } from '@/mocks/shortClips';
+
+let NativeYoutubePlayer: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    NativeYoutubePlayer = require('react-native-youtube-iframe').default;
+  } catch {
+    console.log('react-native-youtube-iframe not available');
+  }
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -442,18 +450,30 @@ const ClipPage = React.memo(function ClipPage({
   insets,
   height,
 }: ClipPageProps) {
-  const [showPlayer, setShowPlayer] = useState(isActive);
-  const [isPlaying, setIsPlaying] = useState(isActive);
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const playerRef = useRef<any>(null);
+  const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const userIntentRef = useRef<boolean | null>(null);
   const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (isActive) {
-      console.log('🎬 Clip became active, starting autoplay:', clip.youtubeId);
+      console.log('Clip became active, starting autoplay:', clip.youtubeId);
       setShowPlayer(true);
-      setIsPlaying(true);
+      const timer = setTimeout(() => {
+        if (mountedRef.current) {
+          setIsPlaying(true);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
     } else {
       setIsPlaying(false);
       setShowPlayer(false);
@@ -476,43 +496,109 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     stateDebounceRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
       if (state === 'paused') {
         if (userIntentRef.current === true) {
-          console.log('Ignoring clip paused event — user intended play');
+          userIntentRef.current = null;
           return;
         }
         userIntentRef.current = null;
         setIsPlaying(false);
       } else if (state === 'playing') {
         if (userIntentRef.current === false) {
-          console.log('Ignoring clip playing event — user intended pause');
+          userIntentRef.current = null;
           return;
         }
         userIntentRef.current = null;
         setIsPlaying(true);
+        if (!playerReady) setPlayerReady(true);
       }
-    }, 150);
-  }, [clip.youtubeId]);
+    }, 200);
+  }, [clip.youtubeId, playerReady]);
 
   const onPlayerReady = useCallback(() => {
-    console.log('Clip player ready, forcing play:', clip.youtubeId);
+    console.log('Clip player ready:', clip.youtubeId);
+    if (!mountedRef.current) return;
     setPlayerReady(true);
-    setTimeout(() => setIsPlaying(true), 100);
-  }, [clip.youtubeId]);
+    setTimeout(() => {
+      if (mountedRef.current && isActive) {
+        setIsPlaying(true);
+      }
+    }, 200);
+  }, [clip.youtubeId, isActive]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
   }, [clip.youtubeId]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (!showPlayer || !isActive) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        if (typeof event.data !== 'string') return;
+        const data = JSON.parse(event.data);
+        if (data.event === 'onReady') {
+          if (!mountedRef.current) return;
+          setPlayerReady(true);
+          setTimeout(() => {
+            if (mountedRef.current) {
+              setIsPlaying(true);
+              try {
+                webIframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+                );
+              } catch {}
+            }
+          }, 300);
+        } else if (data.event === 'onStateChange') {
+          const st = data.info;
+          if (st === 1) {
+            if (mountedRef.current) { setIsPlaying(true); setPlayerReady(true); }
+          } else if (st === 2) {
+            if (mountedRef.current) setIsPlaying(false);
+          } else if (st === 0) {
+            if (mountedRef.current) {
+              setIsPlaying(true);
+              try {
+                webIframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+                );
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [showPlayer, isActive]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      if (isPlaying) {
+        webIframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+        );
+      } else {
+        webIframeRef.current?.contentWindow?.postMessage(
+          JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'
+        );
+      }
+    } catch {}
+  }, [isPlaying]);
+
   const handleTapToPlay = useCallback(() => {
-    if (playerReady) {
-      setIsPlaying(prev => {
-        const next = !prev;
-        userIntentRef.current = next;
-        return next;
-      });
-    }
-  }, [playerReady]);
+    setIsPlaying(prev => {
+      const next = !prev;
+      userIntentRef.current = next;
+      return next;
+    });
+    if (!showPlayer) setShowPlayer(true);
+  }, [showPlayer]);
 
   const handleShare = useCallback(async () => {
     try {
@@ -539,6 +625,98 @@ const ClipPage = React.memo(function ClipPage({
 
   const playerHeight = Math.round(SCREEN_WIDTH * (9 / 16));
 
+  const renderPlayer = () => {
+    if (!showPlayer || !isActive) {
+      return (
+        <TouchableOpacity
+          style={styles.thumbnailContainer}
+          activeOpacity={1}
+          onPress={handleTapToPlay}
+        >
+          <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
+          <View style={styles.playOverlay}>
+            <View style={styles.bigPlayBtn}>
+              <Play size={40} color="#fff" fill="#fff" />
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    if (Platform.OS === 'web') {
+      return (
+        <View style={styles.ytPlayerContainer}>
+          <iframe
+            ref={(el: any) => { webIframeRef.current = el; }}
+            src={`https://www.youtube.com/embed/${clip.youtubeId}?enablejsapi=1&autoplay=1&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${clip.youtubeId}&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+            style={{
+              width: SCREEN_WIDTH,
+              height: playerHeight,
+              border: 'none',
+              backgroundColor: '#000',
+            } as any}
+            allow="autoplay; encrypted-media"
+          />
+          {!playerReady && (
+            <View style={styles.playerLoading}>
+              <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    if (NativeYoutubePlayer) {
+      return (
+        <View style={styles.ytPlayerContainer}>
+          <NativeYoutubePlayer
+            ref={playerRef}
+            videoId={clip.youtubeId}
+            height={playerHeight}
+            width={SCREEN_WIDTH}
+            play={isPlaying}
+            onReady={onPlayerReady}
+            onError={onPlayerError}
+            onChangeState={onStateChange}
+            initialPlayerParams={{
+              controls: false,
+              modestbranding: true,
+              rel: false,
+              playsinline: true,
+              preventFullScreen: true,
+              loop: true,
+            }}
+            webViewStyle={styles.ytWebView}
+          />
+          {!playerReady && (
+            <View style={styles.playerLoading}>
+              <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.thumbnailContainer}
+        activeOpacity={1}
+        onPress={handleTapToPlay}
+      >
+        <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
+        <View style={styles.playOverlay}>
+          <View style={styles.bigPlayBtn}>
+            <Play size={40} color="#fff" fill="#fff" />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={[styles.clipPage, { height }]}>
       <Image
@@ -549,52 +727,8 @@ const ClipPage = React.memo(function ClipPage({
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
 
       <View style={styles.playerWrapper}>
-        {showPlayer && isActive ? (
-          <View style={styles.ytPlayerContainer}>
-            <YoutubePlayer
-              ref={playerRef}
-              videoId={clip.youtubeId}
-              height={playerHeight}
-              width={SCREEN_WIDTH}
-              play={isPlaying}
-              onReady={onPlayerReady}
-              onError={onPlayerError}
-              onChangeState={onStateChange}
-              initialPlayerParams={{
-                controls: false,
-                modestbranding: true,
-                rel: false,
-                playsinline: true,
-                preventFullScreen: true,
-                loop: true,
-              }}
-              webViewStyle={styles.ytWebView}
-            />
-            {!playerReady && (
-              <View style={styles.playerLoading}>
-                <Image source={{ uri: clip.thumbnail }} style={StyleSheet.absoluteFillObject} />
-                <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
-                <ActivityIndicator size="large" color="#fff" />
-              </View>
-            )}
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.thumbnailContainer}
-            activeOpacity={1}
-            onPress={handleTapToPlay}
-          >
-            <Image source={{ uri: clip.thumbnail }} style={styles.thumbnailFull} resizeMode="cover" />
-            <View style={styles.playOverlay}>
-              <View style={styles.bigPlayBtn}>
-                <Play size={40} color="#fff" fill="#fff" />
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
+        {renderPlayer()}
       </View>
-
-
 
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.85)']}

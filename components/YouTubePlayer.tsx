@@ -1,6 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
 
 interface YouTubePlayerProps {
@@ -11,14 +10,77 @@ interface YouTubePlayerProps {
   onError?: (error: string) => void;
 }
 
-export default function YouTubePlayer({
-  videoId,
-  title,
-  autoplay = false,
-  onReady,
-  onError
-}: YouTubePlayerProps) {
-  const webViewRef = useRef<WebView>(null);
+function WebYouTubePlayer({ videoId, title, autoplay = false, onReady, onError }: YouTubePlayerProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLoad = useCallback(() => {
+    console.log('YouTube iframe loaded:', videoId);
+    setIsLoading(false);
+    setError(null);
+    onReady?.();
+  }, [videoId, onReady]);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setIsLoading(true);
+    if (iframeRef.current) {
+      const currentSrc = iframeRef.current.src;
+      iframeRef.current.src = '';
+      setTimeout(() => { if (iframeRef.current) iframeRef.current.src = currentSrc; }, 100);
+    }
+  }, []);
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertCircle color="#ff6b6b" size={48} />
+        <Text style={styles.errorTitle}>Unable to load video</Text>
+        <Text style={styles.errorText}>{title}</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+        <TouchableOpacity onPress={handleRetry} style={styles.retryButton}>
+          <RefreshCw color="white" size={20} />
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  return (
+    <View style={styles.container}>
+      {isLoading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Loading video...</Text>
+        </View>
+      )}
+      <iframe
+        ref={(el: any) => { iframeRef.current = el; }}
+        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=${autoplay ? 1 : 0}&controls=1&modestbranding=1&rel=0&playsinline=1&origin=${origin}`}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          backgroundColor: '#000',
+        } as any}
+        allow="autoplay; encrypted-media; fullscreen"
+        onLoad={handleLoad}
+        onError={() => {
+          setError('Failed to load video player');
+          setIsLoading(false);
+          onError?.('Failed to load video player');
+        }}
+      />
+    </View>
+  );
+}
+
+function NativeYouTubePlayer({ videoId, title, autoplay = false, onReady, onError }: YouTubePlayerProps) {
+  const WebView = require('react-native-webview').WebView;
+  const webViewRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,37 +90,19 @@ export default function YouTubePlayer({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-          body {
-            background-color: #000;
-            overflow: hidden;
-          }
-          #player-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-          }
-          #player {
-            width: 100%;
-            height: 100%;
-            border: none;
-          }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background-color: #000; overflow: hidden; }
+          #player-container { width: 100vw; height: 100vh; position: relative; }
+          #player { width: 100%; height: 100%; border: none; }
         </style>
       </head>
       <body>
         <div id="player-container">
           <div id="player"></div>
         </div>
-
         <script src="https://www.youtube.com/iframe_api"></script>
         <script>
           let player;
-          let isReady = false;
-
           function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
               videoId: '${videoId}',
@@ -78,35 +122,20 @@ export default function YouTubePlayer({
               },
               events: {
                 onReady: function(event) {
-                  isReady = true;
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'ready'
-                  }));
-                  if (${autoplay}) {
-                    event.target.playVideo();
-                  }
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+                  if (${autoplay}) { event.target.playVideo(); }
                 },
                 onError: function(event) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'error',
-                    error: 'Error code: ' + event.data
-                  }));
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', error: 'Error code: ' + event.data }));
                 },
                 onStateChange: function(event) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'stateChange',
-                    state: event.data
-                  }));
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stateChange', state: event.data }));
                 }
               }
             });
           }
-
           window.addEventListener('error', function(e) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'error',
-              error: e.message
-            }));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', error: e.message }));
           });
         </script>
       </body>
@@ -116,26 +145,25 @@ export default function YouTubePlayer({
   const handleMessage = (event: any) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      
       switch (data.type) {
         case 'ready':
-          console.log('✅ YouTube player ready:', videoId);
+          console.log('YouTube player ready:', videoId);
           setIsLoading(false);
           setError(null);
           onReady?.();
           break;
         case 'error':
-          console.error('❌ YouTube player error:', data.error);
+          console.error('YouTube player error:', data.error);
           setError(data.error);
           setIsLoading(false);
           onError?.(data.error);
           break;
         case 'stateChange':
-          console.log('📊 Player state changed:', data.state);
+          console.log('Player state changed:', data.state);
           break;
       }
     } catch (err) {
-      console.error('❌ Error parsing message:', err);
+      console.error('Error parsing message:', err);
     }
   };
 
@@ -158,7 +186,6 @@ export default function YouTubePlayer({
           <RefreshCw color="white" size={20} />
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
-        <Text style={styles.helpText}>Video ID: {videoId}</Text>
       </View>
     );
   }
@@ -181,21 +208,28 @@ export default function YouTubePlayer({
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled={true}
         domStorageEnabled={true}
-        onError={(syntheticEvent) => {
+        onError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('❌ WebView error:', nativeEvent);
+          console.error('WebView error:', nativeEvent);
           setError('Failed to load video player');
           setIsLoading(false);
         }}
-        onHttpError={(syntheticEvent) => {
+        onHttpError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('❌ HTTP error:', nativeEvent.statusCode);
+          console.error('HTTP error:', nativeEvent.statusCode);
           setError(`HTTP error: ${nativeEvent.statusCode}`);
           setIsLoading(false);
         }}
       />
     </View>
   );
+}
+
+export default function YouTubePlayer(props: YouTubePlayerProps) {
+  if (Platform.OS === 'web') {
+    return <WebYouTubePlayer {...props} />;
+  }
+  return <NativeYouTubePlayer {...props} />;
 }
 
 const styles = StyleSheet.create({
@@ -221,7 +255,7 @@ const styles = StyleSheet.create({
   loadingText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     marginTop: 16,
   },
   errorContainer: {
@@ -234,7 +268,7 @@ const styles = StyleSheet.create({
   errorTitle: {
     color: 'white',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     marginTop: 16,
     marginBottom: 8,
   },
@@ -262,12 +296,6 @@ const styles = StyleSheet.create({
   retryText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  helpText: {
-    color: '#666',
-    fontSize: 12,
-    marginTop: 16,
-    fontFamily: 'monospace',
+    fontWeight: '600' as const,
   },
 });
