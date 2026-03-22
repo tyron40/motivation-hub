@@ -161,7 +161,13 @@ export default function HomeScreen() {
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext;
 
   const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches.filter(s => s.duration > 60) : popularSpeeches.filter(s => s.duration > 60);
-  const displayFeatured = displaySpeeches.length > 0 ? displaySpeeches[0] : featuredSpeech;
+  const displayFeatured = React.useMemo(() => {
+    if (displaySpeeches.length === 0) return featuredSpeech;
+    const today = new Date();
+    const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+    const index = dayOfYear % displaySpeeches.length;
+    return displaySpeeches[index];
+  }, [displaySpeeches]);
 
   const handleSpeechPress = React.useCallback(async (speech: any, playlist?: any[]) => {
     try {
@@ -287,10 +293,8 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  activeOpacity={0.9}
+                <View
                   style={styles.flyerPoster}
-                  onPress={() => router.push('/flyers')}
                   testID={`flyer-card-${item.id}`}
                 >
                   <Image
@@ -318,7 +322,7 @@ export default function HomeScreen() {
                       <Text style={styles.flyerPosterTitle}>{item.title}</Text>
                     </LinearGradient>
                   )}
-                </TouchableOpacity>
+                </View>
               )}
             />
           </View>
@@ -534,7 +538,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700' as const,
     marginBottom: 12,
     letterSpacing: -0.3,
-    textAlign: 'center' as const,
+    textAlign: 'left' as const,
     paddingHorizontal: 20,
   },
   sectionHeaderLeft: {
@@ -553,8 +557,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600' as const,
   },
   clipPoster: {
-    width: 200,
-    height: 130,
+    width: 260,
+    height: 170,
     borderRadius: 14,
     overflow: 'hidden' as const,
     elevation: 4,

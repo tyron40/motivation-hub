@@ -10,9 +10,8 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
-import { User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Palette, DollarSign, Church } from 'lucide-react-native';
+import { Stack, router } from 'expo-router';
+import { ArrowLeft, User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Palette, DollarSign, Church } from 'lucide-react-native';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
 import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
@@ -59,12 +58,18 @@ export default function SettingsScreen() {
   const styles = getStyles(colors);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen 
         options={{ 
           title: 'Settings',
+          headerShown: true,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 4, padding: 4 }}>
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
         }} 
       />
       
@@ -509,7 +514,7 @@ export default function SettingsScreen() {
         visible={showPaywall}
         onClose={() => setShowPaywall(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

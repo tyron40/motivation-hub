@@ -287,16 +287,16 @@ const getStyles = (colors: any) => StyleSheet.create({
   compactCard: {
     flexDirection: 'row' as const,
     backgroundColor: colors.cardBackground,
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     marginHorizontal: 20,
-    marginVertical: 7,
+    marginVertical: 8,
     alignItems: 'center' as const,
   },
   compactImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
+    width: 120,
+    height: 120,
+    borderRadius: 14,
   },
   compactContent: {
     flex: 1,
