@@ -303,13 +303,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       clearInterval(progressInterval.current);
     }
     
-    progressInterval.current = setInterval(async () => {
+    progressInterval.current = setInterval(() => {
       if (playerRef.current && !isSeekingRef.current && playerReadyRef.current && mountedRef.current) {
         try {
-          const time = await playerRef.current.getCurrentTime();
-          if (mountedRef.current) {
-            setCurrentTime(time);
-            onProgressChangeRef.current?.(time, durationRef.current);
+          if (typeof playerRef.current.getCurrentTime === 'function') {
+            const timePromise = playerRef.current.getCurrentTime();
+            if (timePromise && typeof timePromise.then === 'function') {
+              timePromise.then((time: number) => {
+                if (mountedRef.current && typeof time === 'number' && !isNaN(time)) {
+                  setCurrentTime(time);
+                  onProgressChangeRef.current?.(time, durationRef.current);
+                }
+              }).catch(() => {
+                // silently ignore progress tracking errors
+              });
+            }
           }
         } catch {
           // silently ignore progress tracking errors
@@ -351,14 +359,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
     autoplayInProgressRef.current = true;
     autoplayAttemptRef.current = 0;
-    console.log('[Autoplay] Starting autoplay sequence for:', videoId);
+    console.log('[Autoplay] Starting autoplay for:', videoId);
 
     const attemptPlay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId || !autoplayInProgressRef.current) return;
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId || !autoplayInProgressRef.current) {
+        autoplayInProgressRef.current = false;
+        return;
+      }
       autoplayAttemptRef.current += 1;
       const attempt = autoplayAttemptRef.current;
 
-      if (attempt > 8) {
+      if (attempt > 5) {
         console.log(`[Autoplay] Giving up after ${attempt} attempts`);
         autoplayInProgressRef.current = false;
         return;
@@ -370,44 +381,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         return;
       }
 
-      playerRef.current.getState().then((state: string) => {
-        if (!mountedRef.current || activeVideoIdRef.current !== videoId || !autoplayInProgressRef.current) return;
-        console.log(`[Autoplay] Attempt #${attempt}, player state: ${state}`);
+      console.log(`[Autoplay] Attempt #${attempt} — setting play state to true`);
+      commitPlayState(true);
 
-        if (state === 'playing') {
-          console.log('[Autoplay] Already playing!');
-          if (!isPlayingRef.current) commitPlayState(true);
+      autoplayRetryTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
           autoplayInProgressRef.current = false;
           return;
         }
-
-        commitPlayState(true);
-
-        const delay = attempt <= 2 ? 1500 : 2500;
-        autoplayRetryTimerRef.current = setTimeout(() => {
-          if (!mountedRef.current || activeVideoIdRef.current !== videoId || !autoplayInProgressRef.current) return;
-          if (!playerRef.current) {
-            autoplayInProgressRef.current = false;
-            return;
-          }
-          playerRef.current.getState().then((s: string) => {
-            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-            if (s === 'playing') {
-              console.log('[Autoplay] Confirmed playing after attempt #' + attempt);
-              if (!isPlayingRef.current) commitPlayState(true);
-              autoplayInProgressRef.current = false;
-            } else {
-              console.log(`[Autoplay] Still not playing (${s}), will retry`);
-              attemptPlay();
-            }
-          }).catch(() => {
-            attemptPlay();
-          });
-        }, delay);
-      }).catch(() => {
-        const delay = 1500;
-        autoplayRetryTimerRef.current = setTimeout(attemptPlay, delay);
-      });
+        if (isPlayingRef.current) {
+          console.log('[Autoplay] Confirmed playing after attempt #' + attempt);
+          autoplayInProgressRef.current = false;
+        } else {
+          console.log(`[Autoplay] Still not playing, will retry`);
+          attemptPlay();
+        }
+      }, 2000);
     };
 
     autoplayRetryTimerRef.current = setTimeout(attemptPlay, 500);
@@ -424,21 +413,25 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     setPlayerError(false);
     setError(null);
     
-    if (playerRef.current) {
-      void playerRef.current.getDuration().then((dur: number) => {
-        if (dur > 0 && mountedRef.current) {
-          console.log('[Autoplay] Duration from onReady:', dur);
-          setDuration(dur);
-        }
-      }).catch((err: any) => {
-        console.error('[Autoplay] Error getting duration on ready:', err);
-      });
-      
-      if (autoplay && !autoplayTriggeredRef.current) {
-        autoplayTriggeredRef.current = true;
-        console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
-        startAutoplay();
+    try {
+      if (playerRef.current && typeof playerRef.current.getDuration === 'function') {
+        void playerRef.current.getDuration().then((dur: number) => {
+          if (dur > 0 && mountedRef.current) {
+            console.log('[Autoplay] Duration from onReady:', dur);
+            setDuration(dur);
+          }
+        }).catch((err: any) => {
+          console.log('[Autoplay] Could not get duration on ready:', err);
+        });
       }
+    } catch (e) {
+      console.log('[Autoplay] getDuration call failed:', e);
+    }
+
+    if (autoplay && !autoplayTriggeredRef.current) {
+      autoplayTriggeredRef.current = true;
+      console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
+      startAutoplay();
     }
   }, [autoplay, startAutoplay]);
 
@@ -455,41 +448,49 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
-    if (state === 'ended') {
-      if (onEndCalledRef.current) {
-        console.log('onEnd already called for this video, ignoring');
+    try {
+      if (state === 'ended') {
+        if (onEndCalledRef.current) {
+          console.log('onEnd already called for this video, ignoring');
+          return;
+        }
+        onEndCalledRef.current = true;
+        commitPlayState(false);
+        stopProgressTracking();
+        setCurrentTime(0);
+        console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
+        setTimeout(() => {
+          if (mountedRef.current) {
+            onEndRef.current?.();
+          }
+        }, 100);
         return;
       }
-      onEndCalledRef.current = true;
-      commitPlayState(false);
-      stopProgressTracking();
-      setCurrentTime(0);
-      console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
-      onEndRef.current?.();
-      return;
-    }
 
-    if (state === 'playing') {
-      if (autoplayInProgressRef.current) {
-        console.log('[Autoplay] Confirmed playing via state change');
-        autoplayInProgressRef.current = false;
-        clearAutoplayTimer();
+      if (state === 'playing') {
+        if (autoplayInProgressRef.current) {
+          console.log('[Autoplay] Confirmed playing via state change');
+          autoplayInProgressRef.current = false;
+          clearAutoplayTimer();
+        }
+        if (!isPlayingRef.current) {
+          commitPlayState(true);
+        }
+        startProgressTracking();
+      } else if (state === 'paused') {
+        if (!autoplayInProgressRef.current && isPlayingRef.current) {
+          commitPlayState(false);
+        }
+        if (!autoplayInProgressRef.current) {
+          stopProgressTracking();
+        }
+      } else if (state === 'buffering') {
+        console.log('[Autoplay] Player buffering...');
+      } else if (state === 'unstarted') {
+        console.log('[Autoplay] Player unstarted');
       }
-      if (!isPlayingRef.current) {
-        commitPlayState(true);
-      }
-      startProgressTracking();
-    } else if (state === 'paused') {
-      if (!autoplayInProgressRef.current && isPlayingRef.current) {
-        commitPlayState(false);
-      }
-      if (!autoplayInProgressRef.current) {
-        stopProgressTracking();
-      }
-    } else if (state === 'buffering') {
-      console.log('[Autoplay] Player buffering...');
-    } else if (state === 'unstarted') {
-      console.log('[Autoplay] Player unstarted');
+    } catch (e) {
+      console.error('Error in onStateChange:', e);
     }
   }, [commitPlayState, startProgressTracking, stopProgressTracking, clearAutoplayTimer]);
 

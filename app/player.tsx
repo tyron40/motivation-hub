@@ -92,21 +92,30 @@ export default function PlayerScreen() {
   }, [setCurrentTime, setDuration]);
 
   const handleEnd = useCallback(async () => {
-    if (onEndLockedRef.current) {
-      console.log('onEnd already processing, skipping');
-      return;
-    }
-    onEndLockedRef.current = true;
-    console.log('Audio playback ended');
-    midpointAdShownRef.current = false;
-    if (canShowAds) {
-      const shown = await tryShowInterstitialOnTransition();
-      if (shown) {
-        console.log('[Ad] Speech ended — showed interstitial');
+    try {
+      if (onEndLockedRef.current) {
+        console.log('onEnd already processing, skipping');
+        return;
       }
+      onEndLockedRef.current = true;
+      console.log('Audio playback ended');
+      midpointAdShownRef.current = false;
+      if (canShowAds) {
+        try {
+          const shown = await tryShowInterstitialOnTransition();
+          if (shown) {
+            console.log('[Ad] Speech ended — showed interstitial');
+          }
+        } catch (adErr) {
+          console.log('Ad error on end, continuing:', adErr);
+        }
+      }
+      handleNext();
+    } catch (err) {
+      console.error('Error in handleEnd:', err);
+    } finally {
+      setTimeout(() => { onEndLockedRef.current = false; }, 2000);
     }
-    handleNext();
-    setTimeout(() => { onEndLockedRef.current = false; }, 2000);
   }, [canShowAds, tryShowInterstitialOnTransition, handleNext]);
 
   const handleProgressWithAds = useCallback((time: number, dur: number) => {
