@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
-import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Activity, Crown, Zap, Shield, ImageIcon, Film } from 'lucide-react-native';
+import { User, Clock, Heart, Flame, Award, Settings, MessageCircle, ChevronRight, LogOut, ListMusic, Sparkles, Camera, Church, Crown, Zap, Shield, ImageIcon, Film } from 'lucide-react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -344,14 +344,7 @@ function ProfileContent() {
                   onPress={() => router.push('/settings')}
                   colors={colors}
                 />
-                <View style={styles.menuDivider} />
-                <MenuItem 
-                  icon={Activity} 
-                  iconColor={colors.categories.productivity} 
-                  label="Diagnostics"
-                  onPress={() => router.push('/diagnostic')}
-                  colors={colors}
-                />
+
               </View>
             </View>
 
