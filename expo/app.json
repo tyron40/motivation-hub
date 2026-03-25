@@ -2,7 +2,7 @@
   "expo": {
     "name": "Motivation Fuel",
     "slug": "motivational-app",
-    "version": "1.1.7",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "122",
+      "buildNumber": "124",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -54,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tyron40.motivationalapp",
-      "versionCode": 122,
+      "versionCode": 124,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
