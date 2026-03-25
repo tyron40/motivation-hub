@@ -123,6 +123,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => { mountedRef.current = false; };
   }, []);
 
+  const desiredPlayRef = useRef(false);
+
+  const requestPlayState = useCallback((newState: boolean) => {
+    if (!mountedRef.current) return;
+    console.log('requestPlayState:', isPlayingRef.current, '->', newState);
+    desiredPlayRef.current = newState;
+    setIsPlaying(newState);
+    onPlayingChangeRef.current?.(newState);
+  }, []);
+
   const commitPlayState = useCallback((newState: boolean) => {
     if (!mountedRef.current) return;
     console.log('commitPlayState:', isPlayingRef.current, '->', newState);
@@ -139,17 +149,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       const newState = !isPlayingRef.current;
       console.log('Ref togglePlay:', isPlayingRef.current, '->', newState);
-      commitPlayState(newState);
+      requestPlayState(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
       if (isPlayingRef.current) return;
-      commitPlayState(true);
+      requestPlayState(true);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
       if (!isPlayingRef.current) return;
-      commitPlayState(false);
+      requestPlayState(false);
     },
     seekForward: (seconds = 15) => {
       if (!playerReadyRef.current || !playerRef.current) return;
@@ -173,7 +183,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     },
     getIsPlaying: () => isPlayingRef.current,
-  }), [commitPlayState]);
+  }), [requestPlayState]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -371,45 +381,47 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('[Autoplay] Starting autoplay for:', videoId);
 
     const attemptPlay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId || !autoplayInProgressRef.current) {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
         autoplayInProgressRef.current = false;
         return;
       }
       autoplayAttemptRef.current += 1;
       const attempt = autoplayAttemptRef.current;
 
-      if (attempt > 5) {
+      if (attempt > 6) {
         console.log(`[Autoplay] Giving up after ${attempt} attempts`);
         autoplayInProgressRef.current = false;
         return;
       }
 
       if (!playerRef.current || !playerReadyRef.current) {
-        console.log(`[Autoplay] Player not ready, retry #${attempt} in 1s`);
-        autoplayRetryTimerRef.current = setTimeout(attemptPlay, 1000);
+        console.log(`[Autoplay] Player not ready, retry #${attempt} in 700ms`);
+        autoplayRetryTimerRef.current = setTimeout(attemptPlay, 700);
         return;
       }
 
-      console.log(`[Autoplay] Attempt #${attempt} — setting play state to true`);
-      commitPlayState(true);
+      console.log(`[Autoplay] Attempt #${attempt} — forcing false->true transition`);
+      requestPlayState(false);
+
+      setTimeout(() => {
+        if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+        requestPlayState(true);
+      }, 150);
 
       autoplayRetryTimerRef.current = setTimeout(() => {
         if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
           autoplayInProgressRef.current = false;
           return;
         }
-        if (isPlayingRef.current) {
-          console.log('[Autoplay] Confirmed playing after attempt #' + attempt);
-          autoplayInProgressRef.current = false;
-        } else {
-          console.log(`[Autoplay] Still not playing, will retry`);
+        if (autoplayInProgressRef.current) {
+          console.log(`[Autoplay] Not confirmed playing yet, retrying...`);
           attemptPlay();
         }
-      }, 2000);
+      }, 1800);
     };
 
-    autoplayRetryTimerRef.current = setTimeout(attemptPlay, 500);
-  }, [autoplay, videoId, commitPlayState]);
+    autoplayRetryTimerRef.current = setTimeout(attemptPlay, 400);
+  }, [autoplay, videoId, requestPlayState]);
 
   useEffect(() => {
     return () => clearAutoplayTimer();
@@ -449,59 +461,60 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     setPlayerError(true);
     setPlayerReady(false);
-    commitPlayState(false);
+    requestPlayState(false);
     stopProgressTracking();
-  }, [commitPlayState, stopProgressTracking]);
+  }, [requestPlayState, stopProgressTracking]);
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
-    try {
-      if (state === 'ended') {
-        if (onEndCalledRef.current) {
-          console.log('onEnd already called for this video, ignoring');
-          return;
-        }
-        onEndCalledRef.current = true;
-        commitPlayState(false);
+    if (state === 'playing') {
+      autoplayInProgressRef.current = false;
+      clearAutoplayTimer();
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      onPlayingChangeRef.current?.(true);
+      startProgressTracking();
+      return;
+    }
+
+    if (state === 'paused') {
+      if (!autoplayInProgressRef.current) {
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        onPlayingChangeRef.current?.(false);
         stopProgressTracking();
-        setCurrentTime(0);
-        console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
-        setTimeout(() => {
-          if (mountedRef.current) {
-            onEndRef.current?.();
-          }
-        }, 100);
+      }
+      return;
+    }
+
+    if (state === 'ended') {
+      if (onEndCalledRef.current) {
+        console.log('onEnd already called for this video, ignoring');
         return;
       }
-
-      if (state === 'playing') {
-        if (autoplayInProgressRef.current) {
-          console.log('[Autoplay] Confirmed playing via state change');
-          autoplayInProgressRef.current = false;
-          clearAutoplayTimer();
+      onEndCalledRef.current = true;
+      autoplayInProgressRef.current = false;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      stopProgressTracking();
+      setCurrentTime(0);
+      console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          onEndRef.current?.();
         }
-        if (!isPlayingRef.current) {
-          commitPlayState(true);
-        }
-        startProgressTracking();
-      } else if (state === 'paused') {
-        if (!autoplayInProgressRef.current && isPlayingRef.current) {
-          commitPlayState(false);
-        }
-        if (!autoplayInProgressRef.current) {
-          stopProgressTracking();
-        }
-      } else if (state === 'buffering') {
-        console.log('[Autoplay] Player buffering...');
-      } else if (state === 'unstarted') {
-        console.log('[Autoplay] Player unstarted');
-      }
-    } catch (e) {
-      console.error('Error in onStateChange:', e);
+      }, 100);
+      return;
     }
-  }, [commitPlayState, startProgressTracking, stopProgressTracking, clearAutoplayTimer]);
+
+    if (state === 'buffering') {
+      console.log('[Autoplay] Player buffering...');
+    } else if (state === 'unstarted') {
+      console.log('[Autoplay] Player unstarted');
+    }
+  }, [clearAutoplayTimer, startProgressTracking, stopProgressTracking]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -525,8 +538,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newState = !isPlayingRef.current;
     console.log(isPlayingRef.current ? 'Pausing video' : 'Playing video');
-    commitPlayState(newState);
-  }, [playerReady, playerError, commitPlayState]);
+    requestPlayState(newState);
+  }, [playerReady, playerError, requestPlayState]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
