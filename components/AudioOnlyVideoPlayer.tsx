@@ -133,9 +133,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     onPlayingChangeRef.current?.(newState);
   }, []);
 
-  const commitPlayState = useCallback((newState: boolean) => {
+  const confirmPlayState = useCallback((newState: boolean) => {
     if (!mountedRef.current) return;
-    console.log('commitPlayState:', isPlayingRef.current, '->', newState);
+    console.log('confirmPlayState:', isPlayingRef.current, '->', newState);
     isPlayingRef.current = newState;
     setIsPlaying(newState);
     onPlayingChangeRef.current?.(newState);
@@ -461,29 +461,27 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     setPlayerError(true);
     setPlayerReady(false);
-    requestPlayState(false);
+    autoplayInProgressRef.current = false;
+    confirmPlayState(false);
     stopProgressTracking();
-  }, [requestPlayState, stopProgressTracking]);
+  }, [confirmPlayState, stopProgressTracking]);
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
     if (state === 'playing') {
+      console.log('[Autoplay] Confirmed playing via state change');
       autoplayInProgressRef.current = false;
       clearAutoplayTimer();
-      isPlayingRef.current = true;
-      setIsPlaying(true);
-      onPlayingChangeRef.current?.(true);
+      confirmPlayState(true);
       startProgressTracking();
       return;
     }
 
     if (state === 'paused') {
       if (!autoplayInProgressRef.current) {
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-        onPlayingChangeRef.current?.(false);
+        confirmPlayState(false);
         stopProgressTracking();
       }
       return;
@@ -496,8 +494,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       onEndCalledRef.current = true;
       autoplayInProgressRef.current = false;
-      isPlayingRef.current = false;
-      setIsPlaying(false);
+      confirmPlayState(false);
       stopProgressTracking();
       setCurrentTime(0);
       console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
@@ -514,7 +511,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } else if (state === 'unstarted') {
       console.log('[Autoplay] Player unstarted');
     }
-  }, [clearAutoplayTimer, startProgressTracking, stopProgressTracking]);
+  }, [clearAutoplayTimer, confirmPlayState, startProgressTracking, stopProgressTracking]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -636,14 +633,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
             setTimeout(() => {
               if (mountedRef.current) {
                 postMessageToWebPlayer('playVideo');
-                commitPlayState(true);
+                requestPlayState(true);
               }
             }, 300);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
           if (state === 1) {
-            if (!isPlayingRef.current) commitPlayState(true);
+            console.log('[Web YT] Confirmed playing via state change');
+            autoplayInProgressRef.current = false;
+            confirmPlayState(true);
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
@@ -651,11 +650,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
               }, 500);
             }
           } else if (state === 2) {
-            if (isPlayingRef.current && !autoplayInProgressRef.current) commitPlayState(false);
+            if (!autoplayInProgressRef.current) {
+              confirmPlayState(false);
+            }
           } else if (state === 0) {
             if (!onEndCalledRef.current) {
               onEndCalledRef.current = true;
-              commitPlayState(false);
+              autoplayInProgressRef.current = false;
+              confirmPlayState(false);
               setCurrentTime(0);
               setTimeout(() => { if (mountedRef.current) onEndRef.current?.(); }, 100);
             }
@@ -683,7 +685,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webProgressIntervalRef.current = null;
       }
     };
-  }, [videoId, autoplay, commitPlayState, postMessageToWebPlayer]);
+  }, [videoId, autoplay, confirmPlayState, requestPlayState, postMessageToWebPlayer]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
