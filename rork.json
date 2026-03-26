@@ -2,7 +2,7 @@
   "apps": [
     {
       "name": "Expo",
-      "path": ".",
+      "path": "expo",
       "framework": "react-native"
     }
   ]
