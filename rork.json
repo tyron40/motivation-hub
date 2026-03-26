@@ -3,7 +3,7 @@
   "apps": [
     {
       "name": "Motivation Fuel",
-      "path": ".",
+      "path": "expo",
       "framework": "react-native"
     }
   ]
