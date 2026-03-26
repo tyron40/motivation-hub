@@ -4,27 +4,13 @@
     "strict": true,
     "paths": {
       "@/*": [
-        "../*"
+        "./*"
       ]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx",
-    "../hooks/**/*.ts",
-    "../hooks/**/*.tsx",
-    "../components/**/*.ts",
-    "../components/**/*.tsx",
-    "../services/**/*.ts",
-    "../services/**/*.tsx",
-    "../lib/**/*.ts",
-    "../lib/**/*.tsx",
-    "../constants/**/*.ts",
-    "../constants/**/*.tsx",
-    "../types/**/*.ts",
-    "../types/**/*.tsx",
-    "../mocks/**/*.ts",
-    "../mocks/**/*.tsx"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules",
