@@ -1,8 +1,14 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
       "name": "Expo",
       "path": ".",
+      "framework": "react-native"
+    },
+    {
+      "name": "Motivation Hub",
+      "path": "expo",
       "framework": "react-native"
     }
   ]
