@@ -1,4 +1,4 @@
-const Colors = {
+export default {
   primary: '#3B82F6',
   secondary: '#60A5FA',
   accent: '#93C5FD',
@@ -8,9 +8,6 @@ const Colors = {
   surface: '#1E293B',
   text: '#FFFFFF',
   textSecondary: '#94A3B8',
-  tint: '#3B82F6',
-  tabIconDefault: '#64748B',
-  tabIconSelected: '#3B82F6',
   gradient: {
     start: '#1E40AF',
     middle: '#3B82F6',
@@ -28,14 +25,5 @@ const Colors = {
     active: '#3B82F6',
     inactive: '#64748B',
     background: '#1E293B',
-  },
-  light: {
-    text: '#000',
-    background: '#fff',
-    tint: '#3B82F6',
-    tabIconDefault: '#ccc',
-    tabIconSelected: '#3B82F6',
-  },
+  }
 };
-
-export default Colors;

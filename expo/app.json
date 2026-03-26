@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Motivation Fuel",
-    "slug": "k91c9069s42awypgl25pj",
-    "version": "1.0.0",
+    "slug": "motivational-app",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,15 +14,55 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "app.rork.k91c9069s42awypgl25pj"
+      "supportsTablet": true,
+      "bundleIdentifier": "app.rork.motivational-speech-app",
+      "buildNumber": "124",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSMicrophoneUsageDescription": "Motivation Fuel uses your microphone only when you press and hold to speak with the Voice Coach feature.",
+        "NSPhotoLibraryUsageDescription": "Motivation Fuel lets you personalize your profile by selecting a photo from your library.",
+        "NSCameraUsageDescription": "Motivation Fuel allows you to take a new photo for your profile picture.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "googleapis.com": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false
+            },
+            "vercel.app": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false
+            },
+            "youtube.com": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false
+            },
+            "supabase.co": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": false
+            }
+          }
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.k91c9069s42awypgl25pj"
+      "package": "com.tyron40.motivationalapp",
+      "versionCode": 124,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -34,11 +74,24 @@
           "origin": "https://rork.com/"
         }
       ],
-      "expo-font",
-      "expo-web-browser"
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Motivation Fuel uses your microphone only when you press and hold to speak with the Voice Coach feature."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Motivation Fuel lets you personalize your profile by selecting a photo from your library.",
+          "cameraPermission": "Motivation Fuel allows you to take a new photo for your profile picture."
+        }
+      ]
     ],
-    "experiments": {
-      "typedRoutes": true
+    "extra": {
+      "eas": {
+        "projectId": "7389ef4c-4537-4e7b-9081-c30a7e9c22bd"
+      }
     }
   }
 }
