@@ -1,20 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+// template
+import { Link, Stack } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
 
 export default function NotFoundScreen() {
-  const router = useRouter();
-
   return (
     <>
-      <Stack.Screen options={{ title: 'Not Found' }} />
+      <Stack.Screen options={{ title: "Oops!" }} />
       <View style={styles.container}>
-        <Text style={styles.emoji}>🔍</Text>
-        <Text style={styles.title}>Page Not Found</Text>
-        <Text style={styles.subtitle}>The page you are looking for does not exist.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.replace('/')}>
-          <Text style={styles.buttonText}>Go Home</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>This screen doesn&apos;t exist.</Text>
+
+        <Link href="/" style={styles.link}>
+          <Text style={styles.linkText}>Go to home screen!</Text>
+        </Link>
       </View>
     </>
   );
@@ -23,36 +20,20 @@ export default function NotFoundScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A1A2E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  emoji: {
-    fontSize: 64,
-    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: 'bold' as const,
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: "bold",
   },
-  subtitle: {
-    color: '#9CA3AF',
-    fontSize: 16,
-    textAlign: 'center' as const,
-    marginBottom: 32,
+  link: {
+    marginTop: 15,
+    paddingVertical: 15,
   },
-  button: {
-    backgroundColor: '#6C63FF',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600' as const,
+  linkText: {
+    fontSize: 14,
+    color: "#2e78b7",
   },
 });

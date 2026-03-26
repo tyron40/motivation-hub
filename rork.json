@@ -1,7 +1,8 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
-      "name": "Expo",
+      "name": "Motivation Fuel",
       "path": ".",
       "framework": "react-native"
     }
