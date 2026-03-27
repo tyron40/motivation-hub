@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -35,7 +35,7 @@ export default function PlayerScreen() {
     setCurrentTime,
     setDuration,
   } = useSpeechContext();
-  const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition } = useAdMob();
+  const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition, isShowingAd } = useAdMob();
   const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -43,6 +43,8 @@ export default function PlayerScreen() {
   const quarterAdShownRef = useRef(false);
   const openAdShownRef = useRef(false);
   const onEndLockedRef = useRef(false);
+  const wasPlayingBeforeAdRef = useRef(false);
+  const adJustFinishedRef = useRef(false);
   const styles = getStyles(colors);
 
   useEffect(() => {
@@ -56,6 +58,23 @@ export default function PlayerScreen() {
       audioPlayerRef.current = null;
     };
   }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
+
+  useEffect(() => {
+    if (isShowingAd) {
+      console.log('[Ad] Ad started showing, saving play state');
+      wasPlayingBeforeAdRef.current = localPlayerRef.current?.getIsPlaying() ?? false;
+    } else if (wasPlayingBeforeAdRef.current) {
+      console.log('[Ad] Ad finished, resuming playback');
+      adJustFinishedRef.current = true;
+      wasPlayingBeforeAdRef.current = false;
+      setTimeout(() => {
+        if (localPlayerRef.current) {
+          localPlayerRef.current.resumeAfterAd();
+        }
+        adJustFinishedRef.current = false;
+      }, 600);
+    }
+  }, [isShowingAd]);
 
   useEffect(() => {
     if (localPlayerRef.current) {
@@ -120,16 +139,19 @@ export default function PlayerScreen() {
 
   const handleProgressWithAds = useCallback((time: number, dur: number) => {
     handleProgressChange(time, dur);
+    if (adJustFinishedRef.current) return;
     if (canShowAds && dur > 0) {
       const progress = time / dur;
       if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
         quarterAdShownRef.current = true;
         console.log('[Ad] 25% reached — showing interstitial');
+        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
       if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
         midpointAdShownRef.current = true;
         console.log('[Ad] Midpoint reached — showing interstitial');
+        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
     }
