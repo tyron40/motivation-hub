@@ -490,11 +490,9 @@ const ClipPage = React.memo(function ClipPage({
     const t = setTimeout(() => {
       if (!mountedRef.current) return;
       setShouldPlay(false);
-      setIsPlaying(false);
       setTimeout(() => {
         if (!mountedRef.current) return;
         setShouldPlay(true);
-        setIsPlaying(true);
       }, 120);
     }, 250);
 
@@ -533,7 +531,6 @@ const ClipPage = React.memo(function ClipPage({
       setTimeout(() => {
         if (!mountedRef.current) return;
         setShouldPlay(true);
-        setIsPlaying(true);
       }, 120);
       return;
     }
@@ -578,7 +575,6 @@ const ClipPage = React.memo(function ClipPage({
               setTimeout(() => {
                 if (!mountedRef.current) return;
                 setShouldPlay(true);
-                setIsPlaying(true);
                 try {
                   webIframeRef.current?.contentWindow?.postMessage(
                     JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'

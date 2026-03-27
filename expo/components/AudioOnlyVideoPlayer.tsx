@@ -133,13 +133,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     onPlayingChangeRef.current?.(newState);
   }, []);
 
-  const commitPlayState = useCallback((newState: boolean) => {
-    if (!mountedRef.current) return;
-    console.log('commitPlayState:', isPlayingRef.current, '->', newState);
-    isPlayingRef.current = newState;
-    setIsPlaying(newState);
-    onPlayingChangeRef.current?.(newState);
-  }, []);
 
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
@@ -633,17 +626,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
           if (autoplay && !autoplayTriggeredRef.current) {
             autoplayTriggeredRef.current = true;
+            autoplayInProgressRef.current = true;
             setTimeout(() => {
               if (mountedRef.current) {
                 postMessageToWebPlayer('playVideo');
-                commitPlayState(true);
+                requestPlayState(true);
               }
             }, 300);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
           if (state === 1) {
-            if (!isPlayingRef.current) commitPlayState(true);
+            autoplayInProgressRef.current = false;
+            isPlayingRef.current = true;
+            setIsPlaying(true);
+            onPlayingChangeRef.current?.(true);
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
@@ -651,11 +648,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
               }, 500);
             }
           } else if (state === 2) {
-            if (isPlayingRef.current && !autoplayInProgressRef.current) commitPlayState(false);
+            if (!autoplayInProgressRef.current) {
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              onPlayingChangeRef.current?.(false);
+            }
           } else if (state === 0) {
             if (!onEndCalledRef.current) {
               onEndCalledRef.current = true;
-              commitPlayState(false);
+              autoplayInProgressRef.current = false;
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              onPlayingChangeRef.current?.(false);
               setCurrentTime(0);
               setTimeout(() => { if (mountedRef.current) onEndRef.current?.(); }, 100);
             }
@@ -683,7 +687,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webProgressIntervalRef.current = null;
       }
     };
-  }, [videoId, autoplay, commitPlayState, postMessageToWebPlayer]);
+  }, [videoId, autoplay, requestPlayState, postMessageToWebPlayer]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;

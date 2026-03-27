@@ -50,6 +50,13 @@ export const motivationalFlyers: MotivationalFlyer[] = [
     accent: '#C0392B',
   },
   {
+    id: 'flyer-featured-7',
+    title: 'Coach With Fire',
+    quote: 'A great coach doesn\'t just teach the game — they ignite the fire that makes players believe they can win it.',
+    imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/hg5aerpcv5h4lr9xks2mh',
+    accent: '#E74C3C',
+  },
+  {
     id: 'flyer-1',
     title: 'Discipline Over Mood',
     quote: 'You don\'t need to feel ready. You need to move anyway.',

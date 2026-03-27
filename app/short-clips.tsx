@@ -482,19 +482,16 @@ const ClipPage = React.memo(function ClipPage({
   useEffect(() => {
     if (!isActive) {
       setShouldPlay(false);
-      setIsPlaying(false);
       return;
     }
     if (!playerReady) return;
 
     autoplayInProgressRef.current = true;
-    console.log('[ClipAutoplay] Starting autoplay for:', clip.youtubeId);
     const t = setTimeout(() => {
       if (!mountedRef.current) return;
       setShouldPlay(false);
       setTimeout(() => {
         if (!mountedRef.current) return;
-        console.log('[ClipAutoplay] Requesting play for:', clip.youtubeId);
         setShouldPlay(true);
       }, 120);
     }, 250);
@@ -503,7 +500,7 @@ const ClipPage = React.memo(function ClipPage({
   }, [isActive, playerReady, clip.youtubeId]);
 
   const onStateChange = useCallback((state: string) => {
-    console.log('[ClipState]', state, clip.youtubeId);
+    console.log('Clip player state:', state, clip.youtubeId);
 
     if (stateDebounceRef.current) {
       clearTimeout(stateDebounceRef.current);
@@ -511,7 +508,6 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'playing') {
-      console.log('[ClipState] Confirmed playing:', clip.youtubeId);
       autoplayInProgressRef.current = false;
       if (!mountedRef.current) return;
       setIsPlaying(true);
@@ -529,7 +525,6 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'ended') {
-      console.log('[ClipState] Ended, looping:', clip.youtubeId);
       autoplayInProgressRef.current = true;
       setShouldPlay(false);
       setIsPlaying(false);
@@ -565,7 +560,6 @@ const ClipPage = React.memo(function ClipPage({
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {
-            console.log('[WebClip] Confirmed playing:', clip.youtubeId);
             autoplayInProgressRef.current = false;
             if (mountedRef.current) { setIsPlaying(true); setShouldPlay(true); setPlayerReady(true); }
           } else if (st === 2) {
@@ -595,7 +589,7 @@ const ClipPage = React.memo(function ClipPage({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [showPlayer, isActive, clip.youtubeId]);
+  }, [showPlayer, isActive]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
