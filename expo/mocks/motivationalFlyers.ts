@@ -51,8 +51,8 @@ export const motivationalFlyers: MotivationalFlyer[] = [
   },
   {
     id: 'flyer-featured-7',
-    title: 'Coach With Fire',
-    quote: 'As iron sharpens iron, so does one person sharpen another.',
+    title: 'Iron Sharpens Iron',
+    quote: 'As iron sharpens iron, so does one person sharpens another. -Proverbs 27:17',
     imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/hg5aerpcv5h4lr9xks2mh',
     accent: '#E74C3C',
   },
