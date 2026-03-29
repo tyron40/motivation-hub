@@ -25,9 +25,9 @@ import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 52) / 2;
-const CARD_HEIGHT = CARD_WIDTH * 1.45;
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 52) / 2);
+const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.45);
 
 const LIKED_FLYERS_KEY = 'liked_flyers';
 
@@ -117,6 +117,34 @@ export default function FlyersScreen() {
     } finally {
       setIsPickingImage(false);
     }
+  }, []);
+
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [loadingImages, setLoadingImages] = useState<Set<string>>(new Set());
+
+  const handleImageError = useCallback((flyerId: string) => {
+    console.log('Image failed to load for flyer:', flyerId);
+    setFailedImages(prev => {
+      const next = new Set(prev);
+      next.add(flyerId);
+      return next;
+    });
+  }, []);
+
+  const handleImageLoadStart = useCallback((flyerId: string) => {
+    setLoadingImages(prev => {
+      const next = new Set(prev);
+      next.add(flyerId);
+      return next;
+    });
+  }, []);
+
+  const handleImageLoadEnd = useCallback((flyerId: string) => {
+    setLoadingImages(prev => {
+      const next = new Set(prev);
+      next.delete(flyerId);
+      return next;
+    });
   }, []);
 
   const allFlyers = [...motivationalFlyers, ...customFlyers];
@@ -285,7 +313,25 @@ export default function FlyersScreen() {
               style={[styles.card, index % 2 === 0 ? styles.cardLeft : styles.cardRight]}
               testID={`flyer-grid-${flyer.id}`}
             >
-              <Image source={{ uri: flyer.imageUrl }} style={styles.cardImage} />
+              {failedImages.has(flyer.id) ? (
+                <View style={[styles.cardImage, styles.cardImageFallback, { backgroundColor: flyer.accent + '30' }]}>
+                  <Quote size={28} color={flyer.accent} />
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: flyer.imageUrl }}
+                  style={styles.cardImage}
+                  resizeMode="cover"
+                  onLoadStart={() => handleImageLoadStart(flyer.id)}
+                  onLoadEnd={() => handleImageLoadEnd(flyer.id)}
+                  onError={() => handleImageError(flyer.id)}
+                />
+              )}
+              {loadingImages.has(flyer.id) && (
+                <View style={styles.cardLoadingOverlay}>
+                  <ActivityIndicator size="small" color="#fff" />
+                </View>
+              )}
               {flyer.quote ? (
                 <LinearGradient
                   colors={['transparent', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
@@ -329,7 +375,7 @@ export default function FlyersScreen() {
             <Animated.View style={[styles.modalContent, { transform: [{ scale: scaleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
               {selectedFlyer && (
                 <View style={styles.modalCard}>
-                  <Image source={{ uri: selectedFlyer.imageUrl }} style={styles.modalImage} />
+                  <Image source={{ uri: selectedFlyer.imageUrl }} style={styles.modalImage} resizeMode="cover" />
                   <LinearGradient
                     colors={selectedFlyer.quote ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)'] : ['transparent', 'rgba(0,0,0,0.35)']}
                     style={styles.modalGradient}
@@ -533,6 +579,18 @@ const getStyles = (colors: any) => StyleSheet.create({
     width: '100%' as const,
     height: '100%' as const,
     position: 'absolute' as const,
+    backgroundColor: '#1a1a1a',
+  },
+  cardImageFallback: {
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  cardLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    zIndex: 1,
   },
   cardGradient: {
     flex: 1,
