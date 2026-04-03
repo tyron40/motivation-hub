@@ -1,34 +1,19 @@
-const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
+function getApiBase(): string {
+  const raw = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
+  const trimmed = raw.endsWith('/') ? raw.slice(0, -1) : raw;
 
-function sanitizeBaseUrl(input: string | undefined): string {
-  const unsafe = input ?? '';
-  const lowered = unsafe.toLowerCase();
-  const isBad = !unsafe ||
-    lowered.includes('rorktest.dev') ||
-    lowered.includes('localhost') ||
-    lowered.startsWith('http://') ||
-    lowered.startsWith('https://a-');
+  if (trimmed && trimmed.startsWith('https://') && !trimmed.includes('localhost')) {
+    return trimmed;
+  }
 
-  const finalUrl = isBad ? PRODUCTION_API_URL : unsafe;
-  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+  console.warn('⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is not set or invalid, API calls may fail');
+  return trimmed || '';
 }
 
-const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+const API_BASE = getApiBase();
 
-console.log('🔧 ========================================');
-console.log('🔧 API Client Configuration');
-console.log('🔧 ========================================');
-console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
-console.log('🔧 FINAL URL BEING USED:', API_BASE);
-console.log('🔧 Basic auth user present:', !!process.env.EXPO_PUBLIC_BASIC_AUTH_USER);
-console.log('🔧 Basic auth header present:', !!process.env.EXPO_PUBLIC_API_AUTH_HEADER);
-console.log('🔧 ========================================');
-
-if (API_BASE.includes('rorktest.dev')) {
-  console.warn('⚠️ WARNING: Using Rork development URL!');
-  console.warn('⚠️ This will NOT work on physical devices. Forcing production URL.');
-}
+console.log('🔧 API Client | EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+console.log('🔧 API Client | FINAL URL:', API_BASE);
 
 const DEFAULT_TIMEOUT = 45000;
 const CONNECTION_TEST_TIMEOUT = 10000;

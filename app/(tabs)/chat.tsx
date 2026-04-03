@@ -25,7 +25,7 @@ import PaywallModal from '@/components/PaywallModal';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -349,14 +349,30 @@ function ChatScreenContent() {
       ];
 
       try {
-        console.log('🤖 Sending chat message via Rork Toolkit...');
+        console.log('🤖 Sending chat message...');
         console.log('📤 Messages count:', allMessages.length);
 
-        const completion = await generateText({
-          messages: allMessages,
-        });
+        let completion: string | null = null;
 
-        console.log('📥 Chat response received, length:', completion?.length);
+        try {
+          console.log('🤖 Trying Vercel backend /api/chat...');
+          const chatResult = await sendChatMessage({
+            messages: allMessages.map(m => ({
+              role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+              content: m.content,
+            })),
+          });
+          completion = chatResult.message;
+          console.log('✅ Vercel backend responded, length:', completion?.length);
+        } catch (backendError: any) {
+          console.warn('⚠️ Vercel backend failed:', backendError?.message);
+          console.log('🔄 Falling back to Rork Toolkit...');
+          const toolkitResult = await generateText({
+            messages: allMessages,
+          });
+          completion = toolkitResult;
+          console.log('✅ Toolkit responded, length:', completion?.length);
+        }
 
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format from AI');
