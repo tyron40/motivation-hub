@@ -1,34 +1,14 @@
-const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
-
-function sanitizeBaseUrl(input: string | undefined): string {
-  const unsafe = input ?? '';
-  const lowered = unsafe.toLowerCase();
-  const isBad = !unsafe ||
-    lowered.includes('rorktest.dev') ||
-    lowered.includes('localhost') ||
-    lowered.startsWith('http://') ||
-    lowered.startsWith('https://a-');
-
-  const finalUrl = isBad ? PRODUCTION_API_URL : unsafe;
-  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+function getApiBase(): string {
+  const rorkUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
+  if (rorkUrl) {
+    return rorkUrl.endsWith('/') ? rorkUrl.slice(0, -1) : rorkUrl;
+  }
+  return '';
 }
 
-const API_BASE = sanitizeBaseUrl(process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+const API_BASE = getApiBase();
 
-console.log('🔧 ========================================');
-console.log('🔧 API Client Configuration');
-console.log('🔧 ========================================');
-console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
-console.log('🔧 FINAL URL BEING USED:', API_BASE);
-console.log('🔧 Basic auth user present:', !!process.env.EXPO_PUBLIC_BASIC_AUTH_USER);
-console.log('🔧 Basic auth header present:', !!process.env.EXPO_PUBLIC_API_AUTH_HEADER);
-console.log('🔧 ========================================');
-
-if (API_BASE.includes('rorktest.dev')) {
-  console.warn('⚠️ WARNING: Using Rork development URL!');
-  console.warn('⚠️ This will NOT work on physical devices. Forcing production URL.');
-}
+console.log('🔧 API Client - Using URL:', API_BASE);
 
 const DEFAULT_TIMEOUT = 45000;
 const CONNECTION_TEST_TIMEOUT = 10000;
