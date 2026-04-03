@@ -25,6 +25,7 @@ import PaywallModal from '@/components/PaywallModal';
 import { generateText } from '@rork-ai/toolkit-sdk';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
+import { generateTextToSpeech } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -139,34 +140,14 @@ function ChatScreenContent() {
     try {
       console.log('🎤 Generating voice for message:', messageId);
       
-      const TOOLKIT_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
-      const apiUrl = `${TOOLKIT_URL}/tts/synthesize/`;
+      console.log('🎤 Calling TTS via backend API...');
       
-      console.log('🎤 Calling TTS API:', apiUrl);
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text.substring(0, 500),
-          voice: profile.preferredVoice || 'alloy',
-        }),
+      const data = await generateTextToSpeech({
+        text: text.substring(0, 500),
+        voice: (profile.preferredVoice || 'alloy') as any,
       });
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ TTS API error:', response.status, errorText);
-        throw new Error(`TTS API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
       console.log('✅ TTS response received');
-      
-      if (!data.audio || !data.audio.base64Data) {
-        throw new Error('Invalid TTS response format');
-      }
       
       const audioUrl = `data:${data.audio.mimeType};base64,${data.audio.base64Data}`;
       console.log('✅ Audio URL created');
