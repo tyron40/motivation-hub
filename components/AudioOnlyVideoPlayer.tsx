@@ -616,6 +616,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const webPlayerReadyRef = useRef(false);
   const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const webAutoplayRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const postMessageToWebPlayer = useCallback((command: string, args?: any) => {
     try {
@@ -709,10 +710,53 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (Platform.OS !== 'web') return;
     if (isPlaying) {
       postMessageToWebPlayer('playVideo');
-    } else {
+    } else if (!autoplayInProgressRef.current) {
       postMessageToWebPlayer('pauseVideo');
     }
   }, [isPlaying, postMessageToWebPlayer]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (!autoplay || !playerReady || !videoId) return;
+    if (autoplayTriggeredRef.current) return;
+
+    autoplayTriggeredRef.current = true;
+    autoplayInProgressRef.current = true;
+    let attempts = 0;
+
+    const kickAutoplay = () => {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      attempts += 1;
+      postMessageToWebPlayer('playVideo');
+      requestPlayState(true);
+
+      if (attempts >= 8) {
+        if (webAutoplayRetryRef.current) {
+          clearInterval(webAutoplayRetryRef.current);
+          webAutoplayRetryRef.current = null;
+        }
+      }
+    };
+
+    kickAutoplay();
+    webAutoplayRetryRef.current = setInterval(() => {
+      if (!autoplayInProgressRef.current) {
+        if (webAutoplayRetryRef.current) {
+          clearInterval(webAutoplayRetryRef.current);
+          webAutoplayRetryRef.current = null;
+        }
+        return;
+      }
+      kickAutoplay();
+    }, 700);
+
+    return () => {
+      if (webAutoplayRetryRef.current) {
+        clearInterval(webAutoplayRetryRef.current);
+        webAutoplayRetryRef.current = null;
+      }
+    };
+  }, [autoplay, playerReady, videoId, postMessageToWebPlayer, requestPlayState]);
 
   const webPlayerElement = Platform.OS === 'web' ? (
     <View style={styles.hiddenPlayer}>

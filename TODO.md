@@ -1,0 +1,6 @@
+- [ ] Inspect player entry points for autoplay flag consistency
+- [ ] Harden autoplay handshake logic in `components/AudioOnlyVideoPlayer.tsx`
+- [ ] Verify web autoplay fallback retry after navigation
+- [ ] Run app and test speech autoplay on navigation
+- [ ] Run app and test short-clip autoplay on navigation
+- [ ] Confirm mini-player playback continuity
