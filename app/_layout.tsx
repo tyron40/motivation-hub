@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Stack, Redirect } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Platform } from "react-native";
@@ -153,8 +153,6 @@ function RootLayoutNav() {
     return <LoadingScreen message="Loading your motivational coach..." />;
   }
 
-  const canAccessApp = isAuthenticated;
-
   return (
     <>
       <Stack screenOptions={{ 
@@ -165,97 +163,92 @@ function RootLayoutNav() {
         },
         headerTintColor: '#FFFFFF',
       }}>
-        {canAccessApp ? (
-          <>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen 
-              name="player" 
-              options={{ 
-                presentation: 'modal',
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="category/[id]" 
-              options={{ 
-                title: 'Category',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="voice-coach" 
-              options={{ 
-                presentation: 'modal',
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="settings" 
-              options={{ 
-                title: 'Settings',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="videos" 
-              options={{ 
-                title: 'Videos',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="video-player" 
-              options={{ 
-                presentation: 'modal',
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="playlists" 
-              options={{ 
-                title: 'My Playlists',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="coach-character" 
-              options={{ 
-                title: 'Choose Your Coach',
-                presentation: 'modal',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="church-motivation" 
-              options={{ 
-                title: 'Church Motivation',
-                headerShown: true,
-              }} 
-            />
-            <Stack.Screen 
-              name="flyers" 
-              options={{ 
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="short-clips" 
-              options={{ 
-                headerShown: false,
-              }} 
-            />
-          </>
-        ) : (
-          <Stack.Screen 
-            name="auth" 
-            options={{ 
-              headerShown: false,
-              gestureEnabled: false,
-            }} 
-          />
-        )}
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen 
+          name="auth" 
+          options={{ 
+            headerShown: false,
+            gestureEnabled: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="player" 
+          options={{ 
+            presentation: 'modal',
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="category/[id]" 
+          options={{ 
+            title: 'Category',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="voice-coach" 
+          options={{ 
+            presentation: 'modal',
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="settings" 
+          options={{ 
+            title: 'Settings',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="videos" 
+          options={{ 
+            title: 'Videos',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="video-player" 
+          options={{ 
+            presentation: 'modal',
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="playlists" 
+          options={{ 
+            title: 'My Playlists',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="coach-character" 
+          options={{ 
+            title: 'Choose Your Coach',
+            presentation: 'modal',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="church-motivation" 
+          options={{ 
+            title: 'Church Motivation',
+            headerShown: true,
+          }} 
+        />
+        <Stack.Screen 
+          name="flyers" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="short-clips" 
+          options={{ 
+            headerShown: false,
+          }} 
+        />
       </Stack>
-      {canAccessApp && <AudioPlayerWrapper />}
+      {isAuthenticated && <AudioPlayerWrapper />}
     </>
   );
 }
