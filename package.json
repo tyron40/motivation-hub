@@ -15,7 +15,7 @@
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.0.1",
-    "@rork-ai/toolkit-sdk": "^0.2.54",
+    "@rork-ai/toolkit-sdk": "0.2.54",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@supabase/supabase-js": "^2.74.0",
     "@tanstack/eslint-plugin-query": "^5.91.2",
@@ -70,7 +70,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@expo/ngrok": "4.0.0",
+    "@expo/ngrok": "4.1.3",
     "@types/react": "~19.1.10",
     "eslint": "9.31.0",
     "eslint-config-expo": "~10.0.0",
