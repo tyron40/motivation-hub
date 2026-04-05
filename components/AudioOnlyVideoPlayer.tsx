@@ -368,12 +368,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, []);
 
   const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayInitialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayAttemptRef = useRef(0);
   const mediaLoadedRef = useRef(false);
   const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayInProgressRef = useRef(false);
 
   const clearAutoplayTimer = useCallback(() => {
+    if (autoplayInitialTimerRef.current) {
+      clearTimeout(autoplayInitialTimerRef.current);
+      autoplayInitialTimerRef.current = null;
+    }
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
@@ -435,7 +440,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }, 1800);
     };
 
-    autoplayRetryTimerRef.current = setTimeout(attemptPlay, 400);
+    autoplayInitialTimerRef.current = setTimeout(attemptPlay, 400);
   }, [autoplay, videoId, requestPlayState]);
 
   useEffect(() => {
@@ -488,6 +493,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] Confirmed playing via state change');
       autoplayInProgressRef.current = false;
       clearAutoplayTimer();
+      autoplayTriggeredRef.current = true;
       confirmPlayState(true);
       startProgressTracking();
       return;
@@ -660,6 +666,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           if (state === 1) {
             console.log('[Web YT] Confirmed playing');
             autoplayInProgressRef.current = false;
+            autoplayTriggeredRef.current = true;
             confirmPlayState(true);
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {

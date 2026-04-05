@@ -460,14 +460,18 @@ const ClipPage = React.memo(function ClipPage({
   const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const autoplayInProgressRef = useRef(false);
-  const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayInitialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayAttemptRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (autoplayTimerRef.current) clearTimeout(autoplayTimerRef.current);
+      if (autoplayInitialTimerRef.current) clearTimeout(autoplayInitialTimerRef.current);
+      if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
+      if (autoplayToggleTimerRef.current) clearTimeout(autoplayToggleTimerRef.current);
     };
   }, []);
 
@@ -482,9 +486,17 @@ const ClipPage = React.memo(function ClipPage({
       setShowPlayer(false);
       setPlayerReady(false);
       autoplayInProgressRef.current = false;
-      if (autoplayTimerRef.current) {
-        clearTimeout(autoplayTimerRef.current);
-        autoplayTimerRef.current = null;
+      if (autoplayInitialTimerRef.current) {
+        clearTimeout(autoplayInitialTimerRef.current);
+        autoplayInitialTimerRef.current = null;
+      }
+      if (autoplayRetryTimerRef.current) {
+        clearTimeout(autoplayRetryTimerRef.current);
+        autoplayRetryTimerRef.current = null;
+      }
+      if (autoplayToggleTimerRef.current) {
+        clearTimeout(autoplayToggleTimerRef.current);
+        autoplayToggleTimerRef.current = null;
       }
     }
   }, [isActive, clip.youtubeId]);
@@ -512,7 +524,7 @@ const ClipPage = React.memo(function ClipPage({
 
       console.log(`[Clip Autoplay] Attempt #${attempt} for:`, clip.youtubeId);
       setShouldPlay(false);
-      autoplayTimerRef.current = setTimeout(() => {
+      autoplayToggleTimerRef.current = setTimeout(() => {
         if (!mountedRef.current || !isActive) return;
         setShouldPlay(true);
 
@@ -525,7 +537,7 @@ const ClipPage = React.memo(function ClipPage({
         }
       }, 150);
 
-      autoplayTimerRef.current = setTimeout(() => {
+      autoplayRetryTimerRef.current = setTimeout(() => {
         if (!mountedRef.current || !isActive) return;
         if (autoplayInProgressRef.current) {
           console.log(`[Clip Autoplay] Not confirmed yet, retrying...`);
@@ -534,10 +546,12 @@ const ClipPage = React.memo(function ClipPage({
       }, 2000);
     };
 
-    autoplayTimerRef.current = setTimeout(attemptAutoplay, 300);
+    autoplayInitialTimerRef.current = setTimeout(attemptAutoplay, 300);
 
     return () => {
-      if (autoplayTimerRef.current) clearTimeout(autoplayTimerRef.current);
+      if (autoplayInitialTimerRef.current) clearTimeout(autoplayInitialTimerRef.current);
+      if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
+      if (autoplayToggleTimerRef.current) clearTimeout(autoplayToggleTimerRef.current);
     };
   }, [isActive, playerReady, clip.youtubeId]);
 
@@ -552,9 +566,17 @@ const ClipPage = React.memo(function ClipPage({
     if (state === 'playing') {
       console.log('[Clip] Confirmed playing:', clip.youtubeId);
       autoplayInProgressRef.current = false;
-      if (autoplayTimerRef.current) {
-        clearTimeout(autoplayTimerRef.current);
-        autoplayTimerRef.current = null;
+      if (autoplayInitialTimerRef.current) {
+        clearTimeout(autoplayInitialTimerRef.current);
+        autoplayInitialTimerRef.current = null;
+      }
+      if (autoplayRetryTimerRef.current) {
+        clearTimeout(autoplayRetryTimerRef.current);
+        autoplayRetryTimerRef.current = null;
+      }
+      if (autoplayToggleTimerRef.current) {
+        clearTimeout(autoplayToggleTimerRef.current);
+        autoplayToggleTimerRef.current = null;
       }
       if (!mountedRef.current) return;
       setIsPlaying(true);
@@ -624,9 +646,17 @@ const ClipPage = React.memo(function ClipPage({
           if (st === 1) {
             console.log('[Clip Web] Confirmed playing:', clip.youtubeId);
             autoplayInProgressRef.current = false;
-            if (autoplayTimerRef.current) {
-              clearTimeout(autoplayTimerRef.current);
-              autoplayTimerRef.current = null;
+            if (autoplayInitialTimerRef.current) {
+              clearTimeout(autoplayInitialTimerRef.current);
+              autoplayInitialTimerRef.current = null;
+            }
+            if (autoplayRetryTimerRef.current) {
+              clearTimeout(autoplayRetryTimerRef.current);
+              autoplayRetryTimerRef.current = null;
+            }
+            if (autoplayToggleTimerRef.current) {
+              clearTimeout(autoplayToggleTimerRef.current);
+              autoplayToggleTimerRef.current = null;
             }
             if (mountedRef.current) { setIsPlaying(true); setShouldPlay(true); setPlayerReady(true); }
           } else if (st === 2) {

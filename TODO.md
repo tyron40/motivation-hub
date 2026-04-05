@@ -1,6 +1,7 @@
-- [ ] Inspect player entry points for autoplay flag consistency
-- [ ] Harden autoplay handshake logic in `components/AudioOnlyVideoPlayer.tsx`
-- [ ] Verify web autoplay fallback retry after navigation
-- [ ] Run app and test speech autoplay on navigation
-- [ ] Run app and test short-clip autoplay on navigation
-- [ ] Confirm mini-player playback continuity
+# TODO - Fix autoplay for speeches and short clips
+
+- [x] Inspect speech and short-clip playback files to identify autoplay failure points
+- [x] Refactor autoplay timer handling in components/AudioOnlyVideoPlayer.tsx
+- [x] Refactor autoplay timer handling in app/short-clips.tsx
+- [ ] Run lint/typecheck verification
+- [ ] Summarize fixes and expected behavior
