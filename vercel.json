@@ -1,4 +1,4 @@
 {
   "installCommand": "bun install",
-  "buildCommand": "bun run vercel-build || true"
+  "buildCommand": "bunx expo export --platform web || true"
 }
