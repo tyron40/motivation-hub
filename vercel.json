@@ -1,4 +1,4 @@
 {
-  "installCommand": "bun install",
-  "buildCommand": "bunx expo export --platform web || true"
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npx expo export --platform web || true"
 }
