@@ -469,12 +469,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
+    if (autoplay) {
+      desiredPlayRef.current = true;
+      requestPlayState(true);
+    }
+
     if (autoplay && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
       console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
       startAutoplay();
     }
-  }, [autoplay, startAutoplay]);
+  }, [autoplay, requestPlayState, startAutoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);

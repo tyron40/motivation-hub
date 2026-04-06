@@ -3,5 +3,5 @@
 - [x] Inspect speech and short-clip playback files to identify autoplay failure points
 - [x] Refactor autoplay timer handling in components/AudioOnlyVideoPlayer.tsx
 - [x] Refactor autoplay timer handling in app/short-clips.tsx
-- [ ] Run lint/typecheck verification
-- [ ] Summarize fixes and expected behavior
+- [x] Run lint/typecheck verification
+- [x] Summarize fixes and expected behavior
