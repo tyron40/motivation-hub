@@ -480,6 +480,8 @@ const ClipPage = React.memo(function ClipPage({
       console.log('Clip became active, showing player:', clip.youtubeId);
       setShowPlayer(true);
       autoplayAttemptRef.current = 0;
+      autoplayInProgressRef.current = true;
+      setShouldPlay(true);
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
@@ -623,7 +625,11 @@ const ClipPage = React.memo(function ClipPage({
     console.log('Clip player ready:', clip.youtubeId);
     if (!mountedRef.current) return;
     setPlayerReady(true);
-  }, [clip.youtubeId]);
+    if (isActive) {
+      autoplayInProgressRef.current = true;
+      setShouldPlay(true);
+    }
+  }, [clip.youtubeId, isActive]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
