@@ -22,7 +22,6 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { generateText } from '@rork-ai/toolkit-sdk';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
@@ -352,27 +351,16 @@ function ChatScreenContent() {
         console.log('🤖 Sending chat message...');
         console.log('📤 Messages count:', allMessages.length);
 
-        let completion: string | null = null;
+        console.log('🤖 Using Vercel backend /api/chat...');
+        const chatResult = await sendChatMessage({
+          messages: allMessages.map(m => ({
+            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
+        });
 
-        try {
-          console.log('🤖 Trying Vercel backend /api/chat...');
-          const chatResult = await sendChatMessage({
-            messages: allMessages.map(m => ({
-              role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-              content: m.content,
-            })),
-          });
-          completion = chatResult.message;
-          console.log('✅ Vercel backend responded, length:', completion?.length);
-        } catch (backendError: any) {
-          console.warn('⚠️ Vercel backend failed:', backendError?.message);
-          console.log('🔄 Falling back to Rork Toolkit...');
-          const toolkitResult = await generateText({
-            messages: allMessages,
-          });
-          completion = toolkitResult;
-          console.log('✅ Toolkit responded, length:', completion?.length);
-        }
+        const completion = chatResult?.message;
+        console.log('✅ Vercel backend responded, length:', completion?.length);
 
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format from AI');
