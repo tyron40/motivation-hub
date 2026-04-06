@@ -1,4 +1,3 @@
 {
-  "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "npx expo export --platform web || true"
+  "installCommand": "bun install"
 }
