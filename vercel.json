@@ -1,3 +1,5 @@
 {
-  "installCommand": "bun install"
+  "installCommand": "bun install",
+  "buildCommand": "echo 'No build needed'",
+  "framework": null
 }
