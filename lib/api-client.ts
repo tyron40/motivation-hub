@@ -1,42 +1,79 @@
+import { Platform } from 'react-native';
 import { API_ENDPOINTS } from './config';
 
 console.log('🔧 API Client | Using Vercel backend endpoints');
+console.log('🔧 API Client | Chat endpoint:', API_ENDPOINTS.chat);
+console.log('🔧 API Client | Platform:', Platform.OS);
 
+const CHAT_TIMEOUT = 60000;
 const DEFAULT_TIMEOUT = 30000;
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeout: number = DEFAULT_TIMEOUT
+): Promise<Response> {
+  console.log(`📡 Fetching ${url} (timeout: ${timeout}ms, platform: ${Platform.OS})`);
+
+  if (Platform.OS === 'web') {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    let didTimeout = false;
+    const timeoutId = setTimeout(() => {
+      didTimeout = true;
+      reject(new Error(`Request to ${url} timed out after ${timeout}ms`));
+    }, timeout);
+
+    fetch(url, options)
+      .then((response) => {
+        if (!didTimeout) {
+          clearTimeout(timeoutId);
+          resolve(response);
+        }
+      })
+      .catch((error) => {
+        if (!didTimeout) {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      });
+  });
+}
 
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  retries: number = MAX_RETRIES
+  retries: number = MAX_RETRIES,
+  timeout: number = DEFAULT_TIMEOUT
 ): Promise<Response> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       if (attempt > 0) {
-        const delay = Math.min(1500 * Math.pow(2, attempt - 1), 6000);
+        const delay = Math.min(2000 * attempt, 5000);
         console.log(`[Retry] Attempt ${attempt + 1}/${retries} for ${url} after ${delay}ms`);
         await new Promise<void>(r => setTimeout(r, delay));
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      const response = await fetchWithTimeout(url, options, timeout);
+      console.log(`✅ Fetch success for ${url} (attempt ${attempt + 1}), status: ${response.status}`);
       return response;
     } catch (error: any) {
       lastError = error;
-      if (error?.name === 'AbortError') {
-        console.error(`Request to ${url} timed out (attempt ${attempt + 1})`);
-      } else {
-        console.error(`Fetch error for ${url} (attempt ${attempt + 1}):`, error?.message || error);
-      }
+      console.error(`❌ Fetch error for ${url} (attempt ${attempt + 1}):`, error?.message || error);
     }
   }
 
@@ -138,16 +175,21 @@ export async function sendChatMessage(params: {
     console.log('🤖 Sending chat message via Vercel API...');
     console.log('🤖 Messages count:', params.messages.length);
 
-    const response = await fetchWithRetry(API_ENDPOINTS.chat, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+    const response = await fetchWithRetry(
+      API_ENDPOINTS.chat,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: params.messages,
+        }),
       },
-      body: JSON.stringify({
-        messages: params.messages,
-      }),
-    });
+      MAX_RETRIES,
+      CHAT_TIMEOUT
+    );
 
     const contentType = response.headers.get('content-type');
     console.log('📡 Chat Response status:', response.status);
