@@ -3,9 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
 const MAX_FETCHES_PER_DAY = 30;
 
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
+
 function getApiBase(): string {
   const raw = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
-  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
+  const trimmed = raw.endsWith('/') ? raw.slice(0, -1) : raw;
+  return trimmed || PRODUCTION_API_URL;
 }
 
 const STORAGE_KEYS = {

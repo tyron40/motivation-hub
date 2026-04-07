@@ -1,3 +1,5 @@
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
+
 function getApiBase(): string {
   const raw = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
   const trimmed = raw.endsWith('/') ? raw.slice(0, -1) : raw;
@@ -6,8 +8,8 @@ function getApiBase(): string {
     return trimmed;
   }
 
-  console.warn('⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is not set or invalid, API calls may fail');
-  return trimmed || '';
+  console.warn('⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is not set or invalid, falling back to production URL');
+  return PRODUCTION_API_URL;
 }
 
 const API_BASE = getApiBase();
