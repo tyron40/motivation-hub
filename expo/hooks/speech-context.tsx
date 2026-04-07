@@ -151,7 +151,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       try {
         const quota = await getQuotaStatus();
         console.log(
-          `YouTube quota status – searches: ${quota.searchRequestsUsed}/${quota.searchRequestsMax}, units: ${quota.unitsUsed}/${quota.unitsMax}, fetches: ${quota.fetchCount}/${quota.fetchMax}`
+          `YouTube quota status – fetches: ${quota.fetchCount}/${quota.fetchMax}, limitReached: ${quota.isLimitReached}`
         );
 
         const trendingSpeeches = await fetchTrendingContent(20, true);
