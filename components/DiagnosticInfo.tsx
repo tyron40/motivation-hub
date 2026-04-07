@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
 import { getTrendingVideos } from '@/services/youtubeService';
+import { getVercelBackendUrl, API_ENDPOINTS } from '@/lib/config';
 
 export function DiagnosticInfo() {
   const [testResults, setTestResults] = useState<{
@@ -19,7 +20,7 @@ export function DiagnosticInfo() {
   });
   const [testing, setTesting] = useState(false);
 
-  const API_BASE = 'https://motivation-hub-iota.vercel.app';
+  const API_BASE = getVercelBackendUrl();
 
 
   const runDiagnostics = async () => {
@@ -50,7 +51,7 @@ export function DiagnosticInfo() {
         }
       }
 
-      const healthUrl = `${API_BASE}/api/health`;
+      const healthUrl = API_ENDPOINTS.health;
       console.log('🔍 Testing health endpoint:', healthUrl);
 
       const healthResponse = await fetch(healthUrl, {
@@ -69,7 +70,7 @@ export function DiagnosticInfo() {
         const healthData = await healthResponse.json();
         console.log('✅ Health data:', healthData);
 
-        const ttsUrl = `${API_BASE}/api/tts`;
+        const ttsUrl = API_ENDPOINTS.tts;
         console.log('🔍 Testing TTS endpoint:', ttsUrl);
 
         const ttsResponse = await fetch(ttsUrl, {

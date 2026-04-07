@@ -714,6 +714,61 @@ const handlePostAdminData = async (c: Context) => {
 app.post('/api/admin/data', handlePostAdminData);
 app.post('/admin/data', handlePostAdminData);
 
+const handleGetFlyers = async (c: Context) => {
+  try {
+    console.log('[Flyers] GET flyers from Supabase');
+    await ensureAdminDataLoaded();
+
+    const { data: supabaseFlyers, error } = await supabaseBackend
+      .from('flyers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    let flyersFromTable: any[] = [];
+    if (error) {
+      console.warn('[Flyers] Supabase flyers table error:', error.message);
+    } else if (supabaseFlyers && supabaseFlyers.length > 0) {
+      flyersFromTable = supabaseFlyers.map((f: any) => ({
+        id: f.id || `sb-flyer-${f.created_at}`,
+        title: f.title || '',
+        quote: f.quote || '',
+        imageUrl: f.image_url || f.imageUrl || '',
+        accent: f.accent || '#FF8A00',
+      }));
+      console.log(`[Flyers] Found ${flyersFromTable.length} flyers in Supabase flyers table`);
+    }
+
+    const adminFlyers = Array.isArray(ADMIN_DATA_STORE.flyers) ? ADMIN_DATA_STORE.flyers : [];
+
+    const allFlyers = [...flyersFromTable, ...adminFlyers];
+    const seen = new Set<string>();
+    const uniqueFlyers = allFlyers.filter(f => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+
+    console.log(`[Flyers] Returning ${uniqueFlyers.length} total flyers (${flyersFromTable.length} from table, ${adminFlyers.length} from admin)`);
+
+    return c.json({
+      flyers: uniqueFlyers,
+      source: 'supabase',
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[Flyers] Error fetching flyers:', error);
+    await ensureAdminDataLoaded();
+    return c.json({
+      flyers: ADMIN_DATA_STORE.flyers || [],
+      source: 'admin_fallback',
+      fetchedAt: new Date().toISOString(),
+    });
+  }
+};
+
+app.get('/api/flyers', handleGetFlyers);
+app.get('/flyers', handleGetFlyers);
+
 app.post('/api/youtube/category', handleYouTubeCategory);
 app.post('/youtube/category', handleYouTubeCategory);
 app.post('/api/youtube/search', handleYouTubeSearch);

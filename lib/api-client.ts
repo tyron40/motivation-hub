@@ -1,6 +1,6 @@
-const API_BASE = 'https://motivation-hub-iota.vercel.app';
+import { API_ENDPOINTS } from './config';
 
-console.log('🔧 API Client | Using Vercel backend:', API_BASE);
+console.log('🔧 API Client | Using Vercel backend endpoints');
 
 const DEFAULT_TIMEOUT = 45000;
 
@@ -15,7 +15,7 @@ export async function generateTextToSpeech(params: {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
-    const response = await fetch(`${API_BASE}/api/tts`, {
+    const response = await fetch(API_ENDPOINTS.tts, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -108,7 +108,7 @@ export async function sendChatMessage(params: {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
-    const response = await fetch(`${API_BASE}/api/chat`, {
+    const response = await fetch(API_ENDPOINTS.chat, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

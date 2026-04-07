@@ -24,6 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
+import { API_ENDPOINTS } from '@/lib/config';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 52) / 2);
@@ -43,6 +44,7 @@ export default function FlyersScreen() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [supabaseFlyers, setSupabaseFlyers] = useState<MotivationalFlyer[]>([]);
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -58,6 +60,44 @@ export default function FlyersScreen() {
       }
     };
     void loadLikedIds();
+  }, []);
+
+  useEffect(() => {
+    const fetchSupabaseFlyers = async () => {
+      try {
+        console.log('📡 Fetching flyers from Supabase via Vercel backend...');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const response = await fetch(API_ENDPOINTS.flyers, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.warn('⚠️ Flyers API returned:', response.status);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.flyers && Array.isArray(data.flyers) && data.flyers.length > 0) {
+          console.log(`✅ Fetched ${data.flyers.length} flyers from Supabase (source: ${data.source})`);
+          setSupabaseFlyers(data.flyers);
+        } else {
+          console.log('📦 No additional flyers from Supabase');
+        }
+      } catch (error: any) {
+        if (error?.name === 'AbortError') {
+          console.warn('⚠️ Flyers fetch timed out');
+        } else {
+          console.warn('⚠️ Failed to fetch flyers from Supabase:', error?.message);
+        }
+      }
+    };
+    void fetchSupabaseFlyers();
   }, []);
 
   const saveLikedIds = useCallback(async (ids: Set<string>) => {
@@ -147,7 +187,15 @@ export default function FlyersScreen() {
     });
   }, []);
 
-  const allFlyers = [...motivationalFlyers, ...customFlyers];
+  const allFlyers = React.useMemo(() => {
+    const combined = [...motivationalFlyers, ...supabaseFlyers, ...customFlyers];
+    const seen = new Set<string>();
+    return combined.filter(f => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+  }, [supabaseFlyers, customFlyers]);
 
   const openFlyer = useCallback((flyer: MotivationalFlyer) => {
     setSelectedFlyer(flyer);

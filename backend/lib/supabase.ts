@@ -1,9 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://vncaboqllcykibwdnmwp.supabase.co';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuY2Fib3FsbGN5a2lid2RubXdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3MzAzNTgsImV4cCI6MjA3NDMwNjM1OH0.QbPby5rAKpStXuXE9safH5bQy3VzmFg16nWJHCX9tnA';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabaseBackend = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Backend Supabase] Missing env vars:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+  });
+} else {
+  console.log('[Backend Supabase] Initialized with env vars from Vercel');
+}
+
+export const supabaseBackend = createClient(
+  supabaseUrl || '',
+  supabaseAnonKey || ''
+);
 
 export async function getOpenAIKey(): Promise<string> {
   try {

@@ -5,6 +5,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '@/hooks/auth-context';
 import { MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { CategoryBanner, getDefaultBannerForCategory } from '@/mocks/categoryBanners';
+import { API_ENDPOINTS } from '@/lib/config';
 
 const ADMIN_EMAILS = ['robertstyron40@gmail.com'];
 
@@ -25,12 +26,6 @@ const STORAGE_KEY_UPDATED_AT = 'admin_data_updated_at';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-const VERCEL_URL = 'https://motivation-hub-iota.vercel.app';
-
-const getBackendUrl = () => {
-  return VERCEL_URL;
-};
-
 interface ServerAdminData {
   flyers: MotivationalFlyer[];
   videos: AdminVideo[];
@@ -40,9 +35,8 @@ interface ServerAdminData {
 
 const fetchAdminDataFromServer = async (): Promise<ServerAdminData | null> => {
   try {
-    const baseUrl = getBackendUrl();
     console.log('📡 Fetching admin data from server...');
-    const response = await fetch(`${baseUrl}/api/admin/data`, {
+    const response = await fetch(API_ENDPOINTS.adminData, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -71,9 +65,8 @@ const fetchAdminDataFromServer = async (): Promise<ServerAdminData | null> => {
 
 const syncAdminAction = async (type: string, action: string, data: any): Promise<ServerAdminData | null> => {
   try {
-    const baseUrl = getBackendUrl();
     console.log(`📡 Syncing admin action: ${type}/${action}`);
-    const response = await fetch(`${baseUrl}/api/admin/data`, {
+    const response = await fetch(API_ENDPOINTS.adminData, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, action, data }),

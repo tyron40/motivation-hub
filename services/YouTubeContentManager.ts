@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_ENDPOINTS } from '@/lib/config';
 
 const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
 const MAX_FETCHES_PER_DAY = 30;
-
-function getApiBase(): string {
-  return 'https://motivation-hub-iota.vercel.app';
-}
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',
@@ -140,23 +137,16 @@ async function setCachedVideos(category: string, videos: CachedVideo[]): Promise
 }
 
 async function fetchFromBackend(
-  endpoint: string,
+  endpointUrl: string,
   body: Record<string, unknown>
 ): Promise<CachedVideo[]> {
-  const apiBase = getApiBase();
-  if (!apiBase) {
-    console.error('YouTube fetch failed: Vercel backend URL is not available');
-    return [];
-  }
-
-  const url = `${apiBase}${endpoint}`;
-  console.log(`Fetching from backend: ${url}`, JSON.stringify(body));
+  console.log(`Fetching from backend: ${endpointUrl}`, JSON.stringify(body));
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const response = await fetch(url, {
+    const response = await fetch(endpointUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -170,7 +160,7 @@ async function fetchFromBackend(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Backend ${endpoint} error:`, response.status, errorText.substring(0, 200));
+      console.error(`Backend ${endpointUrl} error:`, response.status, errorText.substring(0, 200));
       return [];
     }
 
@@ -188,28 +178,28 @@ async function fetchFromBackend(
       category: v.category ?? '',
     }));
 
-    console.log(`Backend ${endpoint} returned ${videos.length} videos`);
+    console.log(`Backend ${endpointUrl} returned ${videos.length} videos`);
     return videos;
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      console.error(`Backend ${endpoint} timed out`);
+      console.error(`Backend ${endpointUrl} timed out`);
     } else {
-      console.error(`Backend ${endpoint} fetch error:`, error?.message || error);
+      console.error(`Backend ${endpointUrl} fetch error:`, error?.message || error);
     }
     return [];
   }
 }
 
 async function fetchCategoryFromBackend(category: string, limit: number): Promise<CachedVideo[]> {
-  return fetchFromBackend('/api/youtube/category', { category, limit });
+  return fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit });
 }
 
 async function fetchSearchFromBackend(query: string, limit: number): Promise<CachedVideo[]> {
-  return fetchFromBackend('/api/youtube/search', { query, limit });
+  return fetchFromBackend(API_ENDPOINTS.youtubeSearch, { query, limit });
 }
 
 async function fetchTrendingFromBackend(limit: number): Promise<CachedVideo[]> {
-  return fetchFromBackend('/api/youtube/trending', { limit });
+  return fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit });
 }
 
 export const YouTubeContentManager = {

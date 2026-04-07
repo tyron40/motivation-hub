@@ -4,11 +4,12 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const VERCEL_URL = 'https://motivation-hub-iota.vercel.app';
+import { getVercelBackendUrl } from './config';
 
 const getBaseUrl = () => {
-  console.log('🔧 [tRPC] Using Vercel backend URL:', VERCEL_URL);
-  return VERCEL_URL;
+  const url = getVercelBackendUrl();
+  console.log('🔧 [tRPC] Using Vercel backend URL:', url);
+  return url;
 };
 
 let cachedBaseUrl: string | null = null;
