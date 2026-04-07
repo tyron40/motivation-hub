@@ -2,7 +2,46 @@ import { API_ENDPOINTS } from './config';
 
 console.log('🔧 API Client | Using Vercel backend endpoints');
 
-const DEFAULT_TIMEOUT = 45000;
+const DEFAULT_TIMEOUT = 30000;
+const MAX_RETRIES = 3;
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries: number = MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = Math.min(1500 * Math.pow(2, attempt - 1), 6000);
+        console.log(`[Retry] Attempt ${attempt + 1}/${retries} for ${url} after ${delay}ms`);
+        await new Promise<void>(r => setTimeout(r, delay));
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      if (error?.name === 'AbortError') {
+        console.error(`Request to ${url} timed out (attempt ${attempt + 1})`);
+      } else {
+        console.error(`Fetch error for ${url} (attempt ${attempt + 1}):`, error?.message || error);
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed to fetch ${url} after ${retries} attempts`);
+}
 
 export async function generateTextToSpeech(params: {
   text: string;
@@ -12,10 +51,7 @@ export async function generateTextToSpeech(params: {
     console.log('🎤 Generating TTS via Vercel API...');
     console.log('🎤 Text length:', params.text.length, 'Voice:', params.voice || 'alloy');
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-    const response = await fetch(API_ENDPOINTS.tts, {
+    const response = await fetchWithRetry(API_ENDPOINTS.tts, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -25,10 +61,7 @@ export async function generateTextToSpeech(params: {
         text: params.text,
         voice: params.voice || 'alloy',
       }),
-      signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     const contentType = response.headers.get('content-type');
     console.log('📡 TTS Response status:', response.status);
@@ -88,7 +121,7 @@ export async function generateTextToSpeech(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to Vercel backend. Please check your internet connection.`);
+      throw new Error('Cannot connect to Vercel backend. Please check your internet connection.');
     }
 
     throw error;
@@ -105,10 +138,7 @@ export async function sendChatMessage(params: {
     console.log('🤖 Sending chat message via Vercel API...');
     console.log('🤖 Messages count:', params.messages.length);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-    const response = await fetch(API_ENDPOINTS.chat, {
+    const response = await fetchWithRetry(API_ENDPOINTS.chat, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,10 +147,7 @@ export async function sendChatMessage(params: {
       body: JSON.stringify({
         messages: params.messages,
       }),
-      signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     const contentType = response.headers.get('content-type');
     console.log('📡 Chat Response status:', response.status);
@@ -158,7 +185,7 @@ export async function sendChatMessage(params: {
       result = JSON.parse(responseText);
     } catch (parseError) {
       console.error('❌ Failed to parse chat response');
-      throw new Error(`Invalid JSON response from chat API`);
+      throw new Error('Invalid JSON response from chat API');
     }
 
     if (!result.message || typeof result.message !== 'string') {
@@ -176,7 +203,7 @@ export async function sendChatMessage(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to Vercel backend. Please check your internet connection.`);
+      throw new Error('Cannot connect to Vercel backend. Please check your internet connection.');
     }
 
     throw error;

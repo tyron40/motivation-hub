@@ -138,56 +138,72 @@ async function setCachedVideos(category: string, videos: CachedVideo[]): Promise
 
 async function fetchFromBackend(
   endpointUrl: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  maxRetries: number = 3
 ): Promise<CachedVideo[]> {
-  console.log(`Fetching from backend: ${endpointUrl}`, JSON.stringify(body));
+  let lastError: string = '';
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = Math.min(1500 * Math.pow(2, attempt - 1), 6000);
+        console.log(`[Retry] Attempt ${attempt + 1}/${maxRetries} for ${endpointUrl} after ${delay}ms`);
+        await new Promise<void>(r => setTimeout(r, delay));
+      } else {
+        console.log(`Fetching from backend: ${endpointUrl}`, JSON.stringify(body));
+      }
 
-    const response = await fetch(endpointUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    clearTimeout(timeoutId);
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Backend ${endpointUrl} error:`, response.status, errorText.substring(0, 200));
-      return [];
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Backend ${endpointUrl} error (attempt ${attempt + 1}):`, response.status, errorText.substring(0, 200));
+        lastError = `HTTP ${response.status}`;
+        continue;
+      }
+
+      const data = await response.json();
+      const videos: CachedVideo[] = (data.videos || []).map((v: any) => ({
+        id: v.id ?? '',
+        title: v.title ?? '',
+        description: v.description ?? '',
+        thumbnail: v.thumbnail ?? '',
+        channelTitle: v.channelTitle ?? '',
+        channelId: v.channelId ?? '',
+        publishedAt: v.publishedAt ?? '',
+        duration: v.duration ?? 0,
+        viewCount: v.viewCount ?? 0,
+        category: v.category ?? '',
+      }));
+
+      console.log(`Backend ${endpointUrl} returned ${videos.length} videos`);
+      return videos;
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        lastError = 'timeout';
+        console.error(`Backend ${endpointUrl} timed out (attempt ${attempt + 1})`);
+      } else {
+        lastError = error?.message || String(error);
+        console.error(`Backend ${endpointUrl} fetch error (attempt ${attempt + 1}):`, lastError);
+      }
     }
-
-    const data = await response.json();
-    const videos: CachedVideo[] = (data.videos || []).map((v: any) => ({
-      id: v.id ?? '',
-      title: v.title ?? '',
-      description: v.description ?? '',
-      thumbnail: v.thumbnail ?? '',
-      channelTitle: v.channelTitle ?? '',
-      channelId: v.channelId ?? '',
-      publishedAt: v.publishedAt ?? '',
-      duration: v.duration ?? 0,
-      viewCount: v.viewCount ?? 0,
-      category: v.category ?? '',
-    }));
-
-    console.log(`Backend ${endpointUrl} returned ${videos.length} videos`);
-    return videos;
-  } catch (error: any) {
-    if (error?.name === 'AbortError') {
-      console.error(`Backend ${endpointUrl} timed out`);
-    } else {
-      console.error(`Backend ${endpointUrl} fetch error:`, error?.message || error);
-    }
-    return [];
   }
+
+  console.error(`Backend ${endpointUrl} failed after ${maxRetries} attempts: ${lastError}`);
+  return [];
 }
 
 async function fetchCategoryFromBackend(category: string, limit: number): Promise<CachedVideo[]> {

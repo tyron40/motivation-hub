@@ -193,79 +193,85 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       progressInterval.current = null;
     }
 
-    const fetchVideoMetadata = async () => {
-      console.log(`Fetching metadata for video: ${videoId}`);
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-        if (!apiKey) {
-          throw new Error('YouTube API key not configured');
-        }
-
-        const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-        detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
-        detailsUrl.searchParams.set('id', videoId);
-        detailsUrl.searchParams.set('key', apiKey);
-
-        const response = await fetch(detailsUrl.toString());
-
-        if (!response.ok) {
-          throw new Error(`YouTube API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (!data.items || data.items.length === 0) {
-          throw new Error('Video not found');
-        }
-
-        const video = data.items[0];
-
-        const parseDuration = (dur: string): number => {
-          const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-          if (!match) return 0;
-          const hours = parseInt(match[1] || '0');
-          const minutes = parseInt(match[2] || '0');
-          const seconds = parseInt(match[3] || '0');
-          return hours * 3600 + minutes * 60 + seconds;
-        };
-
-        const videoDuration = parseDuration(video.contentDetails.duration);
-        setDuration(videoDuration);
-        durationRef.current = videoDuration;
-
-        if (mountedRef.current) {
-          setMetadata({
-            id: video.id,
-            title: video.snippet.title,
-            description: video.snippet.description || '',
-            thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
-            channelTitle: video.snippet.channelTitle,
-            duration: videoDuration,
-            viewCount: parseInt(video.statistics.viewCount || '0'),
-            publishedAt: video.snippet.publishedAt,
-          });
-        }
-
-        console.log('Video metadata fetched:', video.snippet.title);
-        setIsLoading(false);
-      } catch (err: any) {
-        console.error('Error fetching video metadata:', err);
-        if (mountedRef.current) {
-          setError(err.message || 'Failed to fetch video data');
-          setIsLoading(false);
-          onErrorRef.current?.(err.message || 'Failed to fetch video data');
-        }
-      }
-    };
-
     if (videoId) {
       setPlayerReady(false);
       setPlayerError(false);
       setCurrentTime(0);
       updatePlayState(false);
+      setIsLoading(false);
+      setError(null);
+
+      const fetchVideoMetadata = async () => {
+        try {
+          const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
+          if (!apiKey) {
+            console.log('[Metadata] No YouTube API key, using props');
+            return;
+          }
+
+          const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+          detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+          detailsUrl.searchParams.set('id', videoId);
+          detailsUrl.searchParams.set('key', apiKey);
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+          const response = await fetch(detailsUrl.toString(), { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            console.warn('[Metadata] YouTube API error:', response.status);
+            return;
+          }
+
+          const data = await response.json();
+
+          if (!data.items || data.items.length === 0) {
+            console.warn('[Metadata] Video not found:', videoId);
+            return;
+          }
+
+          const video = data.items[0];
+
+          const parseDuration = (dur: string): number => {
+            const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (!match) return 0;
+            const hours = parseInt(match[1] || '0');
+            const minutes = parseInt(match[2] || '0');
+            const seconds = parseInt(match[3] || '0');
+            return hours * 3600 + minutes * 60 + seconds;
+          };
+
+          const videoDuration = parseDuration(video.contentDetails.duration);
+          if (mountedRef.current && videoDuration > 0) {
+            setDuration(videoDuration);
+            durationRef.current = videoDuration;
+          }
+
+          if (mountedRef.current) {
+            setMetadata({
+              id: video.id,
+              title: video.snippet.title,
+              description: video.snippet.description || '',
+              thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
+              channelTitle: video.snippet.channelTitle,
+              duration: videoDuration,
+              viewCount: parseInt(video.statistics.viewCount || '0'),
+              publishedAt: video.snippet.publishedAt,
+            });
+          }
+
+          console.log('[Metadata] Fetched:', video.snippet.title);
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            console.warn('[Metadata] Fetch timed out, using props');
+          } else {
+            console.warn('[Metadata] Fetch failed, using props:', err?.message);
+          }
+        }
+      };
+
       void fetchVideoMetadata();
     }
   }, [videoId, updatePlayState]);
@@ -577,7 +583,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     );
   }
 
-  if (error && !metadata) {
+  if (error && !metadata && playerError) {
     return (
       <View style={styles.container}>
         {hiddenPlayerElement}

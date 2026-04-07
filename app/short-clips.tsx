@@ -465,16 +465,18 @@ const ClipPage = React.memo(function ClipPage({
 
   useEffect(() => {
     if (isActive) {
-      console.log('Clip active, loading player:', clip.youtubeId);
+      console.log('[Clip] Active, showing player:', clip.youtubeId);
       setShowPlayer(true);
-      setShouldPlay(true);
+      if (playerReady) {
+        setShouldPlay(true);
+      }
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
       setShowPlayer(false);
       setPlayerReady(false);
     }
-  }, [isActive, clip.youtubeId]);
+  }, [isActive, clip.youtubeId, playerReady]);
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
@@ -508,10 +510,14 @@ const ClipPage = React.memo(function ClipPage({
 
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('[Clip] Player ready:', clip.youtubeId);
+    console.log('[Clip] Player ready, triggering autoplay:', clip.youtubeId);
     setPlayerReady(true);
     if (isActive) {
-      setShouldPlay(true);
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        console.log('[Clip] Autoplay after ready:', clip.youtubeId);
+        setShouldPlay(true);
+      }, 300);
     }
   }, [clip.youtubeId, isActive]);
 
