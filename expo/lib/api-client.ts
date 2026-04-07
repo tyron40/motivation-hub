@@ -2,8 +2,11 @@ import { Platform } from 'react-native';
 import { API_ENDPOINTS } from './config';
 import { generateText } from '@rork-ai/toolkit-sdk';
 
+const TOOLKIT_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
+
 console.log('🔧 API Client | Using Rork toolkit for chat, backend for TTS');
 console.log('🔧 API Client | TTS endpoint:', API_ENDPOINTS.tts);
+console.log('🔧 API Client | Toolkit URL:', TOOLKIT_URL);
 console.log('🔧 API Client | Platform:', Platform.OS);
 
 const CHAT_TIMEOUT = 60000;
@@ -164,45 +167,138 @@ export async function generateTextToSpeech(params: {
   }
 }
 
+async function generateTextWithTimeout(
+  messages: { role: 'user' | 'assistant'; content: string }[],
+  timeout: number = CHAT_TIMEOUT
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Chat request timed out after ${timeout}ms`));
+      }
+    }, timeout);
+
+    generateText({ messages })
+      .then((result) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(result);
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+  });
+}
+
+async function sendChatViaDirectFetch(
+  messages: { role: 'user' | 'assistant'; content: string }[]
+): Promise<string> {
+  const url = `${TOOLKIT_URL}/text/generate`;
+  console.log('🔄 Trying direct fetch to toolkit:', url);
+
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ messages }),
+    },
+    2,
+    CHAT_TIMEOUT
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    console.error('❌ Direct fetch error:', response.status, errorText.substring(0, 200));
+    throw new Error(`Chat API error: ${response.status} - ${errorText.substring(0, 100)}`);
+  }
+
+  const data = await response.json();
+  console.log('✅ Direct fetch response received');
+
+  if (typeof data === 'string') return data;
+  if (data?.text) return data.text;
+  if (data?.message) return data.message;
+  if (data?.result) return data.result;
+
+  throw new Error('Unexpected response format from direct fetch');
+}
+
 export async function sendChatMessage(params: {
   messages: {
     role: 'system' | 'user' | 'assistant';
     content: string;
   }[];
 }): Promise<{ message: string }> {
-  try {
-    console.log('🤖 Sending chat message via Rork toolkit generateText...');
-    console.log('🤖 Messages count:', params.messages.length);
-    console.log('🤖 Platform:', Platform.OS);
+  const toolkitMessages = params.messages.map(m => ({
+    role: m.role === 'system' ? 'user' as const : m.role as 'user' | 'assistant',
+    content: m.content,
+  }));
 
-    const toolkitMessages = params.messages.map(m => ({
-      role: m.role === 'system' ? 'user' as const : m.role as 'user' | 'assistant',
-      content: m.content,
-    }));
+  console.log('🤖 Sending chat message | Platform:', Platform.OS, '| Messages:', params.messages.length);
 
-    const result = await generateText({ messages: toolkitMessages });
+  let lastError: Error | null = null;
 
-    console.log('✅ Toolkit chat response received, length:', result?.length);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 1) {
+        const delay = Math.min(1500 * attempt, 5000);
+        console.log(`🔄 Chat retry attempt ${attempt}/${MAX_RETRIES} after ${delay}ms`);
+        await new Promise<void>(r => setTimeout(r, delay));
+      }
 
-    if (!result || typeof result !== 'string') {
-      throw new Error('Invalid response from AI toolkit');
+      console.log(`🤖 Attempt ${attempt}: Using generateText SDK...`);
+      const result = await generateTextWithTimeout(toolkitMessages, CHAT_TIMEOUT);
+
+      if (!result || typeof result !== 'string') {
+        throw new Error('Invalid response from AI toolkit: empty or non-string');
+      }
+
+      console.log('✅ Chat response received, length:', result.length);
+      return { message: result };
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ Chat attempt ${attempt} failed:`, error?.message || String(error));
+
+      if (attempt === MAX_RETRIES) {
+        try {
+          console.log('🔄 All SDK attempts failed, trying direct fetch fallback...');
+          const directResult = await sendChatViaDirectFetch(toolkitMessages);
+          if (directResult && typeof directResult === 'string') {
+            console.log('✅ Direct fetch fallback succeeded, length:', directResult.length);
+            return { message: directResult };
+          }
+        } catch (directError: any) {
+          console.error('❌ Direct fetch fallback also failed:', directError?.message);
+        }
+      }
     }
-
-    return { message: result };
-  } catch (error: any) {
-    console.error('❌ Chat request failed:', error?.message || String(error));
-    console.error('❌ Error type:', error?.name, 'Platform:', Platform.OS);
-
-    if (error?.message?.includes('timed out') || error?.name === 'AbortError') {
-      throw new Error('Request timed out. Please try again.');
-    }
-
-    if (error?.message?.includes('Network request failed') ||
-        error?.message?.includes('Failed to fetch') ||
-        error?.message?.includes('network')) {
-      throw new Error('Network error. Please check your internet connection and try again.');
-    }
-
-    throw error;
   }
+
+  const errorMsg = lastError?.message || 'Unknown error';
+  console.error('❌ All chat attempts failed. Last error:', errorMsg);
+
+  if (errorMsg.includes('timed out') || errorMsg.includes('AbortError')) {
+    throw new Error('Request timed out. Please check your connection and try again.');
+  }
+
+  if (errorMsg.includes('Network request failed') ||
+      errorMsg.includes('Failed to fetch') ||
+      errorMsg.includes('network') ||
+      errorMsg.includes('TypeError')) {
+    throw new Error('Network error. Please check your internet connection and try again.');
+  }
+
+  throw new Error(`Chat failed: ${errorMsg}`);
 }
