@@ -167,98 +167,69 @@ export async function generateTextToSpeech(params: {
   }
 }
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+
 export async function sendChatMessage(params: {
   messages: {
     role: 'system' | 'user' | 'assistant';
     content: string;
   }[];
 }): Promise<{ message: string }> {
-  const toolkitMessages = params.messages.map(m => ({
-    role: m.role === 'system' ? 'user' as const : m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
+  console.log('🤖 Sending chat message via OpenAI | Platform:', Platform.OS, '| Messages:', params.messages.length);
 
-  console.log('🤖 Sending chat message | Platform:', Platform.OS, '| Messages:', toolkitMessages.length);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log('⏱️ OpenAI request timed out');
+    controller.abort();
+  }, CHAT_TIMEOUT);
 
   try {
-    console.log('🤖 Using generateText SDK...');
-    const result = await generateText({ messages: toolkitMessages });
-    console.log('✅ generateText SDK returned, type:', typeof result, 'length:', result?.length);
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: params.messages,
+        max_tokens: 1000,
+        temperature: 0.8,
+      }),
+      signal: controller.signal,
+    });
 
-    if (result && typeof result === 'string' && result.trim().length > 0) {
-      console.log('✅ Chat response received via SDK, length:', result.length);
-      return { message: result };
+    clearTimeout(timeoutId);
+    console.log('📡 OpenAI response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('❌ OpenAI API error:', response.status, errorText.substring(0, 300));
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
-    throw new Error('Empty or invalid response from generateText SDK');
-  } catch (sdkError: any) {
-    console.error('❌ generateText SDK failed:', sdkError?.message || String(sdkError));
-    console.log('🔄 Trying direct fetch fallback...');
+    const data = await response.json();
+    const message = data?.choices?.[0]?.message?.content;
 
-    try {
-      const agentUrl = new URL('/agent/chat', TOOLKIT_URL).toString();
-      console.log('🔄 Direct fetch to:', agentUrl);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), CHAT_TIMEOUT);
-
-      const response = await fetch(agentUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ messages: toolkitMessages }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      console.log('📡 Direct fetch response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('❌ Direct fetch error:', response.status, errorText.substring(0, 200));
-        throw new Error(`Chat API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ Direct fetch response data keys:', Object.keys(data));
-
-      let message = '';
-      if (typeof data === 'string') {
-        message = data;
-      } else if (data?.text) {
-        message = data.text;
-      } else if (data?.message) {
-        message = data.message;
-      } else if (data?.result) {
-        message = data.result;
-      } else if (data?.choices?.[0]?.message?.content) {
-        message = data.choices[0].message.content;
-      }
-
-      if (message && message.trim().length > 0) {
-        console.log('✅ Direct fetch fallback succeeded, length:', message.length);
-        return { message };
-      }
-
-      throw new Error('Unexpected response format from direct fetch');
-    } catch (directError: any) {
-      console.error('❌ Direct fetch fallback also failed:', directError?.message || String(directError));
-
-      const errorMsg = sdkError?.message || directError?.message || 'Unknown error';
-
-      if (errorMsg.includes('timed out') || errorMsg.includes('AbortError')) {
-        throw new Error('Request timed out. Please check your connection and try again.');
-      }
-
-      if (errorMsg.includes('Network request failed') ||
-          errorMsg.includes('Failed to fetch') ||
-          errorMsg.includes('network')) {
-        throw new Error('Network error. Please check your internet connection and try again.');
-      }
-
-      throw new Error(`Chat failed: ${errorMsg}`);
+    if (message && typeof message === 'string' && message.trim().length > 0) {
+      console.log('✅ OpenAI response received, length:', message.length);
+      return { message };
     }
+
+    throw new Error('Empty or invalid response from OpenAI');
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    console.error('❌ OpenAI chat failed:', error?.message || String(error));
+
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your connection and try again.');
+    }
+
+    if (error?.message?.includes('Network request failed') ||
+        error?.message?.includes('Failed to fetch')) {
+      throw new Error('Network error. Please check your internet connection and try again.');
+    }
+
+    throw error;
   }
 }
