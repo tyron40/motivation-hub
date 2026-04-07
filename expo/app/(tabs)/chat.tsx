@@ -272,82 +272,81 @@ function ChatScreenContent() {
       return;
     }
 
-    try {
-      const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
-      if (nameMatch && !profile.name) {
-        const name = nameMatch[1];
-        await updateProfile({ name });
-      }
+    const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
+    if (nameMatch && !profile.name) {
+      const name = nameMatch[1];
+      await updateProfile({ name });
+    }
 
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        text: text.trim(),
-        isUser: true,
-        timestamp: new Date(),
-      };
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: text.trim(),
+      isUser: true,
+      timestamp: new Date(),
+    };
 
-      if (!isSuggestion) {
-        const creditUsed = await deductCredit();
-        if (!creditUsed) {
-          console.log('❌ Failed to deduct credit');
-          if (Platform.OS !== 'web') {
-            Alert.alert(
-              'No Credits',
-              'You need credits to use the AI chat feature. Purchase credits to continue.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-              ]
-            );
-          } else {
-            console.error('You need credits to use the AI chat feature.');
-          }
-          return;
+    if (!isSuggestion) {
+      const creditUsed = await deductCredit();
+      if (!creditUsed) {
+        console.log('❌ Failed to deduct credit');
+        if (Platform.OS !== 'web') {
+          Alert.alert(
+            'No Credits',
+            'You need credits to use the AI chat feature. Purchase credits to continue.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+            ]
+          );
+        } else {
+          console.error('You need credits to use the AI chat feature.');
         }
-        console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
-      } else {
-        console.log('✅ Suggested question - no credit needed');
+        return;
       }
+      console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
+    } else {
+      console.log('✅ Suggested question - no credit needed');
+    }
 
-      setMessages(prev => [...prev, userMessage]);
-      setInputText('');
-      setIsLoading(true);
-      setIsTyping(true);
-      setHasStartedChat(true);
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    setIsLoading(true);
+    setIsTyping(true);
+    setHasStartedChat(true);
 
-      let sessionId = currentSessionId;
-      if (!sessionId) {
-        const newSession = await createSession(
-          text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
-          [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
-        );
-        sessionId = newSession.id;
-      } else {
-        await addMessageToSession(sessionId, {
-          role: 'user',
-          content: text.trim(),
-          timestamp: Date.now(),
-        });
-      }
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      const newSession = await createSession(
+        text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
+        [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
+      );
+      sessionId = newSession.id;
+    } else {
+      await addMessageToSession(sessionId, {
+        role: 'user',
+        content: text.trim(),
+        timestamp: Date.now(),
+      });
+    }
 
-      const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
+    const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
-        .filter(msg => msg.id !== '1' || msg.isUser)
-        .map(msg => ({
-          role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: msg.text,
-        }));
+    const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
+      .filter(msg => msg.id !== '1' || msg.isUser)
+      .map(msg => ({
+        role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: msg.text,
+      }));
 
-      chatHistory.push({ role: 'user', content: text.trim() });
+    chatHistory.push({ role: 'user', content: text.trim() });
 
-      const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
-        { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
-        { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
-        ...chatHistory,
-      ];
+    const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
+      { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
+      { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
+      ...chatHistory,
+    ];
 
-      try {
+    try {
         console.log('🤖 Sending chat message via Rork backend...');
         console.log('📤 Messages count:', allMessages.length);
 
