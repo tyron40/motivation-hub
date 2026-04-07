@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-9ji3go7xt-tyrons-projects-584a5697.vercel.app';
+const BACKEND_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
 
 console.log('🔍 Testing Vercel backend...');
 console.log('📍 Backend URL:', BACKEND_URL);

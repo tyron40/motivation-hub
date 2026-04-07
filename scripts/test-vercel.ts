@@ -1,4 +1,4 @@
-const VERCEL_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const VERCEL_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://motivation-hub-iota.vercel.app';
 
 async function testEndpoint(name: string, url: string, options?: RequestInit) {
   console.log(`\n🧪 Testing: ${name}`);

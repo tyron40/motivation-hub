@@ -4,7 +4,7 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
 
 const getBaseUrl = () => {
   const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || PRODUCTION_API_URL;

@@ -25,7 +25,7 @@ const STORAGE_KEY_UPDATED_AT = 'admin_data_updated_at';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-const PRODUCTION_API_URL = 'https://motivation-hub-git-main-tyrons-projects-584a5697.vercel.app';
+const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
 
 const getBackendUrl = () => {
   return process.env.EXPO_PUBLIC_RORK_API_BASE_URL || PRODUCTION_API_URL;
