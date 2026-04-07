@@ -1,8 +1,9 @@
 import { Platform } from 'react-native';
 import { API_ENDPOINTS } from './config';
+import { generateText } from '@rork-ai/toolkit-sdk';
 
-console.log('🔧 API Client | Using Rork backend endpoints');
-console.log('🔧 API Client | Chat endpoint:', API_ENDPOINTS.chat);
+console.log('🔧 API Client | Using Rork toolkit for chat, backend for TTS');
+console.log('🔧 API Client | TTS endpoint:', API_ENDPOINTS.tts);
 console.log('🔧 API Client | Platform:', Platform.OS);
 
 const CHAT_TIMEOUT = 60000;
@@ -170,79 +171,35 @@ export async function sendChatMessage(params: {
   }[];
 }): Promise<{ message: string }> {
   try {
-    console.log('🤖 Sending chat message via Rork backend...');
-    console.log('🤖 Endpoint:', API_ENDPOINTS.chat);
+    console.log('🤖 Sending chat message via Rork toolkit generateText...');
     console.log('🤖 Messages count:', params.messages.length);
     console.log('🤖 Platform:', Platform.OS);
 
-    const body = JSON.stringify({ messages: params.messages });
-    console.log('🤖 Request body size:', body.length);
+    const toolkitMessages = params.messages.map(m => ({
+      role: m.role === 'system' ? 'user' as const : m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
 
-    const response = await fetchWithRetry(
-      API_ENDPOINTS.chat,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body,
-      },
-      MAX_RETRIES,
-      CHAT_TIMEOUT
-    );
+    const result = await generateText({ messages: toolkitMessages });
 
-    const contentType = response.headers.get('content-type') || '';
-    console.log('📡 Chat Response status:', response.status, 'content-type:', contentType);
+    console.log('✅ Toolkit chat response received, length:', result?.length);
 
-    const responseText = await response.text();
-    console.log('📡 Chat Response length:', responseText.length);
-
-    if (!response.ok) {
-      let errorMessage = `Chat API error: ${response.status}`;
-      console.error('❌ Chat API error body:', responseText.substring(0, 300));
-      try {
-        const errorJson = JSON.parse(responseText);
-        errorMessage = errorJson.error || errorJson.message || errorJson.details || errorMessage;
-      } catch {
-        if (responseText.length > 0) {
-          errorMessage = `${errorMessage} - ${responseText.substring(0, 150)}`;
-        }
-      }
-      throw new Error(errorMessage);
+    if (!result || typeof result !== 'string') {
+      throw new Error('Invalid response from AI toolkit');
     }
 
-    if (!responseText || responseText.trim().length === 0) {
-      throw new Error('Empty response from chat API');
-    }
-
-    let result: any;
-    try {
-      result = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('❌ Failed to parse chat response, first 200 chars:', responseText.substring(0, 200));
-      throw new Error('Invalid JSON response from chat API');
-    }
-
-    if (!result.message || typeof result.message !== 'string') {
-      console.error('❌ Invalid chat response structure:', JSON.stringify(result).substring(0, 200));
-      throw new Error('Invalid chat response format - missing message field');
-    }
-
-    console.log('✅ Chat response received, length:', result.message.length);
-    return result;
+    return { message: result };
   } catch (error: any) {
     console.error('❌ Chat request failed:', error?.message || String(error));
     console.error('❌ Error type:', error?.name, 'Platform:', Platform.OS);
 
     if (error?.message?.includes('timed out') || error?.name === 'AbortError') {
-      throw new Error('Request timed out. The server may be slow. Please try again.');
+      throw new Error('Request timed out. Please try again.');
     }
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch') ||
-        error?.message?.includes('network') ||
-        error?.message?.includes('TypeError')) {
+        error?.message?.includes('network')) {
       throw new Error('Network error. Please check your internet connection and try again.');
     }
 
