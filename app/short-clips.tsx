@@ -468,7 +468,11 @@ const ClipPage = React.memo(function ClipPage({
       console.log('[Clip] Active, showing player:', clip.youtubeId);
       setShowPlayer(true);
       if (playerReady) {
-        setShouldPlay(true);
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          setShouldPlay(true);
+          setIsPlaying(true);
+        }, 300);
       }
     } else {
       setShouldPlay(false);
@@ -517,7 +521,8 @@ const ClipPage = React.memo(function ClipPage({
         if (!mountedRef.current) return;
         console.log('[Clip] Autoplay after ready:', clip.youtubeId);
         setShouldPlay(true);
-      }, 300);
+        setIsPlaying(true);
+      }, 500);
     }
   }, [clip.youtubeId, isActive]);
 
@@ -677,6 +682,7 @@ const ClipPage = React.memo(function ClipPage({
             width={SCREEN_WIDTH}
             play={shouldPlay}
             mute={false}
+            forceAndroidAutoplay={true}
             onReady={onPlayerReady}
             onError={onPlayerError}
             onChangeState={onStateChange}
@@ -689,6 +695,12 @@ const ClipPage = React.memo(function ClipPage({
               loop: true,
             }}
             webViewStyle={styles.ytWebView}
+            webViewProps={{
+              mediaPlaybackRequiresUserAction: false,
+              allowsInlineMediaPlayback: true,
+              javaScriptEnabled: true,
+              domStorageEnabled: true,
+            }}
           />
           {!playerReady && (
             <View style={styles.playerLoading}>

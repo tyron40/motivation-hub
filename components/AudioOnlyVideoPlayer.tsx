@@ -326,8 +326,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } catch {}
 
     if (autoplay) {
-      console.log('[Autoplay] Direct play for:', videoId);
-      updatePlayState(true);
+      console.log('[Autoplay] Scheduling autoplay for:', videoId);
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        console.log('[Autoplay] Triggering play for:', videoId);
+        updatePlayState(true);
+      }, 500);
     }
   }, [autoplay, videoId, updatePlayState]);
 
@@ -562,6 +566,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           preventFullScreen: true,
         }}
         webViewStyle={styles.hiddenWebView}
+        webViewProps={{
+          mediaPlaybackRequiresUserAction: false,
+          allowsInlineMediaPlayback: true,
+          javaScriptEnabled: true,
+          domStorageEnabled: true,
+        }}
       />
     </View>
   ) : null;
