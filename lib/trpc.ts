@@ -4,11 +4,11 @@ import type { AppRouter } from "@/backend/trpc/app-router";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-import { getVercelBackendUrl } from './config';
+import { getBackendUrl } from './config';
 
 const getBaseUrl = () => {
-  const url = getVercelBackendUrl();
-  console.log('🔧 [tRPC] Using Vercel backend URL:', url);
+  const url = getBackendUrl();
+  console.log('🔧 [tRPC] Using Rork backend URL:', url);
   return url;
 };
 
@@ -27,7 +27,6 @@ const getSafeBaseUrl = () => {
       return cachedBaseUrl;
     } catch (error) {
       console.error('❌ Failed to get base URL on first attempt:', error);
-      console.error('❌ This error will be thrown on the first tRPC call');
       throw error;
     }
   }
@@ -50,31 +49,20 @@ function createTRPCClient() {
           url: `${baseUrl}/api/trpc`,
           fetch: async (url, options) => {
             console.log('🌐 [tRPC] Fetching:', url);
-            console.log('🌐 [tRPC] Method:', options?.method || 'GET');
             try {
               const response = await fetch(url, options);
               console.log('✅ [tRPC] Response status:', response.status);
-              console.log('✅ [tRPC] Response content-type:', response.headers.get('content-type'));
-              
-              const clonedResponse = response.clone();
-              const responseText = await clonedResponse.text();
-              console.log('📥 [tRPC] Response preview (first 200 chars):', responseText.substring(0, 200));
               
               if (!response.ok) {
+                const clonedResponse = response.clone();
+                const responseText = await clonedResponse.text();
                 console.error('❌ [tRPC] Non-OK response:', response.status);
                 console.error('❌ [tRPC] Response body:', responseText.substring(0, 500));
-              }
-              
-              if (response.headers.get('content-type')?.includes('text/html')) {
-                console.error('❌ [tRPC] Received HTML instead of JSON!');
-                console.error('❌ [tRPC] This usually means the backend route is not found or misconfigured');
-                console.error('❌ [tRPC] Full HTML response:', responseText.substring(0, 1000));
               }
               
               return response;
             } catch (error) {
               console.error('❌ [tRPC] Fetch error:', error);
-              console.error('❌ [tRPC] Error type:', error?.constructor?.name);
               throw error;
             }
           },
@@ -83,10 +71,7 @@ function createTRPCClient() {
     });
   } catch (error) {
     console.error('❌ Failed to create tRPC client:', error);
-    console.error('❌ The app will not be able to connect to the backend');
-    console.error('❌ Please restart the development server with: bun start');
     
-    // Return a dummy client that will throw errors on any call
     return createTRPCProxyClient<AppRouter>({
       links: [
         httpLink({

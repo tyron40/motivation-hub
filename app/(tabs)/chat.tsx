@@ -138,7 +138,7 @@ function ChatScreenContent() {
   const generateVoice = useCallback(async (messageId: string, text: string) => {
     try {
       console.log('🎤 Generating voice for message:', messageId);
-      console.log('🎤 Using Vercel backend /api/tts endpoint');
+      console.log('🎤 Using Rork backend /api/tts endpoint');
       
       const result = await generateTextToSpeech({
         text: text.substring(0, 500),
@@ -348,7 +348,7 @@ function ChatScreenContent() {
       ];
 
       try {
-        console.log('🤖 Sending chat message via Vercel backend...');
+        console.log('🤖 Sending chat message via Rork backend...');
         console.log('📤 Messages count:', allMessages.length);
 
         const chatResult = await sendChatMessage({
@@ -358,7 +358,7 @@ function ChatScreenContent() {
           })),
         });
         const completion = chatResult.message;
-        console.log('✅ Vercel backend responded, length:', completion?.length);
+        console.log('✅ Backend responded, length:', completion?.length);
 
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format from AI');

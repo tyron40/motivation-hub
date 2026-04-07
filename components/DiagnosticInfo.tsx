@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
 import { getTrendingVideos } from '@/services/youtubeService';
-import { getVercelBackendUrl, API_ENDPOINTS } from '@/lib/config';
+import { getBackendUrl, API_ENDPOINTS } from '@/lib/config';
 
 export function DiagnosticInfo() {
   const [testResults, setTestResults] = useState<{
@@ -20,7 +20,7 @@ export function DiagnosticInfo() {
   });
   const [testing, setTesting] = useState(false);
 
-  const API_BASE = getVercelBackendUrl();
+  const API_BASE = getBackendUrl();
 
 
   const runDiagnostics = async () => {
@@ -109,7 +109,7 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>Vercel Backend URL:</Text>
+          <Text style={styles.label}>Backend URL:</Text>
         </View>
         <Text style={styles.value}>{API_BASE}</Text>
         
@@ -133,7 +133,7 @@ export function DiagnosticInfo() {
           )}
           <Text style={styles.label}>YouTube API (via Backend)</Text>
         </View>
-        <Text style={styles.helperText}>Tests YouTube API calls through Vercel backend</Text>
+        <Text style={styles.helperText}>Tests YouTube API calls through Rork backend</Text>
         
         <View style={[styles.row, { marginTop: 12 }]}>
           {testResults.healthCheck === null ? (
@@ -143,9 +143,9 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>Vercel Health Check</Text>
+          <Text style={styles.label}>Backend Health Check</Text>
         </View>
-        <Text style={styles.helperText}>Tests Vercel backend connectivity</Text>
+        <Text style={styles.helperText}>Tests Rork backend connectivity</Text>
 
         <View style={[styles.row, { marginTop: 12 }]}>
           {testResults.ttsCheck === null ? (
@@ -184,14 +184,13 @@ export function DiagnosticInfo() {
       <View style={styles.instructions}>
         <Text style={styles.instructionsTitle}>📋 What This Means:</Text>
         <Text style={styles.instructionsText}>
-          ✅ YouTube API (via Backend): Your app fetches videos through Vercel backend.{' '}
+          ✅ YouTube API (via Backend): Your app fetches videos through the Rork backend.{' '}
           This keeps your API key secure and works on all platforms.{'\n\n'}
-          ⚠️ All features require Vercel backend: YouTube videos, AI Chat, Voice Coach, and TTS.{'\n\n'}
+          ⚠️ All features require the backend: YouTube videos, AI Chat, Voice Coach, and TTS.{'\n\n'}
           🔧 Troubleshooting:{'\n'}
-          1. If YouTube API fails: Check YOUTUBE_API_KEY in Vercel environment variables{'\n'}
-          2. If Vercel fails: Check backend deployment at Vercel dashboard{'\n'}
-          3. Test connectivity: Open Vercel URL in Safari on your device{'\n'}
-          4. Vercel backend: https://motivation-hub-iota.vercel.app
+          1. If YouTube API fails: Check EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables{'\n'}
+          2. If backend fails: Check Rork backend deployment{'\n'}
+          3. Test connectivity: Run diagnostics above
         </Text>
       </View>
     </View>

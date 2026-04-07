@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { API_ENDPOINTS } from './config';
 
-console.log('🔧 API Client | Using Vercel backend endpoints');
+console.log('🔧 API Client | Using Rork backend endpoints');
 console.log('🔧 API Client | Chat endpoint:', API_ENDPOINTS.chat);
 console.log('🔧 API Client | Platform:', Platform.OS);
 
@@ -83,7 +83,7 @@ export async function generateTextToSpeech(params: {
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 }): Promise<{ audio: { base64Data: string; mimeType: string } }> {
   try {
-    console.log('🎤 Generating TTS via Vercel API...');
+    console.log('🎤 Generating TTS via Rork backend...');
     console.log('🎤 Text length:', params.text.length, 'Voice:', params.voice || 'alloy');
 
     const response = await fetchWithRetry(API_ENDPOINTS.tts, {
@@ -156,7 +156,7 @@ export async function generateTextToSpeech(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to Vercel backend. Please check your internet connection.');
+      throw new Error('Cannot connect to backend. Please check your internet connection.');
     }
 
     throw error;
@@ -170,7 +170,7 @@ export async function sendChatMessage(params: {
   }[];
 }): Promise<{ message: string }> {
   try {
-    console.log('🤖 Sending chat message via Vercel API...');
+    console.log('🤖 Sending chat message via Rork backend...');
     console.log('🤖 Endpoint:', API_ENDPOINTS.chat);
     console.log('🤖 Messages count:', params.messages.length);
     console.log('🤖 Platform:', Platform.OS);

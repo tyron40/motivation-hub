@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
     hasKey: !!supabaseAnonKey,
   });
 } else {
-  console.log('[Backend Supabase] Initialized with env vars from Vercel');
+  console.log('[Backend Supabase] Initialized with Rork env vars');
 }
 
 export const supabaseBackend = createClient(

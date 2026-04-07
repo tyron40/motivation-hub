@@ -65,7 +65,7 @@ export default function FlyersScreen() {
   useEffect(() => {
     const fetchSupabaseFlyers = async () => {
       try {
-        console.log('📡 Fetching flyers from Supabase via Vercel backend...');
+        console.log('📡 Fetching flyers from Supabase via Rork backend...');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 

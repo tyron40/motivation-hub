@@ -415,7 +415,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
 
   if (!YOUTUBE_API_KEY) {
     console.error('[YouTube] ❌ API key not configured!');
-    console.error('[YouTube] Please set YOUTUBE_API_KEY in Vercel environment variables');
+    console.error('[YouTube] Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables');
     console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
     
     if (cached) {
@@ -423,7 +423,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
       return cached.data;
     }
     
-    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY in Vercel environment variables.');
+    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables.');
   }
 
   try {
@@ -457,7 +457,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
               errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
             } else if (errorDetails.includes('API key')) {
               errorDetails = `YouTube API key is invalid or restricted. Please check:
-1. API key is correct in Vercel environment variables
+1. API key is correct in environment variables
 2. YouTube Data API v3 is enabled in Google Cloud Console
 3. API key restrictions (if any) allow requests from your server`;
             } else {
