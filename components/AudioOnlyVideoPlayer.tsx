@@ -239,16 +239,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     activeVideoIdRef.current = videoId;
     onEndCalledRef.current = false;
     autoplayTriggeredRef.current = false;
-    autoplayAttemptRef.current = 0;
-    mediaLoadedRef.current = false;
-    if (autoplayRetryTimerRef.current) {
-      clearTimeout(autoplayRetryTimerRef.current);
-      autoplayRetryTimerRef.current = null;
-    }
-    if (loadPollTimerRef.current) {
-      clearTimeout(loadPollTimerRef.current);
-      loadPollTimerRef.current = null;
-    }
+    clearAutoplayTimer();
 
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
@@ -368,80 +359,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, []);
 
   const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayInitialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayAttemptRef = useRef(0);
-  const mediaLoadedRef = useRef(false);
-  const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayInProgressRef = useRef(false);
 
   const clearAutoplayTimer = useCallback(() => {
-    if (autoplayInitialTimerRef.current) {
-      clearTimeout(autoplayInitialTimerRef.current);
-      autoplayInitialTimerRef.current = null;
-    }
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
     }
-    if (loadPollTimerRef.current) {
-      clearTimeout(loadPollTimerRef.current);
-      loadPollTimerRef.current = null;
-    }
-    autoplayInProgressRef.current = false;
   }, []);
-
-  const startAutoplay = useCallback(() => {
-    if (!autoplay || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
-    if (autoplayInProgressRef.current) {
-      console.log('[Autoplay] Already in progress, skipping');
-      return;
-    }
-    autoplayInProgressRef.current = true;
-    autoplayAttemptRef.current = 0;
-    console.log('[Autoplay] Starting autoplay for:', videoId);
-
-    const attemptPlay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
-        autoplayInProgressRef.current = false;
-        return;
-      }
-      autoplayAttemptRef.current += 1;
-      const attempt = autoplayAttemptRef.current;
-
-      if (attempt > 6) {
-        console.log(`[Autoplay] Giving up after ${attempt} attempts`);
-        autoplayInProgressRef.current = false;
-        return;
-      }
-
-      if (!playerRef.current || !playerReadyRef.current) {
-        console.log(`[Autoplay] Player not ready, retry #${attempt} in 700ms`);
-        autoplayRetryTimerRef.current = setTimeout(attemptPlay, 700);
-        return;
-      }
-
-      console.log(`[Autoplay] Attempt #${attempt} — forcing false->true transition`);
-      requestPlayState(false);
-
-      setTimeout(() => {
-        if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-        requestPlayState(true);
-      }, 150);
-
-      autoplayRetryTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
-          autoplayInProgressRef.current = false;
-          return;
-        }
-        if (autoplayInProgressRef.current) {
-          console.log(`[Autoplay] Not confirmed playing yet, retrying...`);
-          attemptPlay();
-        }
-      }, 1800);
-    };
-
-    autoplayInitialTimerRef.current = setTimeout(attemptPlay, 400);
-  }, [autoplay, videoId, requestPlayState]);
 
   useEffect(() => {
     return () => clearAutoplayTimer();
@@ -469,17 +393,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
-    if (autoplay) {
-      desiredPlayRef.current = true;
-      requestPlayState(true);
-    }
-
     if (autoplay && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
-      console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
-      startAutoplay();
+      console.log('[Autoplay] Player ready — direct play request:', activeVideoIdRef.current);
+      desiredPlayRef.current = true;
+      requestPlayState(true);
+
+      autoplayRetryTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+        if (!isPlayingRef.current && playerReadyRef.current && !playerErrorRef.current) {
+          console.log('[Autoplay] Retry — not playing yet, requesting again');
+          requestPlayState(true);
+        }
+      }, 1500);
     }
-  }, [autoplay, requestPlayState, startAutoplay]);
+  }, [autoplay, videoId, requestPlayState]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -496,7 +424,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (state === 'playing') {
       console.log('[Autoplay] Confirmed playing via state change');
-      autoplayInProgressRef.current = false;
       clearAutoplayTimer();
       autoplayTriggeredRef.current = true;
       confirmPlayState(true);
@@ -505,8 +432,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'paused') {
-      if (autoplayInProgressRef.current) {
-        console.log('[Autoplay] Ignoring paused during autoplay');
+      if (desiredPlayRef.current && autoplayTriggeredRef.current && !isPlayingRef.current) {
+        console.log('[Autoplay] Ignoring transient paused during autoplay startup');
         return;
       }
       confirmPlayState(false);
@@ -520,7 +447,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         return;
       }
       onEndCalledRef.current = true;
-      autoplayInProgressRef.current = false;
       confirmPlayState(false);
       stopProgressTracking();
       setCurrentTime(0);
@@ -627,7 +553,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const webPlayerReadyRef = useRef(false);
   const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const webAutoplayRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   const postMessageToWebPlayer = useCallback((command: string, args?: any) => {
     try {
@@ -658,7 +584,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
           if (autoplay && !autoplayTriggeredRef.current) {
             autoplayTriggeredRef.current = true;
-            autoplayInProgressRef.current = true;
+            desiredPlayRef.current = true;
             setTimeout(() => {
               if (mountedRef.current) {
                 postMessageToWebPlayer('playVideo');
@@ -670,7 +596,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           const state = data.info;
           if (state === 1) {
             console.log('[Web YT] Confirmed playing');
-            autoplayInProgressRef.current = false;
             autoplayTriggeredRef.current = true;
             confirmPlayState(true);
             if (!webProgressIntervalRef.current) {
@@ -680,14 +605,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
               }, 500);
             }
           } else if (state === 2) {
-            if (!autoplayInProgressRef.current) {
-              console.log('[Web YT] Confirmed paused');
-              confirmPlayState(false);
-            }
+            console.log('[Web YT] Confirmed paused');
+            confirmPlayState(false);
           } else if (state === 0) {
             if (!onEndCalledRef.current) {
               onEndCalledRef.current = true;
-              autoplayInProgressRef.current = false;
               confirmPlayState(false);
               setCurrentTime(0);
               setTimeout(() => { if (mountedRef.current) onEndRef.current?.(); }, 100);
@@ -722,53 +644,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (Platform.OS !== 'web') return;
     if (isPlaying) {
       postMessageToWebPlayer('playVideo');
-    } else if (!autoplayInProgressRef.current) {
+    } else {
       postMessageToWebPlayer('pauseVideo');
     }
   }, [isPlaying, postMessageToWebPlayer]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    if (!autoplay || !playerReady || !videoId) return;
-    if (autoplayTriggeredRef.current) return;
-
-    autoplayTriggeredRef.current = true;
-    autoplayInProgressRef.current = true;
-    let attempts = 0;
-
-    const kickAutoplay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-      attempts += 1;
-      postMessageToWebPlayer('playVideo');
-      requestPlayState(true);
-
-      if (attempts >= 8) {
-        if (webAutoplayRetryRef.current) {
-          clearInterval(webAutoplayRetryRef.current);
-          webAutoplayRetryRef.current = null;
-        }
-      }
-    };
-
-    kickAutoplay();
-    webAutoplayRetryRef.current = setInterval(() => {
-      if (!autoplayInProgressRef.current) {
-        if (webAutoplayRetryRef.current) {
-          clearInterval(webAutoplayRetryRef.current);
-          webAutoplayRetryRef.current = null;
-        }
-        return;
-      }
-      kickAutoplay();
-    }, 700);
-
-    return () => {
-      if (webAutoplayRetryRef.current) {
-        clearInterval(webAutoplayRetryRef.current);
-        webAutoplayRetryRef.current = null;
-      }
-    };
-  }, [autoplay, playerReady, videoId, postMessageToWebPlayer, requestPlayState]);
 
   const webPlayerElement = Platform.OS === 'web' ? (
     <View style={styles.hiddenPlayer}>
