@@ -100,7 +100,7 @@ function VoiceCoachContent() {
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('🎵 Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS via Vercel API (optimized for speed)...');
+      console.log('📤 Calling TTS via Rork backend (optimized for speed)...');
       const ttsStartTime = Date.now();
       
       try {
@@ -1096,7 +1096,7 @@ Key traits:
 
 IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow. Always end with encouragement.`;
 
-      console.log('📤 Calling chat via Vercel API...');
+      console.log('📤 Calling chat via Rork backend...');
       
       const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
         { role: 'system' as const, content: systemPrompt },

@@ -415,7 +415,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
 
   if (!YOUTUBE_API_KEY) {
     console.error('[YouTube] ❌ API key not configured!');
-    console.error('[YouTube] Please set YOUTUBE_API_KEY in Vercel environment variables');
+    console.error('[YouTube] Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables');
     console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
     
     if (cached) {
@@ -423,7 +423,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
       return cached.data;
     }
     
-    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY in Vercel environment variables.');
+    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables.');
   }
 
   try {
@@ -457,7 +457,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
               errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
             } else if (errorDetails.includes('API key')) {
               errorDetails = `YouTube API key is invalid or restricted. Please check:
-1. API key is correct in Vercel environment variables
+1. API key is correct in environment variables
 2. YouTube Data API v3 is enabled in Google Cloud Console
 3. API key restrictions (if any) allow requests from your server`;
             } else {
@@ -713,6 +713,61 @@ const handlePostAdminData = async (c: Context) => {
 
 app.post('/api/admin/data', handlePostAdminData);
 app.post('/admin/data', handlePostAdminData);
+
+const handleGetFlyers = async (c: Context) => {
+  try {
+    console.log('[Flyers] GET flyers from Supabase');
+    await ensureAdminDataLoaded();
+
+    const { data: supabaseFlyers, error } = await supabaseBackend
+      .from('flyers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    let flyersFromTable: any[] = [];
+    if (error) {
+      console.warn('[Flyers] Supabase flyers table error:', error.message);
+    } else if (supabaseFlyers && supabaseFlyers.length > 0) {
+      flyersFromTable = supabaseFlyers.map((f: any) => ({
+        id: f.id || `sb-flyer-${f.created_at}`,
+        title: f.title || '',
+        quote: f.quote || '',
+        imageUrl: f.image_url || f.imageUrl || '',
+        accent: f.accent || '#FF8A00',
+      }));
+      console.log(`[Flyers] Found ${flyersFromTable.length} flyers in Supabase flyers table`);
+    }
+
+    const adminFlyers = Array.isArray(ADMIN_DATA_STORE.flyers) ? ADMIN_DATA_STORE.flyers : [];
+
+    const allFlyers = [...flyersFromTable, ...adminFlyers];
+    const seen = new Set<string>();
+    const uniqueFlyers = allFlyers.filter(f => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+
+    console.log(`[Flyers] Returning ${uniqueFlyers.length} total flyers (${flyersFromTable.length} from table, ${adminFlyers.length} from admin)`);
+
+    return c.json({
+      flyers: uniqueFlyers,
+      source: 'supabase',
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[Flyers] Error fetching flyers:', error);
+    await ensureAdminDataLoaded();
+    return c.json({
+      flyers: ADMIN_DATA_STORE.flyers || [],
+      source: 'admin_fallback',
+      fetchedAt: new Date().toISOString(),
+    });
+  }
+};
+
+app.get('/api/flyers', handleGetFlyers);
+app.get('/flyers', handleGetFlyers);
 
 app.post('/api/youtube/category', handleYouTubeCategory);
 app.post('/youtube/category', handleYouTubeCategory);

@@ -1,85 +1,81 @@
-const PRODUCTION_API_URL = 'https://motivation-hub-iota.vercel.app';
+import { Platform } from 'react-native';
+import { API_ENDPOINTS } from './config';
 
-function getApiBase(): string {
-  const rorkUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
-  const lowered = rorkUrl.toLowerCase();
-  const isBad = !rorkUrl ||
-    lowered.includes('rorktest.dev') ||
-    lowered.includes('localhost') ||
-    lowered.startsWith('http://') ||
-    lowered.startsWith('https://a-');
+console.log('🔧 API Client | Using Rork backend endpoints');
+console.log('🔧 API Client | Chat endpoint:', API_ENDPOINTS.chat);
+console.log('🔧 API Client | Platform:', Platform.OS);
 
-  const finalUrl = isBad ? PRODUCTION_API_URL : rorkUrl;
-  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
-}
+const CHAT_TIMEOUT = 60000;
+const DEFAULT_TIMEOUT = 30000;
+const MAX_RETRIES = 3;
 
-const API_BASE = getApiBase();
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeout: number = DEFAULT_TIMEOUT
+): Promise<Response> {
+  console.log(`📡 Fetching ${url} (timeout: ${timeout}ms, platform: ${Platform.OS})`);
 
-console.log('🔧 API Client - Using URL:', API_BASE);
-console.log('🔧 EXPO_PUBLIC_RORK_API_BASE_URL from env:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-console.log('🔧 PRODUCTION_API_URL (fallback):', PRODUCTION_API_URL);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log(`⏱️ Request to ${url} timed out after ${timeout}ms`);
+    controller.abort();
+  }, timeout);
 
-const DEFAULT_TIMEOUT = 45000;
-const CONNECTION_TEST_TIMEOUT = 10000;
-
-function getAuthHeader(): Record<string, string> {
-  const preset = process.env.EXPO_PUBLIC_API_AUTH_HEADER ?? '';
-  if (preset) {
-    return { Authorization: preset };
-  }
-  const user = process.env.EXPO_PUBLIC_BASIC_AUTH_USER ?? '';
-  const pass = process.env.EXPO_PUBLIC_BASIC_AUTH_PASS ?? '';
-  if (user && pass) {
-    const token = typeof btoa === 'function' ? btoa(`${user}:${pass}`) : Buffer.from(`${user}:${pass}`).toString('base64');
-    return { Authorization: `Basic ${token}` };
-  }
-  return {};
-}
-
-async function testConnection(url: string): Promise<{ success: boolean; error?: string }> {
   try {
-    console.log('🔍 Testing connection to:', url);
+    const fetchOptions: RequestInit = {
+      ...options,
+      signal: controller.signal,
+    };
 
-    if (url.includes('rorktest.dev') || url.includes('localhost')) {
-      console.warn('⚠️ Development URL detected, skipping connection test - using production fallback');
-      return { success: true };
+    if (Platform.OS !== 'web') {
+      fetchOptions.headers = {
+        ...fetchOptions.headers as Record<string, string>,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
     }
 
-    const pathsToTry = ['/api/health', '/health', '/'];
-    for (const path of pathsToTry) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TEST_TIMEOUT);
-
-        const response = await fetch(`${url}${path}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-
-        clearTimeout(timeoutId);
-        console.log(`🔎 Probe ${path} -> ${response.status}`);
-
-        if (response.ok || response.status === 401 || response.status === 403) {
-          return { success: true };
-        }
-      } catch (innerErr: any) {
-        console.log(`⚠️ Probe failed for one path: ${path}`, innerErr?.message);
-      }
-    }
-
-    return { success: false, error: 'All health probes failed' };
+    const response = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
+    console.log(`📡 Response received from ${url}: status=${response.status}`);
+    return response;
   } catch (error: any) {
-    console.log('❌ Connection test failed:', error);
+    clearTimeout(timeoutId);
+    console.error(`📡 Fetch error for ${url}:`, error?.message || error?.name || 'Unknown error');
     if (error?.name === 'AbortError') {
-      return { success: false, error: 'Connection timeout - server took too long to respond' };
+      throw new Error(`Request timed out after ${timeout}ms. Please check your connection.`);
     }
-    return { success: false, error: error?.message || 'Network request failed' };
+    throw error;
   }
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries: number = MAX_RETRIES,
+  timeout: number = DEFAULT_TIMEOUT
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = Math.min(2000 * attempt, 5000);
+        console.log(`[Retry] Attempt ${attempt + 1}/${retries} for ${url} after ${delay}ms`);
+        await new Promise<void>(r => setTimeout(r, delay));
+      }
+
+      const response = await fetchWithTimeout(url, options, timeout);
+      console.log(`✅ Fetch success for ${url} (attempt ${attempt + 1}), status: ${response.status}`);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`❌ Fetch error for ${url} (attempt ${attempt + 1}):`, error?.message || error);
+    }
+  }
+
+  throw lastError || new Error(`Failed to fetch ${url} after ${retries} attempts`);
 }
 
 export async function generateTextToSpeech(params: {
@@ -87,56 +83,30 @@ export async function generateTextToSpeech(params: {
   voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 }): Promise<{ audio: { base64Data: string; mimeType: string } }> {
   try {
-    console.log('🎤 Generating TTS via Vercel API...');
-    console.log('🎤 API Base URL:', API_BASE);
-    console.log('🎤 Full URL:', `${API_BASE}/api/tts`);
-    console.log('🎤 Text length:', params.text.length);
-    console.log('🎤 Voice:', params.voice || 'alloy');
+    console.log('🎤 Generating TTS via Rork backend...');
+    console.log('🎤 Text length:', params.text.length, 'Voice:', params.voice || 'alloy');
 
-    console.log('🔍 Checking server connectivity...');
-    const connectionResult = await testConnection(API_BASE);
-    if (!connectionResult.success) {
-      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
-      console.warn('⚠️ Attempted URL:', API_BASE);
-      console.warn('⚠️ Probe error:', connectionResult.error);
-    } else {
-      console.log('✅ Server connectivity confirmed');
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-    const response = await fetch(`${API_BASE}/api/tts`, {
+    const response = await fetchWithRetry(API_ENDPOINTS.tts, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-        ...getAuthHeader(),
       },
       body: JSON.stringify({
         text: params.text,
         voice: params.voice || 'alloy',
       }),
-      signal: controller.signal,
-      cache: 'no-store',
     });
 
-    clearTimeout(timeoutId);
-
     const contentType = response.headers.get('content-type');
-    console.log('📡 Response content-type:', contentType);
-    console.log('📡 Response status:', response.status);
+    console.log('📡 TTS Response status:', response.status);
 
     if (!response.ok) {
       let errorMessage = `TTS API error: ${response.status}`;
       try {
         const errorText = await response.text();
-        console.error('❌ TTS API error response:', errorText.substring(0, 200));
-
-        if (response.status === 401 || response.status === 403) {
-          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER) to allow the app to access the API.';
-        } else if (contentType?.includes('application/json')) {
+        console.error('❌ TTS API error:', errorText.substring(0, 200));
+        if (contentType?.includes('application/json')) {
           try {
             const errorJson = JSON.parse(errorText);
             errorMessage = errorJson.error || errorJson.message || errorMessage;
@@ -153,12 +123,9 @@ export async function generateTextToSpeech(params: {
     }
 
     const responseText = await response.text();
-    console.log('📥 Response text length:', responseText.length);
-    console.log('📥 Response first 100 chars:', responseText.substring(0, 100));
 
     if (!contentType?.includes('application/json')) {
       console.error('❌ Response is not JSON, content-type:', contentType);
-      console.error('❌ Response body:', responseText.substring(0, 500));
       throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
     }
 
@@ -169,29 +136,19 @@ export async function generateTextToSpeech(params: {
       }
       result = JSON.parse(responseText);
     } catch (parseError: any) {
-      console.error('❌ Failed to parse TTS response as JSON:', parseError);
-      console.error('❌ Parse error message:', parseError?.message);
-      console.error('❌ Response was:', responseText.substring(0, 500));
-      
-      // Check if it's a common error response format
-      if (responseText.includes('error') || responseText.includes('Error')) {
-        throw new Error(`Server error: ${responseText.substring(0, 200)}`);
-      }
-      
-      throw new Error(`Failed to parse server response. The server may have returned invalid data. Error: ${parseError?.message || 'Unknown parse error'}`);
+      console.error('❌ Failed to parse TTS response:', parseError?.message);
+      throw new Error(`Failed to parse server response: ${parseError?.message || 'Unknown parse error'}`);
     }
-    console.log('✅ TTS result received');
 
     if (!result.audio || !result.audio.base64Data) {
-      console.error('❌ Invalid TTS result structure:', JSON.stringify(result).substring(0, 200));
+      console.error('❌ Invalid TTS result structure');
       throw new Error('Invalid TTS response: missing audio data');
     }
 
+    console.log('✅ TTS result received');
     return result;
   } catch (error: any) {
-    console.error('❌ TTS generation failed:', error);
-    console.error('❌ Error name:', error?.name);
-    console.error('❌ Error message:', error?.message);
+    console.error('❌ TTS generation failed:', error?.message);
 
     if (error?.name === 'AbortError') {
       throw new Error('Request timeout - please check your internet connection');
@@ -199,7 +156,7 @@ export async function generateTextToSpeech(params: {
 
     if (error?.message?.includes('Network request failed') ||
         error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
+      throw new Error('Cannot connect to backend. Please check your internet connection.');
     }
 
     throw error;
@@ -213,105 +170,80 @@ export async function sendChatMessage(params: {
   }[];
 }): Promise<{ message: string }> {
   try {
-    console.log('🤖 Sending chat message via Vercel API...');
-    console.log('🤖 API Base URL:', API_BASE);
-    console.log('🤖 Full URL:', `${API_BASE}/api/chat`);
+    console.log('🤖 Sending chat message via Rork backend...');
+    console.log('🤖 Endpoint:', API_ENDPOINTS.chat);
+    console.log('🤖 Messages count:', params.messages.length);
+    console.log('🤖 Platform:', Platform.OS);
 
-    console.log('🔍 Checking server connectivity...');
-    const connectionResult = await testConnection(API_BASE);
-    if (!connectionResult.success) {
-      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
-      console.warn('⚠️ Attempted URL:', API_BASE);
-      console.warn('⚠️ Probe error:', connectionResult.error);
-    } else {
-      console.log('✅ Server connectivity confirmed');
-    }
+    const body = JSON.stringify({ messages: params.messages });
+    console.log('🤖 Request body size:', body.length);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-    const response = await fetch(`${API_BASE}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-        ...getAuthHeader(),
+    const response = await fetchWithRetry(
+      API_ENDPOINTS.chat,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body,
       },
-      body: JSON.stringify({
-        messages: params.messages,
-      }),
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+      MAX_RETRIES,
+      CHAT_TIMEOUT
+    );
 
-    clearTimeout(timeoutId);
+    const contentType = response.headers.get('content-type') || '';
+    console.log('📡 Chat Response status:', response.status, 'content-type:', contentType);
 
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Response content-type:', contentType);
-    console.log('📡 Response status:', response.status);
+    const responseText = await response.text();
+    console.log('📡 Chat Response length:', responseText.length);
 
     if (!response.ok) {
       let errorMessage = `Chat API error: ${response.status}`;
+      console.error('❌ Chat API error body:', responseText.substring(0, 300));
       try {
-        const errorText = await response.text();
-        console.error('❌ Chat API error response:', errorText.substring(0, 200));
-
-        if (response.status === 401 || response.status === 403) {
-          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER).';
-        } else if (contentType?.includes('application/json')) {
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorJson.message || errorMessage;
-          } catch {
-            errorMessage = errorText.substring(0, 100);
-          }
-        } else {
-          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
+        const errorJson = JSON.parse(responseText);
+        errorMessage = errorJson.error || errorJson.message || errorJson.details || errorMessage;
+      } catch {
+        if (responseText.length > 0) {
+          errorMessage = `${errorMessage} - ${responseText.substring(0, 150)}`;
         }
-      } catch (e) {
-        console.error('❌ Could not read error response:', e);
       }
       throw new Error(errorMessage);
     }
 
-    const responseText = await response.text();
-    console.log('📥 Response text length:', responseText.length);
-    console.log('📥 Response first 100 chars:', responseText.substring(0, 100));
-
-    if (!contentType?.includes('application/json')) {
-      console.error('❌ Response is not JSON, content-type:', contentType);
-      console.error('❌ Response body:', responseText.substring(0, 500));
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    if (!responseText || responseText.trim().length === 0) {
+      throw new Error('Empty response from chat API');
     }
 
     let result: any;
     try {
       result = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('❌ Failed to parse chat response as JSON:', parseError);
-      console.error('❌ Response was:', responseText.substring(0, 500));
-      throw new Error(`Invalid JSON response from chat API: ${responseText.substring(0, 100)}`);
+      console.error('❌ Failed to parse chat response, first 200 chars:', responseText.substring(0, 200));
+      throw new Error('Invalid JSON response from chat API');
     }
-    console.log('✅ Chat response received');
 
     if (!result.message || typeof result.message !== 'string') {
-      throw new Error('Invalid chat response format');
+      console.error('❌ Invalid chat response structure:', JSON.stringify(result).substring(0, 200));
+      throw new Error('Invalid chat response format - missing message field');
     }
 
+    console.log('✅ Chat response received, length:', result.message.length);
     return result;
   } catch (error: any) {
-    console.error('❌ Chat request failed:', error);
-    console.error('❌ Error name:', error?.name);
-    console.error('❌ Error message:', error?.message);
+    console.error('❌ Chat request failed:', error?.message || String(error));
+    console.error('❌ Error type:', error?.name, 'Platform:', Platform.OS);
 
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timeout - please check your internet connection');
+    if (error?.message?.includes('timed out') || error?.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be slow. Please try again.');
     }
 
     if (error?.message?.includes('Network request failed') ||
-        error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
+        error?.message?.includes('Failed to fetch') ||
+        error?.message?.includes('network') ||
+        error?.message?.includes('TypeError')) {
+      throw new Error('Network error. Please check your internet connection and try again.');
     }
 
     throw error;

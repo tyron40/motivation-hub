@@ -22,10 +22,9 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { generateText } from '@rork-ai/toolkit-sdk';
-import { useAdMob } from '@/hooks/admob-context';
+import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,7 +67,7 @@ function ChatScreenContent() {
   const { useCredit: deductCredit, usageStats } = useIAP();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
-  const { tryShowInterstitialOnTransition } = useAdMob();
+  const { recordMessageSent, recordMessageComplete, setTyping: setAdTyping, recordInteraction: recordAdInteraction } = useChatInterstitialAd();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
@@ -139,17 +138,16 @@ function ChatScreenContent() {
   const generateVoice = useCallback(async (messageId: string, text: string) => {
     try {
       console.log('🎤 Generating voice for message:', messageId);
+      console.log('🎤 Using Rork backend /api/tts endpoint');
       
-      console.log('🎤 Calling TTS via backend API...');
-      
-      const data = await generateTextToSpeech({
+      const result = await generateTextToSpeech({
         text: text.substring(0, 500),
         voice: (profile.preferredVoice || 'alloy') as any,
       });
       
       console.log('✅ TTS response received');
       
-      const audioUrl = `data:${data.audio.mimeType};base64,${data.audio.base64Data}`;
+      const audioUrl = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
       console.log('✅ Audio URL created');
       
       setMessages(prev => prev.map(msg => 
@@ -255,7 +253,7 @@ function ChatScreenContent() {
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
-    void tryShowInterstitialOnTransition();
+    recordMessageSent();
 
     if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
@@ -350,14 +348,17 @@ function ChatScreenContent() {
       ];
 
       try {
-        console.log('🤖 Sending chat message via Rork Toolkit...');
+        console.log('🤖 Sending chat message via Rork backend...');
         console.log('📤 Messages count:', allMessages.length);
 
-        const completion = await generateText({
-          messages: allMessages,
+        const chatResult = await sendChatMessage({
+          messages: allMessages.map(m => ({
+            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
         });
-
-        console.log('📥 Chat response received, length:', completion?.length);
+        const completion = chatResult.message;
+        console.log('✅ Backend responded, length:', completion?.length);
 
         if (!completion || typeof completion !== 'string') {
           throw new Error('Invalid response format from AI');
@@ -393,10 +394,6 @@ function ChatScreenContent() {
             console.log('⚠️ Not enough credits for voice generation');
           }
         }
-      } catch (fetchError) {
-        console.error('🤖 AI generation error:', fetchError);
-        throw fetchError;
-      }
     } catch (error) {
       console.error('Chat error:', error);
 
@@ -417,8 +414,9 @@ function ChatScreenContent() {
     } finally {
       setIsLoading(false);
       setIsTyping(false);
+      recordMessageComplete();
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, recordMessageSent, recordMessageComplete]);
 
 
 
@@ -961,7 +959,12 @@ function ChatScreenContent() {
                     placeholder="Ask for motivation, advice, or inspiration..."
                     placeholderTextColor={Colors.textSecondary}
                     value={inputText}
-                    onChangeText={setInputText}
+                    onChangeText={(text) => {
+                      setInputText(text);
+                      setAdTyping(text.length > 0);
+                    }}
+                    onFocus={() => setAdTyping(true)}
+                    onBlur={() => setAdTyping(false)}
                     multiline
                     maxLength={500}
                     editable={!isTranscribing}
