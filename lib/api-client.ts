@@ -7,7 +7,7 @@ console.log('🔧 API Client | Platform:', Platform.OS);
 
 const CHAT_TIMEOUT = 60000;
 const DEFAULT_TIMEOUT = 30000;
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 
 async function fetchWithTimeout(
   url: string,
@@ -16,40 +16,38 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   console.log(`📡 Fetching ${url} (timeout: ${timeout}ms, platform: ${Platform.OS})`);
 
-  if (Platform.OS === 'web') {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log(`⏱️ Request to ${url} timed out after ${timeout}ms`);
+    controller.abort();
+  }, timeout);
+
+  try {
+    const fetchOptions: RequestInit = {
+      ...options,
+      signal: controller.signal,
+    };
+
+    if (Platform.OS !== 'web') {
+      fetchOptions.headers = {
+        ...fetchOptions.headers as Record<string, string>,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
     }
+
+    const response = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
+    console.log(`📡 Response received from ${url}: status=${response.status}`);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    console.error(`📡 Fetch error for ${url}:`, error?.message || error?.name || 'Unknown error');
+    if (error?.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms. Please check your connection.`);
+    }
+    throw error;
   }
-
-  return new Promise<Response>((resolve, reject) => {
-    let didTimeout = false;
-    const timeoutId = setTimeout(() => {
-      didTimeout = true;
-      reject(new Error(`Request to ${url} timed out after ${timeout}ms`));
-    }, timeout);
-
-    fetch(url, options)
-      .then((response) => {
-        if (!didTimeout) {
-          clearTimeout(timeoutId);
-          resolve(response);
-        }
-      })
-      .catch((error) => {
-        if (!didTimeout) {
-          clearTimeout(timeoutId);
-          reject(error);
-        }
-      });
-  });
 }
 
 async function fetchWithRetry(
@@ -173,7 +171,12 @@ export async function sendChatMessage(params: {
 }): Promise<{ message: string }> {
   try {
     console.log('🤖 Sending chat message via Vercel API...');
+    console.log('🤖 Endpoint:', API_ENDPOINTS.chat);
     console.log('🤖 Messages count:', params.messages.length);
+    console.log('🤖 Platform:', Platform.OS);
+
+    const body = JSON.stringify({ messages: params.messages });
+    console.log('🤖 Request body size:', body.length);
 
     const response = await fetchWithRetry(
       API_ENDPOINTS.chat,
@@ -183,69 +186,64 @@ export async function sendChatMessage(params: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify({
-          messages: params.messages,
-        }),
+        body,
       },
       MAX_RETRIES,
       CHAT_TIMEOUT
     );
 
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Chat Response status:', response.status);
+    const contentType = response.headers.get('content-type') || '';
+    console.log('📡 Chat Response status:', response.status, 'content-type:', contentType);
+
+    const responseText = await response.text();
+    console.log('📡 Chat Response length:', responseText.length);
 
     if (!response.ok) {
       let errorMessage = `Chat API error: ${response.status}`;
+      console.error('❌ Chat API error body:', responseText.substring(0, 300));
       try {
-        const errorText = await response.text();
-        console.error('❌ Chat API error:', errorText.substring(0, 200));
-        if (contentType?.includes('application/json')) {
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorJson.message || errorMessage;
-          } catch {
-            errorMessage = errorText.substring(0, 100);
-          }
-        } else {
-          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
+        const errorJson = JSON.parse(responseText);
+        errorMessage = errorJson.error || errorJson.message || errorJson.details || errorMessage;
+      } catch {
+        if (responseText.length > 0) {
+          errorMessage = `${errorMessage} - ${responseText.substring(0, 150)}`;
         }
-      } catch (e) {
-        console.error('❌ Could not read error response:', e);
       }
       throw new Error(errorMessage);
     }
 
-    const responseText = await response.text();
-
-    if (!contentType?.includes('application/json')) {
-      console.error('❌ Response is not JSON, content-type:', contentType);
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    if (!responseText || responseText.trim().length === 0) {
+      throw new Error('Empty response from chat API');
     }
 
     let result: any;
     try {
       result = JSON.parse(responseText);
     } catch (parseError) {
-      console.error('❌ Failed to parse chat response');
+      console.error('❌ Failed to parse chat response, first 200 chars:', responseText.substring(0, 200));
       throw new Error('Invalid JSON response from chat API');
     }
 
     if (!result.message || typeof result.message !== 'string') {
-      throw new Error('Invalid chat response format');
+      console.error('❌ Invalid chat response structure:', JSON.stringify(result).substring(0, 200));
+      throw new Error('Invalid chat response format - missing message field');
     }
 
     console.log('✅ Chat response received, length:', result.message.length);
     return result;
   } catch (error: any) {
-    console.error('❌ Chat request failed:', error?.message);
+    console.error('❌ Chat request failed:', error?.message || String(error));
+    console.error('❌ Error type:', error?.name, 'Platform:', Platform.OS);
 
-    if (error?.name === 'AbortError') {
-      throw new Error('Request timeout - please check your internet connection');
+    if (error?.message?.includes('timed out') || error?.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be slow. Please try again.');
     }
 
     if (error?.message?.includes('Network request failed') ||
-        error?.message?.includes('Failed to fetch')) {
-      throw new Error('Cannot connect to Vercel backend. Please check your internet connection.');
+        error?.message?.includes('Failed to fetch') ||
+        error?.message?.includes('network') ||
+        error?.message?.includes('TypeError')) {
+      throw new Error('Network error. Please check your internet connection and try again.');
     }
 
     throw error;

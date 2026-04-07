@@ -457,6 +457,7 @@ const ClipPage = React.memo(function ClipPage({
   const playerRef = useRef<any>(null);
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const mountedRef = useRef(true);
+  const autoplayTriggeredRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -467,20 +468,17 @@ const ClipPage = React.memo(function ClipPage({
     if (isActive) {
       console.log('[Clip] Active, showing player:', clip.youtubeId);
       setShowPlayer(true);
-      if (playerReady) {
-        setTimeout(() => {
-          if (!mountedRef.current) return;
-          setShouldPlay(true);
-          setIsPlaying(true);
-        }, 300);
-      }
+      setShouldPlay(true);
+      setIsPlaying(true);
+      autoplayTriggeredRef.current = false;
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
       setShowPlayer(false);
       setPlayerReady(false);
+      autoplayTriggeredRef.current = false;
     }
-  }, [isActive, clip.youtubeId, playerReady]);
+  }, [isActive, clip.youtubeId]);
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
@@ -514,15 +512,13 @@ const ClipPage = React.memo(function ClipPage({
 
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('[Clip] Player ready, triggering autoplay:', clip.youtubeId);
+    console.log('[Clip] Player ready:', clip.youtubeId, 'isActive:', isActive);
     setPlayerReady(true);
-    if (isActive) {
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        console.log('[Clip] Autoplay after ready:', clip.youtubeId);
-        setShouldPlay(true);
-        setIsPlaying(true);
-      }, 500);
+    if (isActive && !autoplayTriggeredRef.current) {
+      autoplayTriggeredRef.current = true;
+      console.log('[Clip] Ensuring autoplay after ready:', clip.youtubeId);
+      setShouldPlay(true);
+      setIsPlaying(true);
     }
   }, [clip.youtubeId, isActive]);
 
@@ -700,6 +696,8 @@ const ClipPage = React.memo(function ClipPage({
               allowsInlineMediaPlayback: true,
               javaScriptEnabled: true,
               domStorageEnabled: true,
+              bounces: false,
+              scrollEnabled: false,
             }}
           />
           {!playerReady && (

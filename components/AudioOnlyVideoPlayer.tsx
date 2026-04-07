@@ -82,12 +82,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const [isLoading, setIsLoading] = useState(true);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(autoplay);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState(false);
+  const autoplayAttemptedRef = useRef(false);
 
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,6 +188,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     onEndCalledRef.current = false;
+    autoplayAttemptedRef.current = false;
 
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
@@ -197,9 +199,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       setPlayerReady(false);
       setPlayerError(false);
       setCurrentTime(0);
-      updatePlayState(false);
       setIsLoading(false);
       setError(null);
+      if (autoplay) {
+        console.log('[Autoplay] Setting play=true immediately for new video:', videoId);
+        updatePlayState(true);
+      } else {
+        updatePlayState(false);
+      }
 
       const fetchVideoMetadata = async () => {
         try {
@@ -325,15 +332,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     } catch {}
 
-    if (autoplay) {
-      console.log('[Autoplay] Scheduling autoplay for:', videoId);
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        console.log('[Autoplay] Triggering play for:', videoId);
-        updatePlayState(true);
-      }, 500);
+    if (autoplay && !autoplayAttemptedRef.current) {
+      autoplayAttemptedRef.current = true;
+      console.log('[Autoplay] Player ready, ensuring play state for:', videoId);
+      updatePlayState(true);
+      startProgressTracking();
     }
-  }, [autoplay, videoId, updatePlayState]);
+  }, [autoplay, videoId, updatePlayState, startProgressTracking]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -551,8 +556,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       <YoutubePlayer
         ref={playerRef}
         videoId={videoId}
-        height={1}
-        width={1}
+        height={200}
+        width={300}
         play={isPlaying}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
@@ -571,6 +576,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           allowsInlineMediaPlayback: true,
           javaScriptEnabled: true,
           domStorageEnabled: true,
+          bounces: false,
+          scrollEnabled: false,
         }}
       />
     </View>
