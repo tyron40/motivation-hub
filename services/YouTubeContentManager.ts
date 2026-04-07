@@ -145,7 +145,7 @@ async function fetchFromBackend(
 ): Promise<CachedVideo[]> {
   const apiBase = getApiBase();
   if (!apiBase) {
-    console.error('YouTube fetch failed: EXPO_PUBLIC_RORK_API_BASE_URL is not set');
+    console.error('YouTube fetch failed: Vercel backend URL is not available');
     return [];
   }
 

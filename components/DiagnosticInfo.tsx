@@ -19,13 +19,13 @@ export function DiagnosticInfo() {
   });
   const [testing, setTesting] = useState(false);
 
-  const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'NOT SET';
+  const API_BASE = 'https://motivation-hub-iota.vercel.app';
 
 
   const runDiagnostics = async () => {
     setTesting(true);
     const results = {
-      envCheck: !!process.env.EXPO_PUBLIC_RORK_API_BASE_URL,
+      envCheck: true,
       youtubeApiCheck: null as boolean | null,
       healthCheck: null as boolean | null,
       ttsCheck: null as boolean | null,
@@ -108,7 +108,7 @@ export function DiagnosticInfo() {
           ) : (
             <XCircle size={20} color="#ef4444" />
           )}
-          <Text style={styles.label}>EXPO_PUBLIC_RORK_API_BASE_URL:</Text>
+          <Text style={styles.label}>Vercel Backend URL:</Text>
         </View>
         <Text style={styles.value}>{API_BASE}</Text>
         
@@ -190,7 +190,7 @@ export function DiagnosticInfo() {
           1. If YouTube API fails: Check YOUTUBE_API_KEY in Vercel environment variables{'\n'}
           2. If Vercel fails: Check backend deployment at Vercel dashboard{'\n'}
           3. Test connectivity: Open Vercel URL in Safari on your device{'\n'}
-          4. Ensure EXPO_PUBLIC_RORK_API_BASE_URL points to your Vercel deployment
+          4. Vercel backend: https://motivation-hub-iota.vercel.app
         </Text>
       </View>
     </View>

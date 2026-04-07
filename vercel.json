@@ -1,5 +1,10 @@
 {
   "installCommand": "bun install",
   "buildCommand": "echo 'No build needed'",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/health", "destination": "/api" },
+    { "source": "/trpc/(.*)", "destination": "/api" }
+  ]
 }

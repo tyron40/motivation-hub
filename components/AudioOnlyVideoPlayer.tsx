@@ -320,12 +320,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } catch {}
 
     if (autoplay) {
-      console.log('[Autoplay] Ready-gated play for:', videoId);
-      setTimeout(() => {
-        if (mountedRef.current) {
-          updatePlayState(true);
-        }
-      }, 500);
+      console.log('[Autoplay] Direct play for:', videoId);
+      updatePlayState(true);
     }
   }, [autoplay, videoId, updatePlayState]);
 
@@ -473,12 +469,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           setError(null);
 
           if (autoplay) {
-            setTimeout(() => {
-              if (mountedRef.current) {
-                postMessageToWebPlayer('playVideo');
-                updatePlayState(true);
-              }
-            }, 800);
+            postMessageToWebPlayer('playVideo');
+            updatePlayState(true);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;

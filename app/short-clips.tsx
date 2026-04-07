@@ -467,9 +467,7 @@ const ClipPage = React.memo(function ClipPage({
     if (isActive) {
       console.log('Clip active, loading player:', clip.youtubeId);
       setShowPlayer(true);
-      setTimeout(() => {
-        if (mountedRef.current) setShouldPlay(true);
-      }, 600);
+      setShouldPlay(true);
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
@@ -513,9 +511,7 @@ const ClipPage = React.memo(function ClipPage({
     console.log('[Clip] Player ready:', clip.youtubeId);
     setPlayerReady(true);
     if (isActive) {
-      setTimeout(() => {
-        if (mountedRef.current) setShouldPlay(true);
-      }, 500);
+      setShouldPlay(true);
     }
   }, [clip.youtubeId, isActive]);
 
