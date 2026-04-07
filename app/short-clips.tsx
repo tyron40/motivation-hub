@@ -460,46 +460,22 @@ const ClipPage = React.memo(function ClipPage({
   const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const autoplayInProgressRef = useRef(false);
-  const autoplayInitialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayToggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayAttemptRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      if (autoplayInitialTimerRef.current) clearTimeout(autoplayInitialTimerRef.current);
-      if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
-      if (autoplayToggleTimerRef.current) clearTimeout(autoplayToggleTimerRef.current);
-    };
+    return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
     if (isActive) {
       console.log('Clip became active, showing player:', clip.youtubeId);
       setShowPlayer(true);
-      autoplayAttemptRef.current = 0;
-      autoplayInProgressRef.current = true;
-      setShouldPlay(true);
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
       setShowPlayer(false);
       setPlayerReady(false);
       autoplayInProgressRef.current = false;
-      if (autoplayInitialTimerRef.current) {
-        clearTimeout(autoplayInitialTimerRef.current);
-        autoplayInitialTimerRef.current = null;
-      }
-      if (autoplayRetryTimerRef.current) {
-        clearTimeout(autoplayRetryTimerRef.current);
-        autoplayRetryTimerRef.current = null;
-      }
-      if (autoplayToggleTimerRef.current) {
-        clearTimeout(autoplayToggleTimerRef.current);
-        autoplayToggleTimerRef.current = null;
-      }
     }
   }, [isActive, clip.youtubeId]);
 
@@ -511,50 +487,16 @@ const ClipPage = React.memo(function ClipPage({
     if (!playerReady) return;
 
     autoplayInProgressRef.current = true;
-    autoplayAttemptRef.current = 0;
-
-    const attemptAutoplay = () => {
-      if (!mountedRef.current || !isActive) return;
-      autoplayAttemptRef.current += 1;
-      const attempt = autoplayAttemptRef.current;
-
-      if (attempt > 5) {
-        console.log(`[Clip Autoplay] Giving up after ${attempt - 1} attempts for:`, clip.youtubeId);
-        autoplayInProgressRef.current = false;
-        return;
-      }
-
-      console.log(`[Clip Autoplay] Attempt #${attempt} for:`, clip.youtubeId);
+    const t = setTimeout(() => {
+      if (!mountedRef.current) return;
       setShouldPlay(false);
-      autoplayToggleTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current || !isActive) return;
+      setTimeout(() => {
+        if (!mountedRef.current) return;
         setShouldPlay(true);
+      }, 120);
+    }, 250);
 
-        if (Platform.OS === 'web') {
-          try {
-            webIframeRef.current?.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-            );
-          } catch {}
-        }
-      }, 150);
-
-      autoplayRetryTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current || !isActive) return;
-        if (autoplayInProgressRef.current) {
-          console.log(`[Clip Autoplay] Not confirmed yet, retrying...`);
-          attemptAutoplay();
-        }
-      }, 2000);
-    };
-
-    autoplayInitialTimerRef.current = setTimeout(attemptAutoplay, 300);
-
-    return () => {
-      if (autoplayInitialTimerRef.current) clearTimeout(autoplayInitialTimerRef.current);
-      if (autoplayRetryTimerRef.current) clearTimeout(autoplayRetryTimerRef.current);
-      if (autoplayToggleTimerRef.current) clearTimeout(autoplayToggleTimerRef.current);
-    };
+    return () => clearTimeout(t);
   }, [isActive, playerReady, clip.youtubeId]);
 
   const onStateChange = useCallback((state: string) => {
@@ -566,20 +508,7 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'playing') {
-      console.log('[Clip] Confirmed playing:', clip.youtubeId);
       autoplayInProgressRef.current = false;
-      if (autoplayInitialTimerRef.current) {
-        clearTimeout(autoplayInitialTimerRef.current);
-        autoplayInitialTimerRef.current = null;
-      }
-      if (autoplayRetryTimerRef.current) {
-        clearTimeout(autoplayRetryTimerRef.current);
-        autoplayRetryTimerRef.current = null;
-      }
-      if (autoplayToggleTimerRef.current) {
-        clearTimeout(autoplayToggleTimerRef.current);
-        autoplayToggleTimerRef.current = null;
-      }
       if (!mountedRef.current) return;
       setIsPlaying(true);
       setShouldPlay(true);
@@ -588,10 +517,7 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'paused') {
-      if (autoplayInProgressRef.current) {
-        console.log('[Clip] Ignoring paused during autoplay');
-        return;
-      }
+      if (autoplayInProgressRef.current) return;
       if (!mountedRef.current) return;
       setIsPlaying(false);
       setShouldPlay(false);
@@ -599,24 +525,13 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'ended') {
-      console.log('[Clip] Video ended, looping:', clip.youtubeId);
       autoplayInProgressRef.current = true;
       setShouldPlay(false);
       setIsPlaying(false);
       setTimeout(() => {
         if (!mountedRef.current) return;
         setShouldPlay(true);
-        if (Platform.OS === 'web') {
-          try {
-            webIframeRef.current?.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
-            );
-            webIframeRef.current?.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-            );
-          } catch {}
-        }
-      }, 200);
+      }, 120);
       return;
     }
   }, [clip.youtubeId, playerReady]);
@@ -625,11 +540,7 @@ const ClipPage = React.memo(function ClipPage({
     console.log('Clip player ready:', clip.youtubeId);
     if (!mountedRef.current) return;
     setPlayerReady(true);
-    if (isActive) {
-      autoplayInProgressRef.current = true;
-      setShouldPlay(true);
-    }
-  }, [clip.youtubeId, isActive]);
+  }, [clip.youtubeId]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
@@ -644,36 +555,20 @@ const ClipPage = React.memo(function ClipPage({
         if (typeof event.data !== 'string') return;
         const data = JSON.parse(event.data);
         if (data.event === 'onReady') {
-          console.log('[Clip Web] Player ready:', clip.youtubeId);
           if (!mountedRef.current) return;
           setPlayerReady(true);
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {
-            console.log('[Clip Web] Confirmed playing:', clip.youtubeId);
             autoplayInProgressRef.current = false;
-            if (autoplayInitialTimerRef.current) {
-              clearTimeout(autoplayInitialTimerRef.current);
-              autoplayInitialTimerRef.current = null;
-            }
-            if (autoplayRetryTimerRef.current) {
-              clearTimeout(autoplayRetryTimerRef.current);
-              autoplayRetryTimerRef.current = null;
-            }
-            if (autoplayToggleTimerRef.current) {
-              clearTimeout(autoplayToggleTimerRef.current);
-              autoplayToggleTimerRef.current = null;
-            }
             if (mountedRef.current) { setIsPlaying(true); setShouldPlay(true); setPlayerReady(true); }
           } else if (st === 2) {
             if (!autoplayInProgressRef.current && mountedRef.current) {
-              console.log('[Clip Web] Confirmed paused:', clip.youtubeId);
               setIsPlaying(false);
               setShouldPlay(false);
             }
           } else if (st === 0) {
             if (mountedRef.current) {
-              console.log('[Clip Web] Ended, looping:', clip.youtubeId);
               autoplayInProgressRef.current = true;
               setShouldPlay(false);
               setIsPlaying(false);
@@ -682,13 +577,10 @@ const ClipPage = React.memo(function ClipPage({
                 setShouldPlay(true);
                 try {
                   webIframeRef.current?.contentWindow?.postMessage(
-                    JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
-                  );
-                  webIframeRef.current?.contentWindow?.postMessage(
                     JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
                   );
                 } catch {}
-              }, 200);
+              }, 120);
             }
           }
         }
@@ -697,7 +589,7 @@ const ClipPage = React.memo(function ClipPage({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [showPlayer, isActive, clip.youtubeId]);
+  }, [showPlayer, isActive]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -720,21 +612,10 @@ const ClipPage = React.memo(function ClipPage({
       return;
     }
     const next = !isPlaying;
-    console.log('[Clip] User tap to', next ? 'play' : 'pause', clip.youtubeId);
     userIntentRef.current = next;
-    autoplayInProgressRef.current = false;
     setShouldPlay(next);
     setIsPlaying(next);
-
-    if (Platform.OS === 'web') {
-      try {
-        const func = next ? 'playVideo' : 'pauseVideo';
-        webIframeRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func, args: [] }), '*'
-        );
-      } catch {}
-    }
-  }, [showPlayer, isPlaying, clip.youtubeId]);
+  }, [showPlayer, isPlaying]);
 
   const handleShare = useCallback(async () => {
     try {
