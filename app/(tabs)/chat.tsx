@@ -22,7 +22,7 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { useAdMob } from '@/hooks/admob-context';
+import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
 import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
 
@@ -67,7 +67,7 @@ function ChatScreenContent() {
   const { useCredit: deductCredit, usageStats } = useIAP();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
-  const { tryShowInterstitialOnTransition } = useAdMob();
+  const { recordMessageSent, recordMessageComplete, setTyping: setAdTyping, recordInteraction: recordAdInteraction } = useChatInterstitialAd();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
@@ -253,7 +253,7 @@ function ChatScreenContent() {
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
-    void tryShowInterstitialOnTransition();
+    recordMessageSent();
 
     if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
@@ -414,8 +414,9 @@ function ChatScreenContent() {
     } finally {
       setIsLoading(false);
       setIsTyping(false);
+      recordMessageComplete();
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, recordMessageSent, recordMessageComplete]);
 
 
 
@@ -958,7 +959,12 @@ function ChatScreenContent() {
                     placeholder="Ask for motivation, advice, or inspiration..."
                     placeholderTextColor={Colors.textSecondary}
                     value={inputText}
-                    onChangeText={setInputText}
+                    onChangeText={(text) => {
+                      setInputText(text);
+                      setAdTyping(text.length > 0);
+                    }}
+                    onFocus={() => setAdTyping(true)}
+                    onBlur={() => setAdTyping(false)}
                     multiline
                     maxLength={500}
                     editable={!isTranscribing}
