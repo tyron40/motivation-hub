@@ -52,6 +52,7 @@ export interface AudioOnlyVideoPlayerRef {
   seekBackward: (seconds?: number) => void;
   seekTo: (position: number) => void;
   getIsPlaying: () => boolean;
+  resumeAfterAd: () => void;
 }
 
 interface VideoMetadata {
@@ -124,6 +125,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, []);
 
   const desiredPlayRef = useRef(false);
+  const wasPlayingBeforeAdRef = useRef(false);
 
   const requestPlayState = useCallback((newState: boolean) => {
     if (!mountedRef.current) return;
@@ -176,6 +178,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     },
     getIsPlaying: () => isPlayingRef.current,
+    resumeAfterAd: () => {
+      if (!playerReadyRef.current || playerErrorRef.current) return;
+      const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
+      if (shouldResume) {
+        requestPlayState(true);
+      }
+    },
   }), [requestPlayState]);
 
   useEffect(() => {
@@ -533,6 +542,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log(isPlayingRef.current ? 'Pausing video' : 'Playing video');
     requestPlayState(newState);
   }, [playerReady, playerError, requestPlayState]);
+
+  useEffect(() => {
+    wasPlayingBeforeAdRef.current = isPlayingRef.current;
+  }, [isPlaying]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
