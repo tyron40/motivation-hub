@@ -516,29 +516,32 @@ const ClipPage = React.memo(function ClipPage({
     setPlayerReady(true);
     if (isActive && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
-      console.log('[Clip] Applying seek trick then autoplay:', clip.youtubeId);
+      console.log('[Clip] STRICTLY pressing play for clip:', clip.youtubeId);
       if (Platform.OS !== 'web' && playerRef.current) {
-        try {
-          playerRef.current.seekTo(1, true);
-          setTimeout(() => {
-            if (!mountedRef.current) return;
-            try {
-              playerRef.current?.seekTo(0, true);
-            } catch {}
-            setShouldPlay(true);
-            setIsPlaying(true);
-            console.log('[Clip] Seek trick done, playing:', clip.youtubeId);
-          }, 400);
-        } catch {
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          console.log('[Clip] Forcing play state for:', clip.youtubeId);
           setShouldPlay(true);
           setIsPlaying(true);
-        }
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            if (!isPlaying) {
+              console.log('[Clip] Retry: forcing play again for:', clip.youtubeId);
+              setShouldPlay(true);
+              setIsPlaying(true);
+            }
+          }, 800);
+        }, 300);
       } else {
-        setShouldPlay(true);
-        setIsPlaying(true);
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          setShouldPlay(true);
+          setIsPlaying(true);
+          console.log('[Clip] Play pressed for web clip:', clip.youtubeId);
+        }, 200);
       }
     }
-  }, [clip.youtubeId, isActive]);
+  }, [clip.youtubeId, isActive, isPlaying]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
@@ -555,28 +558,27 @@ const ClipPage = React.memo(function ClipPage({
         if (data.event === 'onReady') {
           if (!mountedRef.current) return;
           setPlayerReady(true);
-          console.log('[Clip Web] Player ready, applying seek trick:', clip.youtubeId);
+          console.log('[Clip Web] Player ready, STRICTLY pressing play:', clip.youtubeId);
           setTimeout(() => {
             if (!mountedRef.current) return;
             try {
               webIframeRef.current?.contentWindow?.postMessage(
-                JSON.stringify({ event: 'command', func: 'seekTo', args: [1, true] }), '*'
+                JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
               );
-              setTimeout(() => {
-                if (!mountedRef.current) return;
-                try {
-                  webIframeRef.current?.contentWindow?.postMessage(
-                    JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
-                  );
-                  webIframeRef.current?.contentWindow?.postMessage(
-                    JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-                  );
-                } catch {}
-                setShouldPlay(true);
-                setIsPlaying(true);
-              }, 300);
+              console.log('[Clip Web] Play command sent for:', clip.youtubeId);
             } catch {}
-          }, 500);
+            setShouldPlay(true);
+            setIsPlaying(true);
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              try {
+                webIframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+                );
+                console.log('[Clip Web] Retry play command for:', clip.youtubeId);
+              } catch {}
+            }, 600);
+          }, 400);
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {

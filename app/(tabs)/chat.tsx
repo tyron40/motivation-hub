@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   Modal,
   Animated,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
@@ -650,38 +651,13 @@ function ChatScreenContent() {
     };
   }, [recording, sound]);
 
-  const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
-    const bubbleAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(0.8)).current;
-
-    useEffect(() => {
-      Animated.sequence([
-        Animated.delay(index * 150),
-        Animated.parallel([
-          Animated.timing(bubbleAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.spring(scaleAnim, {
-            toValue: 1,
-            tension: 100,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }, [index, bubbleAnim, scaleAnim]);
-
+  const renderMessageBubble = useCallback((message: Message, profileName: string | undefined) => {
     return (
-      <Animated.View 
+      <View 
+        key={message.id}
         style={[
           styles.messageBubbleContainer,
           message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
-          {
-            opacity: bubbleAnim,
-            transform: [{ scale: scaleAnim }],
-          }
         ]}
       >
         <LinearGradient
@@ -716,7 +692,7 @@ function ChatScreenContent() {
               styles.messageRole,
               { color: message.isUser ? Colors.background : Colors.text }
             ]}>
-              {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
+              {message.isUser ? (profileName || 'You') : 'Coach Alex'}
             </Text>
             {!message.isUser && message.audioUrl && (
               <TouchableOpacity
@@ -744,9 +720,9 @@ function ChatScreenContent() {
             {message.text}
           </Text>
         </LinearGradient>
-      </Animated.View>
+      </View>
     );
-  };
+  }, [playAudio, stopAudio, styles]);
 
   if (!isAuthenticated) {
     return (
@@ -848,10 +824,10 @@ function ChatScreenContent() {
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
           >
-            {messages.map((message, index) => (
-              <MessageBubble key={message.id} message={message} index={index} />
-            ))}
+            {messages.map((message) => renderMessageBubble(message, profile.name))}
             
             {isTyping && (
               <Animated.View 
@@ -997,6 +973,13 @@ function ChatScreenContent() {
                     multiline
                     maxLength={500}
                     editable={!isTranscribing}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => {
+                      if (inputText.trim() && !isLoading && !isTranscribing) {
+                        void sendMessage(inputText);
+                      }
+                    }}
                   />
                   <TouchableOpacity
                     style={styles.micButton}
