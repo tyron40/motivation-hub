@@ -55,17 +55,6 @@ export interface AudioOnlyVideoPlayerRef {
   resumeAfterAd: () => void;
 }
 
-interface VideoMetadata {
-  id: string;
-  title: string;
-  description: string;
-  thumbnail: string;
-  channelTitle: string;
-  duration: number;
-  viewCount: number;
-  publishedAt: string;
-}
-
 const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoPlayerProps>(({
   videoId,
   title: _title,
@@ -80,23 +69,25 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   onProgressChange,
 }, ref) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(autoplay);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState(false);
-  const autoplayAttemptedRef = useRef(false);
+  const [showThumbnail, setShowThumbnail] = useState(true);
+  const [userTappedPlay, setUserTappedPlay] = useState(false);
 
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const thumbnailOpacity = useRef(new Animated.Value(1)).current;
   const mountedRef = useRef(true);
   const onEndCalledRef = useRef(false);
   const isPlayingRef = useRef(false);
   const durationRef = useRef(0);
+  const autoplayAttemptedRef = useRef(false);
+  const playAttemptCount = useRef(0);
 
   const onEndRef = useRef(onEnd);
   const onErrorRef = useRef(onError);
@@ -120,6 +111,27 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     onPlayingChangeRef.current?.(playing);
   }, []);
 
+  const fadeThumbnailOut = useCallback(() => {
+    Animated.timing(thumbnailOpacity, {
+      toValue: 0,
+      duration: 600,
+      useNativeDriver: true,
+    }).start(() => {
+      if (mountedRef.current) {
+        setShowThumbnail(false);
+      }
+    });
+  }, [thumbnailOpacity]);
+
+  const fadeThumbnailIn = useCallback(() => {
+    setShowThumbnail(true);
+    Animated.timing(thumbnailOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [thumbnailOpacity]);
+
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
       if (!playerReady || playerError) return;
@@ -136,19 +148,31 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     seekForward: (seconds = 15) => {
       if (!playerReady || !playerRef.current) return;
       const newPos = Math.min(currentTime + seconds, durationRef.current);
-      void playerRef.current.seekTo(newPos, true);
+      if (Platform.OS !== 'web') {
+        void playerRef.current.seekTo(newPos, true);
+      } else {
+        postMessageToWebPlayer('seekTo', [newPos, true]);
+      }
       setCurrentTime(newPos);
     },
     seekBackward: (seconds = 15) => {
       if (!playerReady || !playerRef.current) return;
       const newPos = Math.max(currentTime - seconds, 0);
-      void playerRef.current.seekTo(newPos, true);
+      if (Platform.OS !== 'web') {
+        void playerRef.current.seekTo(newPos, true);
+      } else {
+        postMessageToWebPlayer('seekTo', [newPos, true]);
+      }
       setCurrentTime(newPos);
     },
     seekTo: async (position: number) => {
-      if (!playerReady || !playerRef.current) return;
+      if (!playerReady) return;
       try {
-        await playerRef.current.seekTo(position, true);
+        if (Platform.OS !== 'web' && playerRef.current) {
+          await playerRef.current.seekTo(position, true);
+        } else {
+          postMessageToWebPlayer('seekTo', [position, true]);
+        }
         setCurrentTime(position);
       } catch (err) {
         console.error('Error seeking:', err);
@@ -189,99 +213,25 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useEffect(() => {
     onEndCalledRef.current = false;
     autoplayAttemptedRef.current = false;
+    playAttemptCount.current = 0;
 
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
       progressInterval.current = null;
     }
 
-    if (videoId) {
-      setPlayerReady(false);
-      setPlayerError(false);
-      setCurrentTime(0);
-      setIsLoading(false);
-      setError(null);
-      if (autoplay) {
-        console.log('[Autoplay] Setting play=true immediately for new video:', videoId);
-        updatePlayState(true);
-      } else {
-        updatePlayState(false);
-      }
+    setPlayerReady(false);
+    setPlayerError(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoading(true);
+    setShowThumbnail(true);
+    thumbnailOpacity.setValue(1);
+    updatePlayState(false);
+    setUserTappedPlay(false);
 
-      const fetchVideoMetadata = async () => {
-        try {
-          const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-          if (!apiKey) {
-            console.log('[Metadata] No YouTube API key, using props');
-            return;
-          }
-
-          const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-          detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
-          detailsUrl.searchParams.set('id', videoId);
-          detailsUrl.searchParams.set('key', apiKey);
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch(detailsUrl.toString(), { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            console.warn('[Metadata] YouTube API error:', response.status);
-            return;
-          }
-
-          const data = await response.json();
-
-          if (!data.items || data.items.length === 0) {
-            console.warn('[Metadata] Video not found:', videoId);
-            return;
-          }
-
-          const video = data.items[0];
-
-          const parseDuration = (dur: string): number => {
-            const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-            if (!match) return 0;
-            const hours = parseInt(match[1] || '0');
-            const minutes = parseInt(match[2] || '0');
-            const seconds = parseInt(match[3] || '0');
-            return hours * 3600 + minutes * 60 + seconds;
-          };
-
-          const videoDuration = parseDuration(video.contentDetails.duration);
-          if (mountedRef.current && videoDuration > 0) {
-            setDuration(videoDuration);
-            durationRef.current = videoDuration;
-          }
-
-          if (mountedRef.current) {
-            setMetadata({
-              id: video.id,
-              title: video.snippet.title,
-              description: video.snippet.description || '',
-              thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
-              channelTitle: video.snippet.channelTitle,
-              duration: videoDuration,
-              viewCount: parseInt(video.statistics.viewCount || '0'),
-              publishedAt: video.snippet.publishedAt,
-            });
-          }
-
-          console.log('[Metadata] Fetched:', video.snippet.title);
-        } catch (err: any) {
-          if (err?.name === 'AbortError') {
-            console.warn('[Metadata] Fetch timed out, using props');
-          } else {
-            console.warn('[Metadata] Fetch failed, using props:', err?.message);
-          }
-        }
-      };
-
-      void fetchVideoMetadata();
-    }
-  }, [videoId, updatePlayState]);
+    console.log('[Player] New video loaded:', videoId);
+  }, [videoId, updatePlayState, thumbnailOpacity]);
 
   const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
@@ -289,7 +239,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     progressInterval.current = setInterval(() => {
-      if (playerRef.current && !isSeeking && mountedRef.current) {
+      if (!mountedRef.current || isSeeking) return;
+
+      if (Platform.OS !== 'web' && playerRef.current) {
         try {
           if (typeof playerRef.current.getCurrentTime === 'function') {
             const timePromise = playerRef.current.getCurrentTime();
@@ -314,12 +266,36 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  const attemptAutoplay = useCallback(() => {
+    if (!mountedRef.current || autoplayAttemptedRef.current) return;
+    autoplayAttemptedRef.current = true;
+    playAttemptCount.current += 1;
+
+    console.log('[Autoplay] Attempting autoplay for:', videoId, 'attempt:', playAttemptCount.current);
+
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      console.log('[Autoplay] Starting playback for:', videoId);
+      updatePlayState(true);
+      startProgressTracking();
+
+      setTimeout(() => {
+        if (mountedRef.current && isPlayingRef.current) {
+          console.log('[Autoplay] Playback confirmed, fading thumbnail');
+          fadeThumbnailOut();
+        } else {
+          console.log('[Autoplay] Playback may not have started, keeping thumbnail with play button');
+        }
+      }, 2000);
+    }, 1200);
+  }, [videoId, updatePlayState, startProgressTracking, fadeThumbnailOut]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
-    console.log('[Autoplay] Player ready for:', videoId);
+    console.log('[Player] YouTube player ready for:', videoId);
     setPlayerReady(true);
     setPlayerError(false);
-    setError(null);
+    setIsLoading(false);
 
     try {
       if (playerRef.current && typeof playerRef.current.getDuration === 'function') {
@@ -332,30 +308,31 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     } catch {}
 
-    if (autoplay && !autoplayAttemptedRef.current) {
-      autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, ensuring play state for:', videoId);
-      updatePlayState(true);
-      startProgressTracking();
+    if (autoplay) {
+      attemptAutoplay();
     }
-  }, [autoplay, videoId, updatePlayState, startProgressTracking]);
+  }, [autoplay, videoId, attemptAutoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
     setPlayerError(true);
     setPlayerReady(false);
+    setIsLoading(false);
     updatePlayState(false);
     stopProgressTracking();
-  }, [updatePlayState, stopProgressTracking]);
+    fadeThumbnailIn();
+  }, [updatePlayState, stopProgressTracking, fadeThumbnailIn]);
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
-    console.log('Player state:', state, 'for video:', videoId);
+    console.log('[Player] State:', state, 'for:', videoId);
 
     if (state === 'playing') {
       updatePlayState(true);
       startProgressTracking();
+      setIsLoading(false);
+      fadeThumbnailOut();
       return;
     }
 
@@ -365,13 +342,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
 
+    if (state === 'buffering') {
+      return;
+    }
+
     if (state === 'ended') {
       if (onEndCalledRef.current) return;
       onEndCalledRef.current = true;
       updatePlayState(false);
       stopProgressTracking();
       setCurrentTime(0);
-      console.log('Video ended, calling onEnd');
+      fadeThumbnailIn();
+      console.log('[Player] Video ended, calling onEnd');
       setTimeout(() => {
         if (mountedRef.current) {
           onEndRef.current?.();
@@ -379,7 +361,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }, 100);
       return;
     }
-  }, [videoId, updatePlayState, startProgressTracking, stopProgressTracking]);
+  }, [videoId, updatePlayState, startProgressTracking, stopProgressTracking, fadeThumbnailOut, fadeThumbnailIn]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -392,17 +374,68 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   };
 
   const handlePlayPause = useCallback(() => {
-    if (playerError || !playerReady) return;
+    if (playerError) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    updatePlayState(!isPlayingRef.current);
-  }, [playerReady, playerError, updatePlayState]);
+
+    if (!playerReady) {
+      console.log('[Player] Player not ready yet, user tapped play');
+      setUserTappedPlay(true);
+      return;
+    }
+
+    const newPlaying = !isPlayingRef.current;
+    updatePlayState(newPlaying);
+
+    if (newPlaying) {
+      startProgressTracking();
+      setTimeout(() => {
+        if (mountedRef.current && isPlayingRef.current) {
+          fadeThumbnailOut();
+        }
+      }, 1500);
+    } else {
+      stopProgressTracking();
+    }
+  }, [playerReady, playerError, updatePlayState, startProgressTracking, stopProgressTracking, fadeThumbnailOut]);
+
+  const handleManualPlay = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setUserTappedPlay(true);
+
+    if (playerReady) {
+      updatePlayState(true);
+      startProgressTracking();
+      setTimeout(() => {
+        if (mountedRef.current && isPlayingRef.current) {
+          fadeThumbnailOut();
+        }
+      }, 1500);
+    }
+  }, [playerReady, updatePlayState, startProgressTracking, fadeThumbnailOut]);
+
+  useEffect(() => {
+    if (userTappedPlay && playerReady && !isPlayingRef.current) {
+      console.log('[Player] Player became ready after user tap, starting playback');
+      updatePlayState(true);
+      startProgressTracking();
+      setTimeout(() => {
+        if (mountedRef.current && isPlayingRef.current) {
+          fadeThumbnailOut();
+        }
+      }, 1500);
+    }
+  }, [userTappedPlay, playerReady, updatePlayState, startProgressTracking, fadeThumbnailOut]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const newPosition = Math.min(currentTime + 15, duration);
-      await playerRef.current.seekTo(newPosition, true);
+      if (Platform.OS !== 'web') {
+        await playerRef.current.seekTo(newPosition, true);
+      } else {
+        postMessageToWebPlayer('seekTo', [newPosition, true]);
+      }
       setCurrentTime(newPosition);
       onProgressChangeRef.current?.(newPosition, duration);
     } catch (err) {
@@ -415,7 +448,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const newPosition = Math.max(currentTime - 15, 0);
-      await playerRef.current.seekTo(newPosition, true);
+      if (Platform.OS !== 'web') {
+        await playerRef.current.seekTo(newPosition, true);
+      } else {
+        postMessageToWebPlayer('seekTo', [newPosition, true]);
+      }
       setCurrentTime(newPosition);
       onProgressChangeRef.current?.(newPosition, duration);
     } catch (err) {
@@ -436,14 +473,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, [onPrevious]);
 
   const handleSliderChange = useCallback((value: number) => {
-    if (!playerReady || !playerRef.current) return;
+    if (!playerReady) return;
     setCurrentTime(value);
   }, [playerReady]);
 
   const handleSliderComplete = useCallback(async (value: number) => {
-    if (!playerReady || !playerRef.current) return;
+    if (!playerReady) return;
     try {
-      await playerRef.current.seekTo(value, true);
+      if (Platform.OS !== 'web' && playerRef.current) {
+        await playerRef.current.seekTo(value, true);
+      } else {
+        postMessageToWebPlayer('seekTo', [value, true]);
+      }
       setIsSeeking(false);
       onProgressChangeRef.current?.(value, duration);
     } catch (err) {
@@ -452,7 +493,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, [playerReady, duration]);
 
-  const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const coverImageUrl = thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -481,16 +522,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           if (!mountedRef.current) return;
           setPlayerReady(true);
           setPlayerError(false);
-          setError(null);
+          setIsLoading(false);
 
-          if (autoplay) {
-            postMessageToWebPlayer('playVideo');
-            updatePlayState(true);
+          if (autoplay || userTappedPlay) {
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              postMessageToWebPlayer('playVideo');
+              updatePlayState(true);
+              setTimeout(() => {
+                if (mountedRef.current && isPlayingRef.current) {
+                  fadeThumbnailOut();
+                }
+              }, 2000);
+            }, 800);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
           if (state === 1) {
             updatePlayState(true);
+            setIsLoading(false);
+            fadeThumbnailOut();
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
@@ -504,6 +555,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
               onEndCalledRef.current = true;
               updatePlayState(false);
               setCurrentTime(0);
+              fadeThumbnailIn();
               setTimeout(() => { if (mountedRef.current) onEndRef.current?.(); }, 100);
             }
           }
@@ -529,7 +581,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webProgressIntervalRef.current = null;
       }
     };
-  }, [videoId, autoplay, updatePlayState, postMessageToWebPlayer]);
+  }, [videoId, autoplay, userTappedPlay, updatePlayState, postMessageToWebPlayer, fadeThumbnailOut, fadeThumbnailIn]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -540,102 +592,111 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, [isPlaying, postMessageToWebPlayer]);
 
-  const webPlayerElement = Platform.OS === 'web' ? (
-    <View style={styles.hiddenPlayer}>
-      <iframe
-        ref={(el: any) => { webIframeRef.current = el; }}
-        src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=${autoplay ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
-        style={{ width: 1, height: 1, border: 'none', opacity: 0, position: 'absolute' as any }}
-        allow="autoplay; encrypted-media"
-      />
-    </View>
-  ) : null;
-
-  const nativePlayerElement = Platform.OS !== 'web' && YoutubePlayer ? (
-    <View style={styles.hiddenPlayer}>
-      <YoutubePlayer
-        ref={playerRef}
-        videoId={videoId}
-        height={200}
-        width={300}
-        play={isPlaying}
-        forceAndroidAutoplay={true}
-        onReady={onPlayerReady}
-        onError={onPlayerError}
-        onChangeState={onStateChange}
-        initialPlayerParams={{
-          controls: false,
-          modestbranding: true,
-          rel: false,
-          playsinline: true,
-          preventFullScreen: true,
-        }}
-        webViewStyle={styles.hiddenWebView}
-        webViewProps={{
-          mediaPlaybackRequiresUserAction: false,
-          allowsInlineMediaPlayback: true,
-          javaScriptEnabled: true,
-          domStorageEnabled: true,
-          bounces: false,
-          scrollEnabled: false,
-        }}
-      />
-    </View>
-  ) : null;
-
-  const hiddenPlayerElement = Platform.OS === 'web' ? webPlayerElement : nativePlayerElement;
-
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        {hiddenPlayerElement}
-        <View style={styles.coverImageContainer}>
-          <Image source={{ uri: coverImageUrl }} style={styles.coverImage} blurRadius={2} />
-          <View style={styles.coverOverlay}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          </View>
+  const renderVideoPlayer = () => {
+    if (Platform.OS === 'web') {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return (
+        <View style={styles.videoPlayerInCover}>
+          <iframe
+            ref={(el: any) => { webIframeRef.current = el; }}
+            src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=${autoplay ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&origin=${origin}`}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              backgroundColor: '#000',
+            } as any}
+            allow="autoplay; encrypted-media"
+          />
         </View>
-        <Text style={styles.loadingText}>Loading audio...</Text>
-      </View>
-    );
-  }
+      );
+    }
 
-  if (error && !metadata && playerError) {
-    return (
-      <View style={styles.container}>
-        {hiddenPlayerElement}
-        <View style={styles.coverImageContainer}>
-          <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
-          <View style={styles.coverOverlay}>
-            <Text style={styles.errorText}>Cannot load audio</Text>
-            <Text style={styles.errorSub}>{error || 'Video not found'}</Text>
-          </View>
+    if (YoutubePlayer) {
+      return (
+        <View style={styles.videoPlayerInCover}>
+          <YoutubePlayer
+            ref={playerRef}
+            videoId={videoId}
+            height={coverSize}
+            width={coverSize}
+            play={isPlaying}
+            forceAndroidAutoplay={true}
+            onReady={onPlayerReady}
+            onError={onPlayerError}
+            onChangeState={onStateChange}
+            initialPlayerParams={{
+              controls: false,
+              modestbranding: true,
+              rel: false,
+              playsinline: true,
+              preventFullScreen: true,
+            }}
+            webViewStyle={{ borderRadius: 24, backgroundColor: '#000' }}
+            webViewProps={{
+              mediaPlaybackRequiresUserAction: false,
+              allowsInlineMediaPlayback: true,
+              javaScriptEnabled: true,
+              domStorageEnabled: true,
+              bounces: false,
+              scrollEnabled: false,
+            }}
+          />
         </View>
-      </View>
-    );
-  }
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.coverImageContainer, { transform: [{ scale: pulseAnim }] }]}>
-        <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
-        <View style={styles.coverGradient}>
-          {isPlaying && (
-            <View style={styles.nowPlayingIndicator}>
-              <View style={[styles.soundBar, styles.soundBar1]} />
-              <View style={[styles.soundBar, styles.soundBar2]} />
-              <View style={[styles.soundBar, styles.soundBar3]} />
-              <View style={[styles.soundBar, styles.soundBar4]} />
+        {renderVideoPlayer()}
+
+        {showThumbnail && (
+          <Animated.View style={[styles.thumbnailOverlay, { opacity: thumbnailOpacity }]}>
+            <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
+            <View style={styles.coverGradient}>
+              {isLoading ? (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator size="large" color="#FFFFFF" />
+                  <Text style={styles.loadingLabel}>Loading...</Text>
+                </View>
+              ) : !isPlaying ? (
+                <TouchableOpacity
+                  style={styles.bigPlayButton}
+                  onPress={handleManualPlay}
+                  activeOpacity={0.8}
+                >
+                  <Play size={36} color="#FFFFFF" fill="#FFFFFF" style={{ marginLeft: 4 }} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.nowPlayingIndicator}>
+                  <View style={[styles.soundBar, styles.soundBar1]} />
+                  <View style={[styles.soundBar, styles.soundBar2]} />
+                  <View style={[styles.soundBar, styles.soundBar3]} />
+                  <View style={[styles.soundBar, styles.soundBar4]} />
+                </View>
+              )}
             </View>
-          )}
-        </View>
+          </Animated.View>
+        )}
+
+        {!showThumbnail && isPlaying && (
+          <View style={styles.videoOverlayIndicator}>
+            <View style={styles.nowPlayingSmall}>
+              <View style={[styles.soundBarSmall, styles.soundBarSmall1]} />
+              <View style={[styles.soundBarSmall, styles.soundBarSmall2]} />
+              <View style={[styles.soundBarSmall, styles.soundBarSmall3]} />
+            </View>
+          </View>
+        )}
       </Animated.View>
 
-      {hiddenPlayerElement}
-
       <View style={styles.infoSection}>
-        <Text style={styles.title} numberOfLines={2}>{metadata?.title ?? _title}</Text>
-        <Text style={styles.subtitle}>{metadata?.channelTitle ?? _channelTitle}</Text>
+        <Text style={styles.title} numberOfLines={2}>{_title}</Text>
+        {_channelTitle ? <Text style={styles.subtitle}>{_channelTitle}</Text> : null}
       </View>
 
       <View style={styles.progressSection}>
@@ -683,7 +744,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           style={styles.playButton}
           activeOpacity={0.8}
         >
-          {!playerReady ? (
+          {isLoading || (!playerReady && !userTappedPlay) ? (
             <ActivityIndicator size="small" color="#000000" />
           ) : isPlaying ? (
             <Pause size={32} color="#000000" fill="#000000" />
@@ -713,9 +774,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       </View>
 
       {playerError && (
-        <View style={styles.fallbackButton}>
-          <Text style={styles.fallbackText}>Audio playback issue - try next speech</Text>
-        </View>
+        <TouchableOpacity style={styles.fallbackButton} onPress={handleManualPlay} activeOpacity={0.7}>
+          <Text style={styles.fallbackText}>Playback issue — tap to retry</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -745,27 +806,57 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  videoPlayerInCover: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  thumbnailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
   coverImage: {
     width: '100%',
     height: '100%',
   },
   coverGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  coverOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  loadingOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingLabel: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
+    marginTop: 10,
+    opacity: 0.8,
+  },
+  bigPlayButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  videoOverlayIndicator: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 12,
+    padding: 6,
   },
   nowPlayingIndicator: {
     flexDirection: 'row',
@@ -782,19 +873,20 @@ const styles = StyleSheet.create({
   soundBar2: { height: 16 },
   soundBar3: { height: 12 },
   soundBar4: { height: 18 },
-  hiddenPlayer: {
-    width: 1,
-    height: 1,
-    opacity: 0,
-    position: 'absolute',
-    top: -9999,
-    left: -9999,
+  nowPlayingSmall: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+    height: 14,
   },
-  hiddenWebView: {
-    backgroundColor: 'transparent',
-    width: 1,
-    height: 1,
+  soundBarSmall: {
+    width: 2,
+    backgroundColor: '#667eea',
+    borderRadius: 1,
   },
+  soundBarSmall1: { height: 5 },
+  soundBarSmall2: { height: 10 },
+  soundBarSmall3: { height: 7 },
   infoSection: {
     width: '100%',
     alignItems: 'center',
@@ -882,34 +974,16 @@ const styles = StyleSheet.create({
     bottom: 6,
     letterSpacing: -0.3,
   },
-  loadingText: {
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    marginTop: 16,
-  },
-  errorText: {
-    fontSize: 18,
-    color: '#ff6b6b',
-    fontWeight: '700' as const,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  errorSub: {
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    marginBottom: 16,
-  },
   fallbackButton: {
-    marginTop: 16,
+    marginTop: 8,
     padding: 12,
-    backgroundColor: 'rgba(255, 107, 107, 0.2)',
+    backgroundColor: 'rgba(102, 126, 234, 0.2)',
     borderRadius: 8,
   },
   fallbackText: {
-    color: '#ff6b6b',
+    color: '#667eea',
     fontSize: 13,
     textAlign: 'center',
+    fontWeight: '600' as const,
   },
 });
