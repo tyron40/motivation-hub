@@ -510,17 +510,74 @@ const ClipPage = React.memo(function ClipPage({
     }
   }, [clip.youtubeId, playerReady]);
 
+  const triggerNativeSeekTrick = useCallback(async () => {
+    if (!playerRef.current) return;
+    try {
+      console.log('[Clip] STRICTLY applying seek-forward-1s then rewind-1s for:', clip.youtubeId);
+      await playerRef.current.seekTo(1, true);
+      console.log('[Clip] Seeked to 1s for:', clip.youtubeId);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      if (!mountedRef.current) return;
+      await playerRef.current.seekTo(0, true);
+      console.log('[Clip] Rewound to 0s for:', clip.youtubeId);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      console.log('[Clip] Seek trick completed for:', clip.youtubeId);
+    } catch (err) {
+      console.log('[Clip] Seek trick error (non-fatal):', err);
+    }
+  }, [clip.youtubeId]);
+
+  const triggerWebSeekTrick = useCallback(() => {
+    if (!webIframeRef.current?.contentWindow) return;
+    try {
+      console.log('[Clip Web] STRICTLY applying seek-forward-1s then rewind-1s for:', clip.youtubeId);
+      webIframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func: 'seekTo', args: [1, true] }), '*'
+      );
+      setTimeout(() => {
+        if (!mountedRef.current || !webIframeRef.current?.contentWindow) return;
+        webIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
+        );
+        setTimeout(() => {
+          if (!mountedRef.current || !webIframeRef.current?.contentWindow) return;
+          webIframeRef.current.contentWindow.postMessage(
+            JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+          );
+          console.log('[Clip Web] Seek trick + play done for:', clip.youtubeId);
+        }, 300);
+      }, 500);
+    } catch (err) {
+      console.log('[Clip Web] Seek trick error (non-fatal):', err);
+    }
+  }, [clip.youtubeId]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Clip] Player ready:', clip.youtubeId, 'isActive:', isActive);
     setPlayerReady(true);
     if (isActive && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
-      console.log('[Clip] Ensuring autoplay after ready:', clip.youtubeId);
-      setShouldPlay(true);
-      setIsPlaying(true);
+      console.log('[Clip] STRICTLY enforcing seek-1s-rewind-1s then play for:', clip.youtubeId);
+      if (Platform.OS === 'web') {
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          triggerWebSeekTrick();
+        }, 400);
+      } else {
+        setTimeout(async () => {
+          if (!mountedRef.current) return;
+          await triggerNativeSeekTrick();
+          if (!mountedRef.current) return;
+          await new Promise(resolve => setTimeout(resolve, 200));
+          if (!mountedRef.current) return;
+          console.log('[Clip] Seek trick done, now pressing play for:', clip.youtubeId);
+          setShouldPlay(true);
+          setIsPlaying(true);
+        }, 400);
+      }
     }
-  }, [clip.youtubeId, isActive]);
+  }, [clip.youtubeId, isActive, triggerNativeSeekTrick, triggerWebSeekTrick]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
@@ -537,6 +594,14 @@ const ClipPage = React.memo(function ClipPage({
         if (data.event === 'onReady') {
           if (!mountedRef.current) return;
           setPlayerReady(true);
+          if (isActive && !autoplayTriggeredRef.current) {
+            autoplayTriggeredRef.current = true;
+            console.log('[Clip Web MSG] Player ready, applying seek trick for:', clip.youtubeId);
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              triggerWebSeekTrick();
+            }, 400);
+          }
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {

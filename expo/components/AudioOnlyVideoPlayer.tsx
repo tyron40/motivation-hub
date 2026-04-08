@@ -314,6 +314,23 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  const triggerSeekTrick = useCallback(async () => {
+    if (!playerRef.current) return;
+    try {
+      console.log('[Autoplay] STRICTLY applying seek-forward-1s then rewind-1s for:', videoId);
+      await playerRef.current.seekTo(1, true);
+      console.log('[Autoplay] Seeked to 1s for:', videoId);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      if (!mountedRef.current) return;
+      await playerRef.current.seekTo(0, true);
+      console.log('[Autoplay] Rewound to 0s for:', videoId);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      console.log('[Autoplay] Seek trick completed for:', videoId);
+    } catch (err) {
+      console.log('[Autoplay] Seek trick error (non-fatal):', err);
+    }
+  }, [videoId]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] Player ready for:', videoId);
@@ -334,11 +351,19 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay && !autoplayAttemptedRef.current) {
       autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, ensuring play state for:', videoId);
-      updatePlayState(true);
-      startProgressTracking();
+      console.log('[Autoplay] Player ready, STRICTLY enforcing seek-1s-rewind-1s then play for:', videoId);
+      setTimeout(async () => {
+        if (!mountedRef.current) return;
+        await triggerSeekTrick();
+        if (!mountedRef.current) return;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        if (!mountedRef.current) return;
+        console.log('[Autoplay] Seek trick done, now forcing play state for:', videoId);
+        updatePlayState(true);
+        startProgressTracking();
+      }, 400);
     }
-  }, [autoplay, videoId, updatePlayState, startProgressTracking]);
+  }, [autoplay, videoId, updatePlayState, startProgressTracking, triggerSeekTrick]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -483,9 +508,23 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           setPlayerError(false);
           setError(null);
 
-          if (autoplay) {
-            postMessageToWebPlayer('playVideo');
-            updatePlayState(true);
+          if (autoplay && !autoplayAttemptedRef.current) {
+            autoplayAttemptedRef.current = true;
+            console.log('[Web Autoplay] STRICTLY enforcing seek-1s-rewind-1s then play for:', videoId);
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              postMessageToWebPlayer('seekTo', [1, true]);
+              setTimeout(() => {
+                if (!mountedRef.current) return;
+                postMessageToWebPlayer('seekTo', [0, true]);
+                setTimeout(() => {
+                  if (!mountedRef.current) return;
+                  postMessageToWebPlayer('playVideo');
+                  updatePlayState(true);
+                  console.log('[Web Autoplay] Seek trick + play done for:', videoId);
+                }, 300);
+              }, 500);
+            }, 400);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
