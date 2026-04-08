@@ -2,9 +2,9 @@ import { Platform } from 'react-native';
 import { API_ENDPOINTS } from './config';
 import { generateText } from '@rork-ai/toolkit-sdk';
 
-const TOOLKIT_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
+const TOOLKIT_BASE_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
 
-console.log('🔧 API Client initialized | Platform:', Platform.OS);
+console.log('🔧 API Client initialized | Platform:', Platform.OS, '| Toolkit:', TOOLKIT_BASE_URL);
 
 const CHAT_TIMEOUT = 60000;
 const TTS_TIMEOUT = 30000;
@@ -22,18 +22,8 @@ async function fetchWithTimeout(
   }, timeout);
 
   try {
-    const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string>),
-    };
-
-    if (Platform.OS !== 'web') {
-      headers['Cache-Control'] = 'no-cache';
-      headers['Pragma'] = 'no-cache';
-    }
-
     const response = await fetch(url, {
       ...options,
-      headers,
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -129,7 +119,10 @@ async function chatViaSDK(
   console.log('🤖 [Strategy 1] generateText SDK | messages:', messages.length);
 
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('SDK timeout after 45s')), 45000);
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(new Error('SDK timeout after 55s'));
+    }, 55000);
   });
 
   const sdkPromise = generateText({ messages });
@@ -144,14 +137,14 @@ async function chatViaSDK(
   return result;
 }
 
-async function chatViaToolkitDirect(
+async function chatViaDirectLLM(
   messages: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<string> {
-  const agentUrl = new URL('/agent/chat', TOOLKIT_URL).toString();
-  console.log('🤖 [Strategy 2] Direct toolkit fetch:', agentUrl);
+  const llmTextUrl = `${TOOLKIT_BASE_URL.replace(/\/$/, '')}/llm/text`;
+  console.log('🤖 [Strategy 2] Direct /llm/text fetch:', llmTextUrl);
 
   const response = await fetchWithTimeout(
-    agentUrl,
+    llmTextUrl,
     {
       method: 'POST',
       headers: {
@@ -165,40 +158,41 @@ async function chatViaToolkitDirect(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    console.error('❌ [Strategy 2] Error:', response.status, errorText.substring(0, 200));
-    throw new Error(`Toolkit API error: ${response.status}`);
+    console.error('❌ [Strategy 2] Error:', response.status, errorText.substring(0, 300));
+    throw new Error(`LLM API error: ${response.status} - ${errorText.substring(0, 100)}`);
   }
 
   const responseText = await response.text();
   console.log('📡 [Strategy 2] Raw response length:', responseText.length);
 
   if (!responseText || responseText.trim().length === 0) {
-    throw new Error('Empty response from toolkit');
+    throw new Error('Empty response from /llm/text');
   }
 
   let data: any;
   try {
     data = JSON.parse(responseText);
   } catch {
-    if (responseText.trim().length > 0) {
-      console.log('✅ [Strategy 2] Plain text response');
-      return responseText.trim();
+    console.error('❌ [Strategy 2] Failed to parse JSON response');
+    throw new Error('Failed to parse /llm/text response');
+  }
+
+  const completion = data?.completion;
+  if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
+    const dataStr = JSON.stringify(data).substring(0, 300);
+    console.error('❌ [Strategy 2] Unexpected format:', dataStr);
+
+    const fallbackText = data?.text ?? data?.message ?? data?.result ?? '';
+    if (fallbackText && typeof fallbackText === 'string' && fallbackText.trim().length > 0) {
+      console.log('✅ [Strategy 2] Used fallback field | length:', fallbackText.length);
+      return fallbackText.trim();
     }
-    throw new Error('Failed to parse toolkit response');
+
+    throw new Error('Unexpected response format from /llm/text');
   }
 
-  const message =
-    typeof data === 'string' ? data :
-    data?.text ?? data?.message ?? data?.result ??
-    data?.choices?.[0]?.message?.content ?? '';
-
-  if (!message || typeof message !== 'string' || message.trim().length === 0) {
-    console.error('❌ [Strategy 2] Unexpected format:', JSON.stringify(data).substring(0, 200));
-    throw new Error('Unexpected response format from toolkit');
-  }
-
-  console.log('✅ [Strategy 2] Toolkit success | length:', message.length);
-  return message;
+  console.log('✅ [Strategy 2] /llm/text success | length:', completion.length);
+  return completion;
 }
 
 async function chatViaBackend(
@@ -248,37 +242,42 @@ export async function sendChatMessage(params: {
   }));
 
   console.log('🤖 sendChatMessage | Platform:', Platform.OS, '| messages:', params.messages.length);
+  console.log('🤖 Toolkit URL:', TOOLKIT_BASE_URL);
+  console.log('🤖 Backend URL:', API_ENDPOINTS.chat);
 
   const errors: string[] = [];
 
   try {
     const result = await chatViaSDK(toolkitMessages);
+    console.log('✅ Chat completed via SDK');
     return { message: result };
   } catch (e: any) {
     const msg = e?.message || String(e);
     errors.push(`SDK: ${msg}`);
-    console.warn('⚠️ Strategy 1 failed:', msg);
+    console.warn('⚠️ Strategy 1 (SDK) failed:', msg);
   }
 
   try {
-    const result = await chatViaToolkitDirect(toolkitMessages);
+    const result = await chatViaDirectLLM(toolkitMessages);
+    console.log('✅ Chat completed via direct /llm/text');
     return { message: result };
   } catch (e: any) {
     const msg = e?.message || String(e);
-    errors.push(`Toolkit: ${msg}`);
-    console.warn('⚠️ Strategy 2 failed:', msg);
+    errors.push(`DirectLLM: ${msg}`);
+    console.warn('⚠️ Strategy 2 (Direct /llm/text) failed:', msg);
   }
 
   try {
     const result = await chatViaBackend(params.messages);
+    console.log('✅ Chat completed via backend');
     return { message: result };
   } catch (e: any) {
     const msg = e?.message || String(e);
     errors.push(`Backend: ${msg}`);
-    console.warn('⚠️ Strategy 3 failed:', msg);
+    console.warn('⚠️ Strategy 3 (Backend) failed:', msg);
   }
 
-  console.error('❌ All chat strategies failed:', errors.join(' | '));
+  console.error('❌ All 3 chat strategies failed:', errors.join(' | '));
 
   const combinedMsg = errors.join('; ');
   if (combinedMsg.includes('timed out') || combinedMsg.includes('AbortError')) {
