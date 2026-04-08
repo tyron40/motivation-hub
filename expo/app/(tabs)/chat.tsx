@@ -257,25 +257,24 @@ function ChatScreenContent() {
 
     if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
-      if (Platform.OS !== 'web') {
-        Alert.alert(
-          'No Credits',
-          'You need credits to use the AI chat feature. Purchase credits to continue.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-          ]
-        );
-      } else {
-        console.error('You need credits to use the AI chat feature.');
-      }
+      Alert.alert(
+        'No Credits',
+        'You need credits to use the AI chat feature. Purchase credits to continue.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+        ]
+      );
       return;
     }
 
-    const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
-    if (nameMatch && !profile.name) {
-      const name = nameMatch[1];
-      await updateProfile({ name });
+    try {
+      const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
+      if (nameMatch && !profile.name) {
+        await updateProfile({ name: nameMatch[1] });
+      }
+    } catch (e) {
+      console.warn('⚠️ Name extraction failed:', e);
     }
 
     const userMessage: Message = {
@@ -289,23 +288,17 @@ function ChatScreenContent() {
       const creditUsed = await deductCredit();
       if (!creditUsed) {
         console.log('❌ Failed to deduct credit');
-        if (Platform.OS !== 'web') {
-          Alert.alert(
-            'No Credits',
-            'You need credits to use the AI chat feature. Purchase credits to continue.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-            ]
-          );
-        } else {
-          console.error('You need credits to use the AI chat feature.');
-        }
+        Alert.alert(
+          'No Credits',
+          'You need credits to use the AI chat feature. Purchase credits to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+          ]
+        );
         return;
       }
-      console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
-    } else {
-      console.log('✅ Suggested question - no credit needed');
+      console.log('✅ Credit deducted');
     }
 
     setMessages(prev => [...prev, userMessage]);
@@ -315,18 +308,22 @@ function ChatScreenContent() {
     setHasStartedChat(true);
 
     let sessionId = currentSessionId;
-    if (!sessionId) {
-      const newSession = await createSession(
-        text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
-        [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
-      );
-      sessionId = newSession.id;
-    } else {
-      await addMessageToSession(sessionId, {
-        role: 'user',
-        content: text.trim(),
-        timestamp: Date.now(),
-      });
+    try {
+      if (!sessionId) {
+        const newSession = await createSession(
+          text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
+          [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
+        );
+        sessionId = newSession.id;
+      } else {
+        await addMessageToSession(sessionId, {
+          role: 'user',
+          content: text.trim(),
+          timestamp: Date.now(),
+        });
+      }
+    } catch (sessionError) {
+      console.warn('⚠️ Session save failed, continuing:', sessionError);
     }
 
     const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
@@ -347,54 +344,56 @@ function ChatScreenContent() {
     ];
 
     try {
-        console.log('🤖 Sending chat message via Rork backend...');
-        console.log('📤 Messages count:', allMessages.length);
+      console.log('🤖 Sending chat message | Platform:', Platform.OS, '| count:', allMessages.length);
 
-        const chatResult = await sendChatMessage({
-          messages: allMessages.map(m => ({
-            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-          })),
-        });
-        const completion = chatResult.message;
-        console.log('✅ Backend responded, length:', completion?.length);
+      const chatResult = await sendChatMessage({
+        messages: allMessages.map(m => ({
+          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+          content: m.content,
+        })),
+      });
+      const completion = chatResult?.message;
+      console.log('✅ AI responded | length:', completion?.length);
 
-        if (!completion || typeof completion !== 'string') {
-          throw new Error('Invalid response format from AI');
-        }
+      if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
+        throw new Error('Empty response from AI');
+      }
 
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: completion,
-          isUser: false,
-          timestamp: new Date(),
-        };
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: completion,
+        isUser: false,
+        timestamp: new Date(),
+      };
 
-        setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => [...prev, aiMessage]);
 
-        if (sessionId) {
+      if (sessionId) {
+        try {
           await addMessageToSession(sessionId, {
             role: 'assistant',
             content: completion,
             timestamp: Date.now(),
           });
+        } catch (saveErr) {
+          console.warn('⚠️ Failed to save AI response to session:', saveErr);
         }
+      }
 
-        if (profile.voiceEnabled && completion) {
+      if (profile.voiceEnabled && completion) {
+        try {
           if (usageStats.credits > 0) {
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
-              console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
               void generateVoice(aiMessage.id, completion);
-            } else {
-              console.log('⚠️ Not enough credits for voice generation');
             }
-          } else {
-            console.log('⚠️ Not enough credits for voice generation');
           }
+        } catch (voiceErr) {
+          console.warn('⚠️ Voice generation failed:', voiceErr);
         }
-    } catch (error) {
-      console.error('Chat error:', error);
+      }
+    } catch (error: any) {
+      console.error('❌ Chat error:', error?.message || error);
 
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
@@ -405,11 +404,10 @@ function ChatScreenContent() {
 
       setMessages(prev => [...prev, errorMessage]);
 
-      if (Platform.OS !== 'web') {
-        Alert.alert('Connection Error', 'Failed to get response. Please check your internet connection and try again.');
-      } else {
-        console.error('Failed to get response. Please check your internet connection and try again.');
-      }
+      Alert.alert(
+        'Connection Error',
+        'Failed to get AI response. Please check your internet connection and try again.'
+      );
     } finally {
       setIsLoading(false);
       setIsTyping(false);
