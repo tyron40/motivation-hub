@@ -516,32 +516,21 @@ const ClipPage = React.memo(function ClipPage({
     setPlayerReady(true);
     if (isActive && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
-      console.log('[Clip] STRICTLY pressing play for clip:', clip.youtubeId);
-      if (Platform.OS !== 'web' && playerRef.current) {
-        setTimeout(() => {
-          if (!mountedRef.current) return;
-          console.log('[Clip] Forcing play state for:', clip.youtubeId);
-          setShouldPlay(true);
-          setIsPlaying(true);
-          setTimeout(() => {
-            if (!mountedRef.current) return;
-            if (!isPlaying) {
-              console.log('[Clip] Retry: forcing play again for:', clip.youtubeId);
-              setShouldPlay(true);
-              setIsPlaying(true);
-            }
-          }, 800);
-        }, 300);
-      } else {
+      console.log('[Clip] Triggering autoplay for:', clip.youtubeId);
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        setShouldPlay(true);
+        setIsPlaying(true);
+        console.log('[Clip] Play triggered for:', clip.youtubeId);
         setTimeout(() => {
           if (!mountedRef.current) return;
           setShouldPlay(true);
           setIsPlaying(true);
-          console.log('[Clip] Play pressed for web clip:', clip.youtubeId);
-        }, 200);
-      }
+          console.log('[Clip] Retry play for:', clip.youtubeId);
+        }, 1200);
+      }, 200);
     }
-  }, [clip.youtubeId, isActive, isPlaying]);
+  }, [clip.youtubeId, isActive]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
