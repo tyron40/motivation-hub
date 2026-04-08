@@ -90,6 +90,7 @@ function ChatScreenContent() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
 
+  const isSendingRef = useRef(false);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -202,8 +203,14 @@ function ChatScreenContent() {
     }
   }, [isTyping, typingAnim]);
 
+  const hasInitializedRef = useRef(false);
+
   useEffect(() => {
-    const loadCurrentSession = () => {
+    if (isSendingRef.current) {
+      return;
+    }
+
+    if (currentSessionId) {
       const currentSession = getCurrentSession();
       if (currentSession && currentSession.messages.length > 0) {
         const convertedMessages: Message[] = currentSession.messages.map((msg, idx) => ({
@@ -216,13 +223,9 @@ function ChatScreenContent() {
         if (currentSession.messages.length > 1) {
           setHasStartedChat(true);
         }
-        return;
       }
-    };
-
-    if (currentSessionId) {
-      loadCurrentSession();
-    } else if (messages.length === 0) {
+    } else if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       const greeting = profile.name 
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
         : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
@@ -244,7 +247,8 @@ function ChatScreenContent() {
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionId]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -301,6 +305,7 @@ function ChatScreenContent() {
       console.log('✅ Credit deducted');
     }
 
+    isSendingRef.current = true;
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
     setIsLoading(true);
@@ -411,6 +416,7 @@ function ChatScreenContent() {
     } finally {
       setIsLoading(false);
       setIsTyping(false);
+      isSendingRef.current = false;
       recordMessageComplete();
     }
   }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, recordMessageSent, recordMessageComplete]);
