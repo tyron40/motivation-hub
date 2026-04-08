@@ -101,14 +101,19 @@ function ChatScreenContent() {
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
     try {
       if (sound) {
-        await sound.unloadAsync();
+        try {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+        } catch (e) {
+          console.log('⚠️ Error cleaning up previous sound:', e);
+        }
+        setSound(null);
       }
 
       setMessages(prev => prev.map(msg => 
         msg.id === messageId ? { ...msg, isPlaying: true } : { ...msg, isPlaying: false }
       ));
 
-      // Set audio mode for playback
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
@@ -117,9 +122,12 @@ function ChatScreenContent() {
         playThroughEarpieceAndroid: false,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      console.log('🔊 Creating sound for message:', messageId);
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
-        { shouldPlay: true, volume: 1.0 }
+        { shouldPlay: false, volume: 1.0 }
       );
       
       setSound(newSound);
@@ -129,6 +137,23 @@ function ChatScreenContent() {
           setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
         }
       });
+
+      const status = await newSound.getStatusAsync();
+      if (status.isLoaded) {
+        console.log('✅ Audio loaded, starting playback for message:', messageId);
+        await newSound.playAsync();
+      } else {
+        console.log('⏳ Audio not yet loaded, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 800));
+        const retryStatus = await newSound.getStatusAsync();
+        if (retryStatus.isLoaded) {
+          console.log('✅ Audio loaded after wait, starting playback');
+          await newSound.playAsync();
+        } else {
+          console.warn('⚠️ Audio still not loaded after waiting');
+          setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
+        }
+      }
     } catch (error) {
       console.error('Audio playback error:', error);
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
@@ -156,9 +181,10 @@ function ChatScreenContent() {
       
       console.log('✅ Voice generated successfully for message:', messageId);
       
+      console.log('⏳ Waiting for audio data to stabilize before playback...');
       setTimeout(() => {
         void playAudio(messageId, audioUrl);
-      }, 500);
+      }, 1200);
     } catch (error: any) {
       console.error('❌ Voice generation error:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -386,7 +412,10 @@ function ChatScreenContent() {
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
               console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
-              void generateVoice(aiMessage.id, completion);
+              console.log('⏳ Giving UI time to render before generating voice...');
+              setTimeout(() => {
+                void generateVoice(aiMessage.id, completion);
+              }, 600);
             } else {
               console.log('⚠️ Not enough credits for voice generation');
             }

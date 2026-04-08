@@ -199,12 +199,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       setPlayerReady(false);
       setPlayerError(false);
       setCurrentTime(0);
-      setIsLoading(false);
+      setIsLoading(true);
       setError(null);
       if (autoplay) {
-        console.log('[Autoplay] Setting play=true immediately for new video:', videoId);
-        updatePlayState(true);
+        console.log('[Autoplay] New video detected, will autoplay once ready:', videoId);
+        setTimeout(() => {
+          if (mountedRef.current) {
+            setIsLoading(false);
+            updatePlayState(true);
+          }
+        }, 1500);
       } else {
+        setIsLoading(false);
         updatePlayState(false);
       }
 
@@ -334,9 +340,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay && !autoplayAttemptedRef.current) {
       autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, ensuring play state for:', videoId);
-      updatePlayState(true);
-      startProgressTracking();
+      console.log('[Autoplay] Player ready, waiting briefly before starting playback for:', videoId);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          console.log('[Autoplay] Starting playback after ready delay for:', videoId);
+          updatePlayState(true);
+          startProgressTracking();
+        }
+      }, 800);
     }
   }, [autoplay, videoId, updatePlayState, startProgressTracking]);
 

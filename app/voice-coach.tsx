@@ -112,7 +112,6 @@ function VoiceCoachContent() {
         const ttsElapsed = Date.now() - ttsStartTime;
         console.log(`✅ TTS audio received in ${ttsElapsed}ms`);
         
-        // Deduct 1 credit for TTS
         const creditUsed = await iapContext.useCredit();
         if (creditUsed) {
           console.log('💳 1 credit used for TTS (Voice Generation). Remaining:', iapContext.usageStats.credits - 1);
@@ -121,10 +120,21 @@ function VoiceCoachContent() {
         }
         
         const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
-        
+
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 400));
+
+        console.log('🔊 Creating sound object (not auto-playing yet)...');
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
-          { shouldPlay: true },
+          { shouldPlay: false, volume: 1.0 },
           (status: AVPlaybackStatus) => {
             if (status.isLoaded && status.didJustFinish) {
               console.log('✅ TTS playback finished');
@@ -135,7 +145,27 @@ function VoiceCoachContent() {
         );
         
         setSound(newSound);
-        console.log('🔊 TTS playback started');
+
+        const loadStatus = await newSound.getStatusAsync();
+        if (loadStatus.isLoaded) {
+          console.log('✅ Audio loaded successfully, starting playback...');
+          await newSound.playAsync();
+          console.log('🔊 TTS playback started');
+        } else {
+          console.log('⏳ Audio not loaded yet, waiting before retry...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const retryStatus = await newSound.getStatusAsync();
+          if (retryStatus.isLoaded) {
+            console.log('✅ Audio loaded after delay, starting playback...');
+            await retryStatus;
+            await newSound.playAsync();
+            console.log('🔊 TTS playback started after delay');
+          } else {
+            console.warn('⚠️ Audio failed to load after retry');
+            setIsPlaying(false);
+            setCurrentStatus('Ready to listen (text mode)');
+          }
+        }
       } catch (ttsError: any) {
         console.error('❌ TTS generation failed:', ttsError);
         
@@ -213,7 +243,8 @@ function VoiceCoachContent() {
     console.log('🔊 Voice enabled:', profile.voiceEnabled !== false);
     console.log('🔊 Selected voice:', profile.preferredVoice || 'alloy');
     
-    await new Promise(resolve => setTimeout(resolve, 200));
+    console.log('⏳ Waiting for audio system to initialize before greeting...');
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     try {
       console.log('🎯 About to speak greeting message...');
@@ -1127,13 +1158,16 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         timestamp: Date.now(),
       };
       
-      console.log('✅ AI response received, starting TTS immediately...');
+      console.log('✅ AI response received, preparing TTS...');
       setMessages(prev => [...prev, assistantMessage]);
       
       if (profile.voiceEnabled !== false) {
-        console.log('🔊 Starting TTS generation immediately (parallel)...');
-        setCurrentStatus('Coach is speaking...');
+        console.log('🔊 Waiting briefly before starting TTS generation...');
+        setCurrentStatus('Coach is preparing to speak...');
         
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        setCurrentStatus('Coach is speaking...');
         speakMessage(completion).catch(error => {
           console.error('❌ Failed to speak AI response:', error);
           setCurrentStatus('Ready to listen');
