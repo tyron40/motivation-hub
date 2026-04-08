@@ -516,9 +516,27 @@ const ClipPage = React.memo(function ClipPage({
     setPlayerReady(true);
     if (isActive && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
-      console.log('[Clip] Ensuring autoplay after ready:', clip.youtubeId);
-      setShouldPlay(true);
-      setIsPlaying(true);
+      console.log('[Clip] Applying seek trick then autoplay:', clip.youtubeId);
+      if (Platform.OS !== 'web' && playerRef.current) {
+        try {
+          playerRef.current.seekTo(1, true);
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            try {
+              playerRef.current?.seekTo(0, true);
+            } catch {}
+            setShouldPlay(true);
+            setIsPlaying(true);
+            console.log('[Clip] Seek trick done, playing:', clip.youtubeId);
+          }, 400);
+        } catch {
+          setShouldPlay(true);
+          setIsPlaying(true);
+        }
+      } else {
+        setShouldPlay(true);
+        setIsPlaying(true);
+      }
     }
   }, [clip.youtubeId, isActive]);
 
@@ -537,6 +555,28 @@ const ClipPage = React.memo(function ClipPage({
         if (data.event === 'onReady') {
           if (!mountedRef.current) return;
           setPlayerReady(true);
+          console.log('[Clip Web] Player ready, applying seek trick:', clip.youtubeId);
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            try {
+              webIframeRef.current?.contentWindow?.postMessage(
+                JSON.stringify({ event: 'command', func: 'seekTo', args: [1, true] }), '*'
+              );
+              setTimeout(() => {
+                if (!mountedRef.current) return;
+                try {
+                  webIframeRef.current?.contentWindow?.postMessage(
+                    JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
+                  );
+                  webIframeRef.current?.contentWindow?.postMessage(
+                    JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+                  );
+                } catch {}
+                setShouldPlay(true);
+                setIsPlaying(true);
+              }, 300);
+            } catch {}
+          }, 500);
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {

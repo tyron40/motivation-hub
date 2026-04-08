@@ -320,6 +320,20 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  const triggerSeekTrick = useCallback(async () => {
+    if (!playerRef.current || Platform.OS === 'web') return;
+    try {
+      console.log('[Autoplay] Applying seek trick to force playback for:', videoId);
+      await playerRef.current.seekTo(1, true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (!mountedRef.current) return;
+      await playerRef.current.seekTo(0, true);
+      console.log('[Autoplay] Seek trick completed for:', videoId);
+    } catch (err) {
+      console.log('[Autoplay] Seek trick error (non-fatal):', err);
+    }
+  }, [videoId]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] Player ready for:', videoId);
@@ -340,16 +354,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay && !autoplayAttemptedRef.current) {
       autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, waiting briefly before starting playback for:', videoId);
-      setTimeout(() => {
-        if (mountedRef.current) {
-          console.log('[Autoplay] Starting playback after ready delay for:', videoId);
-          updatePlayState(true);
-          startProgressTracking();
-        }
-      }, 800);
+      console.log('[Autoplay] Player ready, applying seek trick then starting playback for:', videoId);
+      setTimeout(async () => {
+        if (!mountedRef.current) return;
+        await triggerSeekTrick();
+        if (!mountedRef.current) return;
+        console.log('[Autoplay] Starting playback after seek trick for:', videoId);
+        updatePlayState(true);
+        startProgressTracking();
+      }, 600);
     }
-  }, [autoplay, videoId, updatePlayState, startProgressTracking]);
+  }, [autoplay, videoId, updatePlayState, startProgressTracking, triggerSeekTrick]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -495,8 +510,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           setError(null);
 
           if (autoplay) {
-            postMessageToWebPlayer('playVideo');
-            updatePlayState(true);
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              console.log('[Web Autoplay] Applying seek trick for:', videoId);
+              postMessageToWebPlayer('seekTo', [1, true]);
+              setTimeout(() => {
+                if (!mountedRef.current) return;
+                postMessageToWebPlayer('seekTo', [0, true]);
+                postMessageToWebPlayer('playVideo');
+                updatePlayState(true);
+              }, 300);
+            }, 500);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
