@@ -342,19 +342,35 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay && !autoplayAttemptedRef.current) {
       autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, forcing play for:', videoId);
+      console.log('[Autoplay] Player ready, performing seek trick for:', videoId);
       setTimeout(() => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || !playerRef.current) return;
+        console.log('[Autoplay] Step 1: Seeking forward 1s to trigger playback');
         updatePlayState(true);
-        startProgressTracking();
+        try {
+          playerRef.current.seekTo(1, true);
+        } catch (e) {
+          console.log('[Autoplay] Seek forward error:', e);
+        }
         setTimeout(() => {
-          if (!mountedRef.current) return;
-          if (!isPlayingRef.current) {
-            console.log('[Autoplay] Retry play for:', videoId);
-            updatePlayState(true);
+          if (!mountedRef.current || !playerRef.current) return;
+          console.log('[Autoplay] Step 2: Seeking back to 0 to start from beginning');
+          try {
+            playerRef.current.seekTo(0, true);
+          } catch (e) {
+            console.log('[Autoplay] Seek back error:', e);
           }
-        }, 1000);
-      }, 300);
+          updatePlayState(true);
+          startProgressTracking();
+          setTimeout(() => {
+            if (!mountedRef.current) return;
+            if (!isPlayingRef.current) {
+              console.log('[Autoplay] Retry play after seek trick for:', videoId);
+              updatePlayState(true);
+            }
+          }, 1000);
+        }, 800);
+      }, 500);
     }
   }, [autoplay, videoId, updatePlayState, startProgressTracking]);
 
@@ -503,13 +519,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
           if (autoplay && !autoplayAttemptedRef.current) {
             autoplayAttemptedRef.current = true;
-            console.log('[Web Autoplay] Playing video:', videoId);
+            console.log('[Web Autoplay] Performing seek trick for:', videoId);
             setTimeout(() => {
               if (!mountedRef.current) return;
+              console.log('[Web Autoplay] Step 1: Seeking forward 1s');
+              postMessageToWebPlayer('seekTo', [1, true]);
               postMessageToWebPlayer('playVideo');
-              updatePlayState(true);
-              console.log('[Web Autoplay] Play command sent for:', videoId);
-            }, 300);
+              setTimeout(() => {
+                if (!mountedRef.current) return;
+                console.log('[Web Autoplay] Step 2: Seeking back to 0');
+                postMessageToWebPlayer('seekTo', [0, true]);
+                postMessageToWebPlayer('playVideo');
+                updatePlayState(true);
+                console.log('[Web Autoplay] Seek trick complete for:', videoId);
+              }, 800);
+            }, 500);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
