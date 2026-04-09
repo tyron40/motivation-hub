@@ -25,8 +25,7 @@ import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech } from '@/lib/api-client';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -376,19 +375,20 @@ function ChatScreenContent() {
       ];
 
       try {
-        console.log('🤖 Sending chat message via Rork toolkit generateText...');
+        console.log('🤖 Sending chat message via sendChatMessage (multi-strategy)...');
         console.log('📤 Messages count:', allMessages.length);
 
-        const completion = await generateText({
+        const chatResult = await sendChatMessage({
           messages: allMessages.map(m => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
           })),
         });
-        console.log('✅ Toolkit responded, length:', completion?.length);
+        const completion = chatResult?.message;
+        console.log('✅ AI responded, length:', completion?.length);
 
-        if (!completion || typeof completion !== 'string') {
-          throw new Error('Invalid response format from AI');
+        if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
+          throw new Error('Empty response from AI');
         }
 
         const aiMessage: Message = {
