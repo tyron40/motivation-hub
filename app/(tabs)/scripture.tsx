@@ -88,22 +88,11 @@ export default function ScriptureScreen() {
       setIsGenerating(true);
       const prompt = `Generate 5 inspiring Bible verses about ${selectedCategory}. Return them in JSON format as an array with this structure: [{"id": "unique-id", "verse": "the verse text", "reference": "Book Chapter:Verse", "category": "${selectedCategory}"}]`;
       
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: prompt }],
-        }),
+      const { sendChatMessage } = await import('@/lib/api-client');
+      const result = await sendChatMessage({
+        messages: [{ role: 'user', content: prompt }],
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const completion = data.completion;
+      const completion = result.message;
       
       try {
         const jsonMatch = completion.match(/\[.*\]/s);
@@ -308,14 +297,11 @@ Shared from Motivation Fuel`;
       setInsights(prev => ({ ...prev, [id]: { text: current?.text ?? '', loading: true, error: undefined } }));
       try {
         const prompt = `Using the following Bible verse, write a concise, uplifting motivational application (3-5 sentences) that helps someone apply it today. Avoid quoting the verse again. Keep it warm, practical, and non-denominational. Verse: "${scripture.verse}" (${scripture.reference}).`;
-        const res = await fetch('https://toolkit.rork.com/text/llm/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+        const { sendChatMessage: sendChat } = await import('@/lib/api-client');
+        const chatResult = await sendChat({
+          messages: [{ role: 'user', content: prompt }],
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const text: string = data?.completion ?? '';
+        const text: string = chatResult?.message ?? '';
         const cleaned = String(text ?? '').trim();
         setInsights(prev => ({ ...prev, [id]: { text: cleaned || 'No insight generated. Try again.', loading: false } }));
       } catch (e: unknown) {

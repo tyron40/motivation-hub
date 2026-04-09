@@ -20,7 +20,8 @@ import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech as generateTTS, sendChatMessage } from '@/lib/api-client';
+import { generateTextToSpeech as generateTTS, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
+import { API_ENDPOINTS } from '@/lib/config';
 
 
 interface Message {
@@ -829,194 +830,64 @@ function VoiceCoachContent() {
   const processAudioTranscription = async (audioUri: string) => {
     try {
       setIsProcessing(true);
-      console.log('🔄 Processing audio transcription...');
+      console.log('🔄 Processing audio transcription via backend OpenAI Whisper...');
       console.log('📁 Audio URI:', audioUri);
       
       if (!audioUri || audioUri.trim().length === 0) {
         throw new Error('Invalid audio URI - recording may have failed');
       }
       
-      const formData = new FormData();
-      const uriParts = audioUri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
+      const text = await transcribeAudioViaBackend(audioUri);
+      console.log('✅ Transcription received:', text);
       
-      console.log('📄 File type detected:', fileType);
-      console.log('📄 Full URI:', audioUri);
+      const noisePatterns = ['.', '...', '', ' '];
+      if (noisePatterns.includes(text) || text.length < 1) {
+        console.log('⚠️ Likely transcription error or noise:', text);
+        Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
+        setCurrentStatus('Ready to listen');
+        return;
+      }
       
-      const mimeType = fileType === 'wav' ? 'audio/wav' : 
-                       fileType === 'm4a' ? 'audio/mp4' : 
-                       fileType === 'webm' ? 'audio/webm' : 
-                       `audio/${fileType}`;
+      const userMessage: Message = {
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+      };
       
-      const audioFile = {
-        uri: audioUri,
-        name: `recording.${fileType}`,
-        type: mimeType,
-      } as any;
+      console.log('💬 Adding user message:', userMessage);
       
-      console.log('📦 Audio file object:', JSON.stringify(audioFile));
-      console.log('📦 Appending to FormData...');
-      formData.append('audio', audioFile);
-      console.log('✅ Audio appended to FormData');
-      
-      console.log('🚀 Sending transcription request...');
-      console.log('🚀 Request details:', {
-        url: 'https://toolkit.rork.com/stt/transcribe/',
-        method: 'POST',
-        fileName: audioFile.name,
-        fileType: audioFile.type,
+      setMessages(prev => {
+        const updatedMessages = [...prev, userMessage];
+        console.log('📝 Updated messages count:', updatedMessages.length);
+        getAIResponse(updatedMessages);
+        return updatedMessages;
       });
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.log('⏱️ Request timeout after 30 seconds');
-        controller.abort();
-      }, 30000);
-      
-      console.log('🌐 Calling STT API: https://toolkit.rork.com/stt/transcribe/');
-      console.log('⏱️ Timeout set to 30 seconds');
-      
-      const transcriptionResponse = await fetch('https://toolkit.rork.com/stt/transcribe/', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      console.log('📡 Transcription response received');
-      console.log('📡 Response status:', transcriptionResponse.status);
-      console.log('📡 Response statusText:', transcriptionResponse.statusText);
-      console.log('📡 Response headers:', JSON.stringify(Object.fromEntries(transcriptionResponse.headers.entries())));
-      
-      if (!transcriptionResponse.ok) {
-        const errorText = await transcriptionResponse.text();
-        console.error('❌ Transcription error response:', errorText.substring(0, 200));
-        console.error('❌ Full error (first 500 chars):', errorText.substring(0, 500));
-        
-        if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
-          throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
-        }
-        
-        if (transcriptionResponse.status === 400) {
-          throw new Error('Invalid audio format. Please try recording again.');
-        } else if (transcriptionResponse.status === 413) {
-          throw new Error('Audio file too large. Please record a shorter message.');
-        } else if (transcriptionResponse.status === 415) {
-          throw new Error('Unsupported audio format. Please try again.');
-        }
-        
-        throw new Error(`Transcription failed (${transcriptionResponse.status}): ${errorText.substring(0, 100)}`);
-      }
-      
-      const responseText = await transcriptionResponse.text();
-      console.log('📥 Raw response received');
-      console.log('📥 Response length:', responseText.length);
-      console.log('📥 Response (first 200 chars):', responseText.substring(0, 200));
-      console.log('📥 Response content-type:', transcriptionResponse.headers.get('content-type'));
-      
-      if (!responseText || responseText.trim().length === 0) {
-        console.error('❌ Empty response from STT service');
-        throw new Error('Empty response from speech-to-text service');
-      }
-      
-      let transcriptionData;
-      try {
-        transcriptionData = JSON.parse(responseText);
-        console.log('✅ Successfully parsed JSON response');
-      } catch (parseError) {
-        console.error('❌ Failed to parse JSON response:', parseError);
-        console.error('❌ Response was (first 500 chars):', responseText.substring(0, 500));
-        
-        if (responseText.toLowerCase().includes('error') || 
-            responseText.toLowerCase().includes('invalid') ||
-            responseText.toLowerCase().includes('failed')) {
-          throw new Error(`Transcription service error: ${responseText.substring(0, 200)}`);
-        }
-        
-        if (responseText.trim().length > 0 && !responseText.startsWith('{') && !responseText.startsWith('[')) {
-          console.log('⚠️ Response appears to be plain text, treating as transcription');
-          transcriptionData = { text: responseText.trim() };
-        } else {
-          throw new Error(`Invalid JSON response from transcription service. Response: ${responseText.substring(0, 100)}`);
-        }
-      }
-      
-      console.log('📥 Transcription response data:', JSON.stringify(transcriptionData));
-      
-      const text = transcriptionData.text || transcriptionData.transcription || transcriptionData.result;
-      console.log('🎯 Extracted text type:', typeof text);
-      console.log('🎯 Extracted text value:', JSON.stringify(text));
-      console.log('🎯 Text is string:', typeof text === 'string');
-      console.log('🎯 Text length:', text?.length || 0);
-      
-      if (text && typeof text === 'string' && text.trim().length > 0) {
-        const cleanedText = text.trim();
-        console.log('✅ Valid transcribed text:', cleanedText);
-        console.log('📏 Cleaned text length:', cleanedText.length);
-        
-        const noisePatterns = ['.', '...', '', ' '];
-        
-        if (noisePatterns.includes(cleanedText) || cleanedText.length < 1) {
-          console.log('⚠️ Likely transcription error or noise:', cleanedText);
-          Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
-          setCurrentStatus('Ready to listen');
-          return;
-        }
-        
-        const userMessage: Message = {
-          role: 'user',
-          content: cleanedText,
-          timestamp: Date.now(),
-        };
-        
-        console.log('💬 Adding user message:', userMessage);
-        
-        setMessages(prev => {
-          const updatedMessages = [...prev, userMessage];
-          console.log('📝 Updated messages count:', updatedMessages.length);
-          getAIResponse(updatedMessages);
-          return updatedMessages;
-        });
-      } else {
-        console.log('⚠️ Empty or invalid transcription received:', { 
-          text, 
-          typeOfText: typeof text,
-          trimmed: text?.trim ? text.trim() : 'N/A', 
-          length: text?.trim ? text.trim().length : 0,
-          fullResponse: transcriptionData 
-        });
-        Alert.alert(
-          'No Speech Detected', 
-          'I couldn\'t detect any speech. Please:\n\n1. Hold the microphone button while speaking\n2. Speak clearly into your device\n3. Check microphone permissions\n4. Ensure your microphone is not blocked',
-          [{ text: 'Try Again' }]
-        );
-      }
     } catch (error) {
       console.error('❌ Error processing transcription:', error);
-      console.error('❌ Error type:', error?.constructor?.name);
-      console.error('❌ Error message:', (error as Error)?.message);
-      console.error('❌ Error stack:', (error as Error)?.stack);
       
-      if ((error as Error).name === 'AbortError') {
-        console.error('❌ Request timed out after 30 seconds');
+      if ((error as Error).name === 'AbortError' || (error as Error).message?.includes('timed out')) {
         Alert.alert(
           'Timeout Error', 
-          'Speech processing took too long. This could mean:\n\n1. Poor internet connection\n2. Audio file too large\n3. Service temporarily unavailable\n\nPlease try again with a shorter message.',
+          'Speech processing took too long. Please try again with a shorter message.',
           [{ text: 'OK' }]
         );
       } else if ((error as Error).message?.includes('Network request failed') || 
                  (error as Error).message?.includes('Failed to fetch')) {
-        console.error('❌ Network error - cannot reach STT service');
         Alert.alert(
           'Connection Error', 
           'Cannot reach the speech-to-text service. Please check your internet connection and try again.',
           [{ text: 'OK' }]
         );
+      } else if ((error as Error).message?.includes('Empty transcription')) {
+        Alert.alert(
+          'No Speech Detected', 
+          'I couldn\'t detect any speech. Please hold the microphone button while speaking clearly.',
+          [{ text: 'Try Again' }]
+        );
       } else {
         Alert.alert(
           'Processing Error', 
-          `Failed to process your voice: ${(error as Error).message}\n\nPlease try:\n1. Speaking more clearly\n2. Holding the button longer\n3. Checking your internet connection`,
+          `Failed to process your voice: ${(error as Error).message}`,
           [{ text: 'OK' }]
         );
       }
@@ -1032,17 +903,17 @@ function VoiceCoachContent() {
   const processWebTranscription = async (blob: Blob) => {
     try {
       setIsProcessing(true);
-      console.log('🔄 Processing web audio transcription...');
+      console.log('🔄 Processing web audio transcription via backend OpenAI Whisper...');
       console.log('📦 Blob size:', blob.size);
 
       const formData = new FormData();
       formData.append('audio', blob as any, 'recording.webm');
 
-      console.log('🌐 Calling STT API: https://toolkit.rork.com/stt/transcribe/ (web)');
+      console.log('🌐 Calling backend STT API:', API_ENDPOINTS.stt);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const transcriptionResponse = await fetch('https://toolkit.rork.com/stt/transcribe/', {
+      const transcriptionResponse = await fetch(API_ENDPOINTS.stt, {
         method: 'POST',
         body: formData,
         signal: controller.signal,
@@ -1054,11 +925,6 @@ function VoiceCoachContent() {
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
         console.error('❌ Transcription error response:', errorText.substring(0, 200));
-        
-        if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
-          throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
-        }
-        
         throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
       }
 

@@ -190,6 +190,112 @@ const handleTTS = async (c: Context) => {
 app.post("/api/tts", handleTTS);
 app.post("/tts", handleTTS);
 
+const handleSTT = async (c: Context) => {
+  try {
+    console.log("[Hono] STT request received");
+    
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error("[Hono] OpenAI API key not configured");
+      return c.json({ error: "OpenAI API key not configured" }, 500);
+    }
+
+    const formData = await c.req.formData();
+    const audioFile = formData.get('audio');
+
+    if (!audioFile || !(audioFile instanceof File)) {
+      return c.json({ error: "Audio file is required" }, 400);
+    }
+
+    console.log("[Hono] STT audio file received:", audioFile.name, "size:", audioFile.size);
+
+    const openaiFormData = new FormData();
+    openaiFormData.append('file', audioFile, audioFile.name || 'recording.wav');
+    openaiFormData.append('model', 'whisper-1');
+    openaiFormData.append('language', 'en');
+
+    console.log("[Hono] Sending to OpenAI Whisper API...");
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: openaiFormData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Hono] OpenAI Whisper error:", response.status, errorText);
+      return c.json({ error: "Transcription failed", details: errorText.substring(0, 200) }, 500);
+    }
+
+    const data = await response.json();
+    console.log("[Hono] STT transcription received, text length:", data.text?.length);
+
+    return c.json({ text: data.text || '' });
+  } catch (error) {
+    console.error("[Hono] STT error:", error);
+    return c.json({
+      error: "STT transcription failed",
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+};
+
+app.post("/api/stt", handleSTT);
+app.post("/stt", handleSTT);
+
+const handleImageGenerate = async (c: Context) => {
+  try {
+    console.log("[Hono] Image generation request received");
+    
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error("[Hono] OpenAI API key not configured");
+      return c.json({ error: "OpenAI API key not configured" }, 500);
+    }
+
+    const body = await c.req.json();
+    const { prompt, size = '1024x1024' } = body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return c.json({ error: "Prompt is required" }, 400);
+    }
+
+    console.log("[Hono] Generating image with DALL-E...");
+    console.log("[Hono] Prompt length:", prompt.length);
+    console.log("[Hono] Size:", size);
+
+    const openai = new OpenAI({ apiKey });
+
+    const imageResponse = await openai.images.generate({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: size as any,
+      response_format: "url",
+    });
+
+    const imageUrl = imageResponse.data[0]?.url;
+    if (!imageUrl) {
+      throw new Error("No image URL returned from OpenAI");
+    }
+
+    console.log("[Hono] Image generated successfully");
+
+    return c.json({ imageUrl });
+  } catch (error) {
+    console.error("[Hono] Image generation error:", error);
+    return c.json({
+      error: "Image generation failed",
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+};
+
+app.post("/api/image-generate", handleImageGenerate);
+app.post("/image-generate", handleImageGenerate);
+
 const handleChat = async (c: Context) => {
   try {
     console.log("[Hono] Chat request received");
