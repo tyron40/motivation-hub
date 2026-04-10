@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,6 @@ import {
   Modal,
   Animated,
   ActivityIndicator,
-  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
@@ -23,9 +22,9 @@ import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
+import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage, transcribeAudio as transcribeAudioApi } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,7 +67,7 @@ function ChatScreenContent() {
   const { useCredit: deductCredit, usageStats } = useIAP();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
-  const { recordMessageSent, recordMessageComplete, setTyping: setAdTyping, recordInteraction: recordAdInteraction } = useChatInterstitialAd();
+  const { tryShowInterstitialOnTransition } = useAdMob();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { 
     sessions, 
@@ -102,19 +101,14 @@ function ChatScreenContent() {
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
     try {
       if (sound) {
-        try {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-        } catch (e) {
-          console.log('⚠️ Error cleaning up previous sound:', e);
-        }
-        setSound(null);
+        await sound.unloadAsync();
       }
 
       setMessages(prev => prev.map(msg => 
         msg.id === messageId ? { ...msg, isPlaying: true } : { ...msg, isPlaying: false }
       ));
 
+      // Set audio mode for playback
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
@@ -123,12 +117,9 @@ function ChatScreenContent() {
         playThroughEarpieceAndroid: false,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      console.log('🔊 Creating sound for message:', messageId);
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
-        { shouldPlay: false, volume: 1.0 }
+        { shouldPlay: true, volume: 1.0 }
       );
       
       setSound(newSound);
@@ -138,23 +129,6 @@ function ChatScreenContent() {
           setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
         }
       });
-
-      const status = await newSound.getStatusAsync();
-      if (status.isLoaded) {
-        console.log('✅ Audio loaded, starting playback for message:', messageId);
-        await newSound.playAsync();
-      } else {
-        console.log('⏳ Audio not yet loaded, waiting...');
-        await new Promise(resolve => setTimeout(resolve, 800));
-        const retryStatus = await newSound.getStatusAsync();
-        if (retryStatus.isLoaded) {
-          console.log('✅ Audio loaded after wait, starting playback');
-          await newSound.playAsync();
-        } else {
-          console.warn('⚠️ Audio still not loaded after waiting');
-          setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
-        }
-      }
     } catch (error) {
       console.error('Audio playback error:', error);
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
@@ -164,7 +138,7 @@ function ChatScreenContent() {
   const generateVoice = useCallback(async (messageId: string, text: string) => {
     try {
       console.log('🎤 Generating voice for message:', messageId);
-      console.log('🎤 Using Rork backend /api/tts endpoint');
+      console.log('🎤 Using Vercel backend /api/tts endpoint');
       
       const result = await generateTextToSpeech({
         text: text.substring(0, 500),
@@ -182,10 +156,9 @@ function ChatScreenContent() {
       
       console.log('✅ Voice generated successfully for message:', messageId);
       
-      console.log('⏳ Waiting for audio data to stabilize before playback...');
       setTimeout(() => {
         void playAudio(messageId, audioUrl);
-      }, 1200);
+      }, 500);
     } catch (error: any) {
       console.error('❌ Voice generation error:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -280,7 +253,7 @@ function ChatScreenContent() {
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
     if (!text.trim() || isLoading) return;
 
-    recordMessageSent();
+    void tryShowInterstitialOnTransition();
 
     if (!isSuggestion && !usageStats.canUseAI) {
       console.log('❌ No credits available');
@@ -357,23 +330,10 @@ function ChatScreenContent() {
         });
       }
 
-      const userName = profile.name || 'friend';
-      const systemPrompt = `You are an AI motivation coach named "Coach Alex". You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
+      const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-Key traits:
-- Warm, encouraging, and empathetic
-- Use the user's name when provided (${userName})
-- Provide actionable, practical advice
-- Keep responses conversational and natural (under 200 words)
-- Focus on building confidence, resilience, and positive mindset
-- Ask follow-up questions to better understand their situation
-- Share motivational insights or techniques
-
-IMPORTANT: Keep responses concise for natural conversation flow. Always end with encouragement.`;
-
-      const chatHistory = messages
+      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
         .filter(msg => msg.id !== '1' || msg.isUser)
-        .slice(-10)
         .map(msg => ({
           role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
           content: msg.text,
@@ -381,23 +341,29 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
 
       chatHistory.push({ role: 'user', content: text.trim() });
 
-      const allMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-        { role: 'system', content: systemPrompt },
+      const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
+        { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
+        { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
         ...chatHistory,
       ];
 
       try {
-        console.log('🤖 Sending chat message via sendChatMessage (multi-strategy)...');
+        console.log('🤖 Sending chat message...');
         console.log('📤 Messages count:', allMessages.length);
 
+        console.log('🤖 Using Vercel backend /api/chat...');
         const chatResult = await sendChatMessage({
-          messages: allMessages,
+          messages: allMessages.map(m => ({
+            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
         });
-        const completion = chatResult?.message;
-        console.log('✅ AI responded, length:', completion?.length);
 
-        if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
-          throw new Error('Empty response from AI');
+        const completion = chatResult?.message;
+        console.log('✅ Vercel backend responded, length:', completion?.length);
+
+        if (!completion || typeof completion !== 'string') {
+          throw new Error('Invalid response format from AI');
         }
 
         const aiMessage: Message = {
@@ -422,10 +388,7 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
               console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
-              console.log('⏳ Giving UI time to render before generating voice...');
-              setTimeout(() => {
-                void generateVoice(aiMessage.id, completion);
-              }, 600);
+              void generateVoice(aiMessage.id, completion);
             } else {
               console.log('⚠️ Not enough credits for voice generation');
             }
@@ -433,6 +396,10 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
             console.log('⚠️ Not enough credits for voice generation');
           }
         }
+      } catch (fetchError) {
+        console.error('🤖 AI generation error:', fetchError);
+        throw fetchError;
+      }
     } catch (error) {
       console.error('Chat error:', error);
 
@@ -453,9 +420,8 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
     } finally {
       setIsLoading(false);
       setIsTyping(false);
-      recordMessageComplete();
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, recordMessageSent, recordMessageComplete]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition]);
 
 
 
@@ -593,9 +559,37 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
       console.log('🎯 Starting transcription for URI:', uri);
       setIsTranscribing(true);
 
-      const text = await transcribeAudioViaBackend(uri);
-      console.log('✅ Transcription successful:', text);
-      setInputText(text);
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      const formData = new FormData();
+      
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('audio', blob, `recording.${fileType}`);
+      } else {
+        const audioFile = {
+          uri,
+          name: `recording.${fileType}`,
+          type: `audio/${fileType}`,
+        } as any;
+        formData.append('audio', audioFile);
+      }
+
+      console.log('📤 Sending audio to Vercel transcription service...');
+      const data = await transcribeAudioApi({ audio: formData });
+      console.log('✅ Transcription response:', data);
+
+      if (data.text && data.text.trim()) {
+        setInputText(data.text.trim());
+        console.log('✅ Transcription successful:', data.text);
+      } else {
+        console.warn('⚠️ Empty transcription result');
+        if (Platform.OS !== 'web') {
+          Alert.alert('No Speech Detected', 'Please try speaking again.');
+        }
+      }
     } catch (error) {
       console.error('❌ Transcription error:', error);
       if (Platform.OS !== 'web') {
@@ -623,13 +617,38 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
     };
   }, [recording, sound]);
 
-  const renderMessageBubble = useCallback((message: Message, profileName: string | undefined) => {
+  const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
+    const bubbleAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(0.8)).current;
+
+    useEffect(() => {
+      Animated.sequence([
+        Animated.delay(index * 150),
+        Animated.parallel([
+          Animated.timing(bubbleAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: 1,
+            tension: 100,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }, [index, bubbleAnim, scaleAnim]);
+
     return (
-      <View 
-        key={message.id}
+      <Animated.View 
         style={[
           styles.messageBubbleContainer,
           message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
+          {
+            opacity: bubbleAnim,
+            transform: [{ scale: scaleAnim }],
+          }
         ]}
       >
         <LinearGradient
@@ -664,7 +683,7 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
               styles.messageRole,
               { color: message.isUser ? Colors.background : Colors.text }
             ]}>
-              {message.isUser ? (profileName || 'You') : 'Coach Alex'}
+              {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
             </Text>
             {!message.isUser && message.audioUrl && (
               <TouchableOpacity
@@ -692,9 +711,9 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
             {message.text}
           </Text>
         </LinearGradient>
-      </View>
+      </Animated.View>
     );
-  }, [playAudio, stopAudio, styles]);
+  };
 
   if (!isAuthenticated) {
     return (
@@ -796,10 +815,10 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
           >
-            {messages.map((message) => renderMessageBubble(message, profile.name))}
+            {messages.map((message, index) => (
+              <MessageBubble key={message.id} message={message} index={index} />
+            ))}
             
             {isTyping && (
               <Animated.View 
@@ -936,22 +955,10 @@ IMPORTANT: Keep responses concise for natural conversation flow. Always end with
                     placeholder="Ask for motivation, advice, or inspiration..."
                     placeholderTextColor={Colors.textSecondary}
                     value={inputText}
-                    onChangeText={(text) => {
-                      setInputText(text);
-                      setAdTyping(text.length > 0);
-                    }}
-                    onFocus={() => setAdTyping(true)}
-                    onBlur={() => setAdTyping(false)}
+                    onChangeText={setInputText}
                     multiline
                     maxLength={500}
                     editable={!isTranscribing}
-                    returnKeyType="default"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => {
-                      if (inputText.trim() && !isLoading && !isTranscribing) {
-                        void sendMessage(inputText);
-                      }
-                    }}
                   />
                   <TouchableOpacity
                     style={styles.micButton}

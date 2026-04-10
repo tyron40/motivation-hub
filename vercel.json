@@ -1,10 +1,10 @@
 {
   "installCommand": "bun install",
-  "buildCommand": "echo 'No build needed'",
-  "framework": null,
+  "buildCommand": "bunx expo export --platform web",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/health", "destination": "/api" },
-    { "source": "/trpc/(.*)", "destination": "/api" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    }
   ]
 }

@@ -456,8 +456,11 @@ const ClipPage = React.memo(function ClipPage({
   const [shouldPlay, setShouldPlay] = useState(false);
   const playerRef = useRef<any>(null);
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const userIntentRef = useRef<boolean | null>(null);
+  const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
-  const autoplayTriggeredRef = useRef(false);
+  const autoplayInProgressRef = useRef(false);
+  const warmupDoneRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -466,71 +469,101 @@ const ClipPage = React.memo(function ClipPage({
 
   useEffect(() => {
     if (isActive) {
-      console.log('[Clip] Active, showing player:', clip.youtubeId);
+      console.log('Clip became active, showing player:', clip.youtubeId);
       setShowPlayer(true);
-      setShouldPlay(true);
-      setIsPlaying(true);
-      autoplayTriggeredRef.current = false;
+      warmupDoneRef.current = false;
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
       setShowPlayer(false);
       setPlayerReady(false);
-      autoplayTriggeredRef.current = false;
+      autoplayInProgressRef.current = false;
     }
   }, [isActive, clip.youtubeId]);
 
+  useEffect(() => {
+    if (!isActive) {
+      setShouldPlay(false);
+      return;
+    }
+    if (!playerReady) return;
+
+    autoplayInProgressRef.current = true;
+    const t = setTimeout(() => {
+      if (!mountedRef.current) return;
+      setShouldPlay(false);
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        setShouldPlay(true);
+      }, 120);
+    }, 250);
+
+    return () => clearTimeout(t);
+  }, [isActive, playerReady, clip.youtubeId]);
+
   const onStateChange = useCallback((state: string) => {
-    if (!mountedRef.current) return;
-    console.log('Clip state:', state, clip.youtubeId);
+    console.log('Clip player state:', state, clip.youtubeId);
+
+    if (stateDebounceRef.current) {
+      clearTimeout(stateDebounceRef.current);
+      stateDebounceRef.current = null;
+    }
 
     if (state === 'playing') {
+      autoplayInProgressRef.current = false;
+      if (!mountedRef.current) return;
       setIsPlaying(true);
       setShouldPlay(true);
       if (!playerReady) setPlayerReady(true);
-    } else if (state === 'paused') {
+      return;
+    }
+
+    if (state === 'paused') {
+      if (autoplayInProgressRef.current) return;
+      if (!mountedRef.current) return;
       setIsPlaying(false);
-    } else if (state === 'ended') {
-      console.log('[Clip] Ended, looping:', clip.youtubeId);
+      setShouldPlay(false);
+      return;
+    }
+
+    if (state === 'ended') {
+      autoplayInProgressRef.current = true;
+      setShouldPlay(false);
       setIsPlaying(false);
       setTimeout(() => {
         if (!mountedRef.current) return;
         setShouldPlay(true);
-        if (Platform.OS === 'web') {
-          try {
-            webIframeRef.current?.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
-            );
-            webIframeRef.current?.contentWindow?.postMessage(
-              JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-            );
-          } catch {}
-        }
-      }, 300);
+      }, 120);
+      return;
     }
   }, [clip.youtubeId, playerReady]);
 
+  const runWarmupSeek = useCallback(async () => {
+    if (warmupDoneRef.current) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    warmupDoneRef.current = true;
+    try {
+      await playerRef.current.seekTo(1, true);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      await playerRef.current.seekTo(0, true);
+      console.log('Clip warmup seek +1s -> 0s applied:', clip.youtubeId);
+    } catch (e) {
+      console.log('Clip warmup seek failed (continuing):', e);
+    }
+  }, [clip.youtubeId]);
+
   const onPlayerReady = useCallback(() => {
+    console.log('Clip player ready:', clip.youtubeId);
     if (!mountedRef.current) return;
-    console.log('[Clip] Player ready:', clip.youtubeId, 'isActive:', isActive);
     setPlayerReady(true);
-    if (isActive && !autoplayTriggeredRef.current) {
-      autoplayTriggeredRef.current = true;
-      console.log('[Clip] Triggering autoplay for:', clip.youtubeId);
-      setTimeout(() => {
+    if (isActive) {
+      autoplayInProgressRef.current = true;
+      void runWarmupSeek().finally(() => {
         if (!mountedRef.current) return;
         setShouldPlay(true);
-        setIsPlaying(true);
-        console.log('[Clip] Play triggered for:', clip.youtubeId);
-        setTimeout(() => {
-          if (!mountedRef.current) return;
-          setShouldPlay(true);
-          setIsPlaying(true);
-          console.log('[Clip] Retry play for:', clip.youtubeId);
-        }, 1200);
-      }, 200);
+      });
     }
-  }, [clip.youtubeId, isActive]);
+  }, [clip.youtubeId, isActive, runWarmupSeek]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);
@@ -547,48 +580,30 @@ const ClipPage = React.memo(function ClipPage({
         if (data.event === 'onReady') {
           if (!mountedRef.current) return;
           setPlayerReady(true);
-          console.log('[Clip Web] Player ready, STRICTLY pressing play:', clip.youtubeId);
-          setTimeout(() => {
-            if (!mountedRef.current) return;
-            try {
-              webIframeRef.current?.contentWindow?.postMessage(
-                JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-              );
-              console.log('[Clip Web] Play command sent for:', clip.youtubeId);
-            } catch {}
-            setShouldPlay(true);
-            setIsPlaying(true);
-            setTimeout(() => {
-              if (!mountedRef.current) return;
-              try {
-                webIframeRef.current?.contentWindow?.postMessage(
-                  JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
-                );
-                console.log('[Clip Web] Retry play command for:', clip.youtubeId);
-              } catch {}
-            }, 600);
-          }, 400);
         } else if (data.event === 'onStateChange') {
           const st = data.info;
           if (st === 1) {
-            if (mountedRef.current) { setIsPlaying(true); setPlayerReady(true); }
+            autoplayInProgressRef.current = false;
+            if (mountedRef.current) { setIsPlaying(true); setShouldPlay(true); setPlayerReady(true); }
           } else if (st === 2) {
-            if (mountedRef.current) setIsPlaying(false);
+            if (!autoplayInProgressRef.current && mountedRef.current) {
+              setIsPlaying(false);
+              setShouldPlay(false);
+            }
           } else if (st === 0) {
             if (mountedRef.current) {
+              autoplayInProgressRef.current = true;
+              setShouldPlay(false);
               setIsPlaying(false);
               setTimeout(() => {
                 if (!mountedRef.current) return;
                 setShouldPlay(true);
                 try {
                   webIframeRef.current?.contentWindow?.postMessage(
-                    JSON.stringify({ event: 'command', func: 'seekTo', args: [0, true] }), '*'
-                  );
-                  webIframeRef.current?.contentWindow?.postMessage(
                     JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
                   );
                 } catch {}
-              }, 300);
+              }, 120);
             }
           }
         }
@@ -597,7 +612,7 @@ const ClipPage = React.memo(function ClipPage({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [showPlayer, isActive, clip.youtubeId]);
+  }, [showPlayer, isActive]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -620,15 +635,9 @@ const ClipPage = React.memo(function ClipPage({
       return;
     }
     const next = !isPlaying;
+    userIntentRef.current = next;
     setShouldPlay(next);
     setIsPlaying(next);
-    if (Platform.OS === 'web') {
-      try {
-        webIframeRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ event: 'command', func: next ? 'playVideo' : 'pauseVideo', args: [] }), '*'
-        );
-      } catch {}
-    }
   }, [showPlayer, isPlaying]);
 
   const handleShare = useCallback(async () => {
@@ -709,7 +718,6 @@ const ClipPage = React.memo(function ClipPage({
             width={SCREEN_WIDTH}
             play={shouldPlay}
             mute={false}
-            forceAndroidAutoplay={true}
             onReady={onPlayerReady}
             onError={onPlayerError}
             onChangeState={onStateChange}
@@ -722,14 +730,6 @@ const ClipPage = React.memo(function ClipPage({
               loop: true,
             }}
             webViewStyle={styles.ytWebView}
-            webViewProps={{
-              mediaPlaybackRequiresUserAction: false,
-              allowsInlineMediaPlayback: true,
-              javaScriptEnabled: true,
-              domStorageEnabled: true,
-              bounces: false,
-              scrollEnabled: false,
-            }}
           />
           {!playerReady && (
             <View style={styles.playerLoading}>
