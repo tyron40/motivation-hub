@@ -461,6 +461,7 @@ const ClipPage = React.memo(function ClipPage({
   const mountedRef = useRef(true);
   const autoplayInProgressRef = useRef(false);
   const warmupDoneRef = useRef(false);
+  const autoplayWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -478,6 +479,10 @@ const ClipPage = React.memo(function ClipPage({
       setShowPlayer(false);
       setPlayerReady(false);
       autoplayInProgressRef.current = false;
+      if (autoplayWatchdogRef.current) {
+        clearTimeout(autoplayWatchdogRef.current);
+        autoplayWatchdogRef.current = null;
+      }
     }
   }, [isActive, clip.youtubeId]);
 
@@ -489,17 +494,39 @@ const ClipPage = React.memo(function ClipPage({
     if (!playerReady) return;
 
     autoplayInProgressRef.current = true;
-    const t = setTimeout(() => {
-      if (!mountedRef.current) return;
-      setShouldPlay(false);
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        setShouldPlay(true);
-      }, 120);
-    }, 250);
+    setShouldPlay(true);
 
-    return () => clearTimeout(t);
-  }, [isActive, playerReady, clip.youtubeId]);
+    if (autoplayWatchdogRef.current) {
+      clearTimeout(autoplayWatchdogRef.current);
+    }
+
+    autoplayWatchdogRef.current = setTimeout(async () => {
+      if (!mountedRef.current || !isActive) return;
+      if (isPlaying) return;
+      if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') {
+        setShouldPlay(true);
+        return;
+      }
+
+      try {
+        const base = 0;
+        const nudge = 0.15;
+        await playerRef.current.seekTo(nudge, true);
+        await new Promise(resolve => setTimeout(resolve, 120));
+        await playerRef.current.seekTo(base, true);
+        setShouldPlay(true);
+      } catch {
+        setShouldPlay(true);
+      }
+    }, 1400);
+
+    return () => {
+      if (autoplayWatchdogRef.current) {
+        clearTimeout(autoplayWatchdogRef.current);
+        autoplayWatchdogRef.current = null;
+      }
+    };
+  }, [isActive, playerReady, clip.youtubeId, isPlaying]);
 
   const onStateChange = useCallback((state: string) => {
     console.log('Clip player state:', state, clip.youtubeId);

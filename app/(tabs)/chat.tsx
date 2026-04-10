@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech, sendChatMessage, transcribeAudio as transcribeAudioApi } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
@@ -37,6 +38,33 @@ interface Message {
   audioUrl?: string;
   isPlaying?: boolean;
 }
+
+const extractAssistantText = (rawResult: any): string => {
+  const candidates = [
+    rawResult?.message,
+    rawResult?.text,
+    rawResult?.response,
+    rawResult?.data?.message,
+    rawResult?.choices?.[0]?.message?.content,
+    rawResult?.output_text,
+    rawResult?.content,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  for (const value of candidates) {
+    if (value != null) {
+      const asString = String(value).trim();
+      if (asString.length > 0) return asString;
+    }
+  }
+
+  return '';
+};
 
 const suggestedPrompts = [
   {
@@ -89,6 +117,7 @@ function ChatScreenContent() {
   const [hasStartedChat, setHasStartedChat] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -99,6 +128,7 @@ function ChatScreenContent() {
   const micAnim = useRef(new Animated.Value(1)).current;
 
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
+    if (isVoiceMuted) return;
     try {
       if (sound) {
         await sound.unloadAsync();
@@ -133,9 +163,10 @@ function ChatScreenContent() {
       console.error('Audio playback error:', error);
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
     }
-  }, [sound]);
+  }, [sound, isVoiceMuted]);
 
   const generateVoice = useCallback(async (messageId: string, text: string) => {
+    if (isVoiceMuted) return;
     try {
       console.log('🎤 Generating voice for message:', messageId);
       console.log('🎤 Using Vercel backend /api/tts endpoint');
@@ -164,9 +195,17 @@ function ChatScreenContent() {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error('❌ Error details:', errorMsg);
     }
-  }, [profile.preferredVoice, playAudio]);
+  }, [profile.preferredVoice, playAudio, isVoiceMuted]);
 
   useEffect(() => {
+    const loadVoiceMute = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('chat_voice_muted_v1');
+        setIsVoiceMuted(saved === '1');
+      } catch {}
+    };
+    void loadVoiceMute();
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -180,6 +219,17 @@ function ChatScreenContent() {
       }),
     ]).start();
   }, [fadeAnim, slideAnim]);
+
+  const toggleVoiceMute = useCallback(async () => {
+    const next = !isVoiceMuted;
+    setIsVoiceMuted(next);
+    try {
+      await AsyncStorage.setItem('chat_voice_muted_v1', next ? '1' : '0');
+    } catch {}
+    if (next) {
+      await stopAudio();
+    }
+  }, [isVoiceMuted, sound]);
 
   useEffect(() => {
     if (isTyping) {
@@ -360,13 +410,7 @@ function ChatScreenContent() {
         });
 
         const rawResult: any = chatResult as any;
-        const completionCandidate =
-          rawResult?.message ??
-          rawResult?.text ??
-          rawResult?.response ??
-          rawResult?.data?.message ??
-          '';
-        const completion = typeof completionCandidate === 'string' ? completionCandidate.trim() : '';
+        const completion = extractAssistantText(rawResult);
 
         console.log('✅ Vercel backend responded, length:', completion?.length);
 
@@ -382,7 +426,10 @@ function ChatScreenContent() {
           timestamp: new Date(),
         };
 
-        setMessages(prev => [...prev, aiMessage]);
+        setMessages(prev => {
+          const next = [...prev, aiMessage];
+          return next;
+        });
 
         if (sessionId) {
           await addMessageToSession(sessionId, {
@@ -392,7 +439,7 @@ function ChatScreenContent() {
           });
         }
 
-        if (profile.voiceEnabled && completion) {
+        if (profile.voiceEnabled && !isVoiceMuted && completion) {
           if (usageStats.credits > 0) {
             const voiceCreditUsed = await deductCredit();
             if (voiceCreditUsed) {
@@ -430,7 +477,7 @@ function ChatScreenContent() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition, isVoiceMuted]);
 
 
 
@@ -797,6 +844,16 @@ function ChatScreenContent() {
                   <Volume2 color={Colors.primary} size={20} />
                 ) : (
                   <VolumeX color={Colors.textSecondary} size={20} />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconButton, isVoiceMuted && styles.iconButtonActive]}
+                onPress={() => { void toggleVoiceMute(); }}
+              >
+                {isVoiceMuted ? (
+                  <MicOff color={Colors.primary} size={20} />
+                ) : (
+                  <Mic color={Colors.textSecondary} size={20} />
                 )}
               </TouchableOpacity>
               <TouchableOpacity

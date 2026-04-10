@@ -361,6 +361,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayInProgressRef = useRef(false);
   const autoplayWarmupDoneRef = useRef(false);
+  const autoplayRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
@@ -370,6 +371,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (loadPollTimerRef.current) {
       clearTimeout(loadPollTimerRef.current);
       loadPollTimerRef.current = null;
+    }
+    if (autoplayRecoveryTimerRef.current) {
+      clearTimeout(autoplayRecoveryTimerRef.current);
+      autoplayRecoveryTimerRef.current = null;
     }
     autoplayInProgressRef.current = false;
   }, []);
@@ -455,6 +460,29 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       void runWarmupSeek().finally(() => {
         requestPlayState(true);
       });
+
+      if (Platform.OS !== 'web') {
+        if (autoplayRecoveryTimerRef.current) {
+          clearTimeout(autoplayRecoveryTimerRef.current);
+        }
+        autoplayRecoveryTimerRef.current = setTimeout(async () => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+          if (isPlayingRef.current || currentTimeRef.current > 0.25) return;
+
+          try {
+            const base = Math.max(currentTimeRef.current, 0);
+            const nudge = Math.min(base + 0.12, Math.max(durationRef.current - 0.05, 0.12));
+            console.log('[Autoplay] Native recovery nudge seek:', base, '->', nudge);
+            await playerRef.current.seekTo(nudge, true);
+            await new Promise(resolve => setTimeout(resolve, 140));
+            await playerRef.current.seekTo(base, true);
+            requestPlayState(true);
+          } catch (e) {
+            console.log('[Autoplay] Native recovery nudge failed:', e);
+          }
+        }, 1800);
+      }
     }
 
     if (autoplay && !autoplayTriggeredRef.current) {
