@@ -228,6 +228,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     autoplayTriggeredRef.current = false;
     autoplayAttemptRef.current = 0;
     mediaLoadedRef.current = false;
+    autoplayWarmupDoneRef.current = false;
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
@@ -359,6 +360,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const mediaLoadedRef = useRef(false);
   const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayInProgressRef = useRef(false);
+  const autoplayWarmupDoneRef = useRef(false);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
@@ -429,6 +431,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => clearAutoplayTimer();
   }, [clearAutoplayTimer]);
 
+  const runWarmupSeek = useCallback(async () => {
+    if (autoplayWarmupDoneRef.current) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    autoplayWarmupDoneRef.current = true;
+    try {
+      await playerRef.current.seekTo(1, true);
+      setCurrentTime(1);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      await playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
+      console.log('[Autoplay] Warmup seek +1s -> 0s applied');
+    } catch (e) {
+      console.log('[Autoplay] Warmup seek failed (continuing):', e);
+    }
+  }, []);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
@@ -451,12 +469,19 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
+    if (autoplay) {
+      desiredPlayRef.current = true;
+      void runWarmupSeek().finally(() => {
+        requestPlayState(true);
+      });
+    }
+
     if (autoplay && !autoplayTriggeredRef.current) {
       autoplayTriggeredRef.current = true;
       console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
       startAutoplay();
     }
-  }, [autoplay, startAutoplay]);
+  }, [autoplay, requestPlayState, runWarmupSeek, startAutoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);

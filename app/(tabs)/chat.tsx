@@ -24,7 +24,7 @@ import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage, transcribeAudio as transcribeAudioApi } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -577,17 +577,8 @@ function ChatScreenContent() {
         formData.append('audio', audioFile);
       }
 
-      console.log('📤 Sending audio to transcription service...');
-      const response = await fetch('https://toolkit.rork.com/stt/transcribe/', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      console.log('📤 Sending audio to Vercel transcription service...');
+      const data = await transcribeAudioApi({ audio: formData });
       console.log('✅ Transcription response:', data);
 
       if (data.text && data.text.trim()) {

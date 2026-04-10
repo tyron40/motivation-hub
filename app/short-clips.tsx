@@ -460,6 +460,7 @@ const ClipPage = React.memo(function ClipPage({
   const stateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const autoplayInProgressRef = useRef(false);
+  const warmupDoneRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -470,6 +471,7 @@ const ClipPage = React.memo(function ClipPage({
     if (isActive) {
       console.log('Clip became active, showing player:', clip.youtubeId);
       setShowPlayer(true);
+      warmupDoneRef.current = false;
     } else {
       setShouldPlay(false);
       setIsPlaying(false);
@@ -536,11 +538,32 @@ const ClipPage = React.memo(function ClipPage({
     }
   }, [clip.youtubeId, playerReady]);
 
+  const runWarmupSeek = useCallback(async () => {
+    if (warmupDoneRef.current) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    warmupDoneRef.current = true;
+    try {
+      await playerRef.current.seekTo(1, true);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      await playerRef.current.seekTo(0, true);
+      console.log('Clip warmup seek +1s -> 0s applied:', clip.youtubeId);
+    } catch (e) {
+      console.log('Clip warmup seek failed (continuing):', e);
+    }
+  }, [clip.youtubeId]);
+
   const onPlayerReady = useCallback(() => {
     console.log('Clip player ready:', clip.youtubeId);
     if (!mountedRef.current) return;
     setPlayerReady(true);
-  }, [clip.youtubeId]);
+    if (isActive) {
+      autoplayInProgressRef.current = true;
+      void runWarmupSeek().finally(() => {
+        if (!mountedRef.current) return;
+        setShouldPlay(true);
+      });
+    }
+  }, [clip.youtubeId, isActive, runWarmupSeek]);
 
   const onPlayerError = useCallback((error: string) => {
     console.error('Clip player error:', error, clip.youtubeId);

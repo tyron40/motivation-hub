@@ -202,6 +202,97 @@ export async function generateTextToSpeech(params: {
   }
 }
 
+export async function transcribeAudio(params: {
+  audio: FormData;
+}): Promise<{ text: string }> {
+  try {
+    console.log('🎯 Transcribing audio via Vercel API...');
+    console.log('🎯 API Base URL:', API_BASE);
+    console.log('🎯 Full URL:', `${API_BASE}/api/stt`);
+
+    const connectionResult = await testConnection(API_BASE);
+    if (!connectionResult.success) {
+      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
+      console.warn('⚠️ Attempted URL:', API_BASE);
+      console.warn('⚠️ Probe error:', connectionResult.error);
+    } else {
+      console.log('✅ Server connectivity confirmed');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+
+    const response = await fetch(`${API_BASE}/api/stt`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+        ...getAuthHeader(),
+      },
+      body: params.audio,
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    const contentType = response.headers.get('content-type');
+    console.log('📡 STT response content-type:', contentType);
+    console.log('📡 STT response status:', response.status);
+
+    if (!response.ok) {
+      let errorMessage = `STT API error: ${response.status}`;
+      try {
+        const errorText = await response.text();
+        console.error('❌ STT API error response:', errorText.substring(0, 200));
+
+        if (response.status === 401 || response.status === 403) {
+          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER).';
+        } else if (contentType?.includes('application/json')) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorMessage;
+          } catch {
+            errorMessage = errorText.substring(0, 100);
+          }
+        } else {
+          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
+        }
+      } catch (e) {
+        console.error('❌ Could not read STT error response:', e);
+      }
+      throw new Error(errorMessage);
+    }
+
+    const responseText = await response.text();
+    if (!contentType?.includes('application/json')) {
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    }
+
+    let result: any;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Invalid JSON response from STT API: ${responseText.substring(0, 100)}`);
+    }
+
+    if (!result?.text || typeof result.text !== 'string') {
+      throw new Error('Invalid STT response format');
+    }
+
+    return { text: result.text };
+  } catch (error: any) {
+    console.error('❌ STT request failed:', error);
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timeout - please check your internet connection');
+    }
+    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
+      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
+    }
+    throw error;
+  }
+}
+
 export async function sendChatMessage(params: {
   messages: {
     role: 'system' | 'user' | 'assistant';
