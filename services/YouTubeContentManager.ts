@@ -146,7 +146,7 @@ async function fetchFromBackend(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       if (attempt > 0) {
-        const delay = Math.min(1500 * Math.pow(2, attempt - 1), 6000);
+        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
         console.log(`[Retry] Attempt ${attempt + 1}/${maxRetries} for ${endpointUrl} after ${delay}ms`);
         await new Promise<void>(r => setTimeout(r, delay));
       } else {
@@ -154,7 +154,7 @@ async function fetchFromBackend(
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const response = await fetch(endpointUrl, {
         method: 'POST',
@@ -164,12 +164,14 @@ async function fetchFromBackend(
         },
         body: JSON.stringify(body),
         signal: controller.signal,
+        mode: 'cors' as RequestMode,
+        credentials: 'omit' as RequestCredentials,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(() => 'Unable to read error body');
         console.error(`Backend ${endpointUrl} error (attempt ${attempt + 1}):`, response.status, errorText.substring(0, 200));
         lastError = `HTTP ${response.status}`;
         continue;
