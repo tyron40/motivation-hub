@@ -138,7 +138,7 @@ export async function sendChatMessage(params: {
   console.log('🤖 sendChatMessage | Platform:', Platform.OS, '| messages:', params.messages.length);
   console.log('🤖 Backend URL:', API_ENDPOINTS.chat);
 
-  const response = await fetchWithTimeout(
+  const response = await fetchWithRetry(
     API_ENDPOINTS.chat,
     {
       method: 'POST',
@@ -148,6 +148,7 @@ export async function sendChatMessage(params: {
       },
       body: JSON.stringify({ messages: params.messages }),
     },
+    3,
     CHAT_TIMEOUT
   );
 
@@ -157,10 +158,25 @@ export async function sendChatMessage(params: {
     throw new Error(`Chat request failed: ${response.status}`);
   }
 
-  const data = await response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const responseText = await response.text();
+
+  if (!responseText || responseText.trim().length === 0) {
+    throw new Error('Empty chat response body');
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseErr) {
+    console.error('❌ Chat response parse error:', responseText.substring(0, 200));
+    throw new Error('Invalid JSON in chat response');
+  }
+
   const message = data?.message;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    console.error('❌ Chat empty message, full response:', JSON.stringify(data).substring(0, 300));
     throw new Error('Backend returned empty message');
   }
 

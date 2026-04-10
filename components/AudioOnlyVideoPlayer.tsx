@@ -208,7 +208,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
             setIsLoading(false);
             updatePlayState(true);
           }
-        }, 1500);
+        }, 2500);
       } else {
         setIsLoading(false);
         updatePlayState(false);
@@ -342,19 +342,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay && !autoplayAttemptedRef.current) {
       autoplayAttemptedRef.current = true;
-      console.log('[Autoplay] Player ready, performing seek trick for:', videoId);
-      setTimeout(() => {
+      console.log('[Autoplay] Player ready, performing production seek trick for:', videoId);
+
+      const attemptAutoplay = (attempt: number) => {
         if (!mountedRef.current || !playerRef.current) return;
-        console.log('[Autoplay] Step 1: Seeking forward 1s to trigger playback');
+        console.log(`[Autoplay] Attempt ${attempt}: seek forward 1s for:`, videoId);
         updatePlayState(true);
         try {
           playerRef.current.seekTo(1, true);
         } catch (e) {
           console.log('[Autoplay] Seek forward error:', e);
         }
+
         setTimeout(() => {
           if (!mountedRef.current || !playerRef.current) return;
-          console.log('[Autoplay] Step 2: Seeking back to 0 to start from beginning');
+          console.log(`[Autoplay] Attempt ${attempt}: seek back to 0 for:`, videoId);
           try {
             playerRef.current.seekTo(0, true);
           } catch (e) {
@@ -362,15 +364,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           }
           updatePlayState(true);
           startProgressTracking();
-          setTimeout(() => {
-            if (!mountedRef.current) return;
-            if (!isPlayingRef.current) {
-              console.log('[Autoplay] Retry play after seek trick for:', videoId);
-              updatePlayState(true);
-            }
-          }, 1000);
-        }, 800);
-      }, 500);
+        }, 1000);
+      };
+
+      setTimeout(() => attemptAutoplay(1), 800);
+
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (!isPlayingRef.current) {
+          console.log('[Autoplay] Retry attempt 2 for:', videoId);
+          attemptAutoplay(2);
+        }
+      }, 3500);
+
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (!isPlayingRef.current) {
+          console.log('[Autoplay] Retry attempt 3 (final) for:', videoId);
+          attemptAutoplay(3);
+        }
+      }, 6000);
     }
   }, [autoplay, videoId, updatePlayState, startProgressTracking]);
 
@@ -520,20 +533,27 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           if (autoplay && !autoplayAttemptedRef.current) {
             autoplayAttemptedRef.current = true;
             console.log('[Web Autoplay] Performing seek trick for:', videoId);
-            setTimeout(() => {
+
+            const webAttempt = (num: number) => {
               if (!mountedRef.current) return;
-              console.log('[Web Autoplay] Step 1: Seeking forward 1s');
+              console.log(`[Web Autoplay] Attempt ${num}: seek forward 1s for:`, videoId);
               postMessageToWebPlayer('seekTo', [1, true]);
               postMessageToWebPlayer('playVideo');
               setTimeout(() => {
                 if (!mountedRef.current) return;
-                console.log('[Web Autoplay] Step 2: Seeking back to 0');
+                console.log(`[Web Autoplay] Attempt ${num}: seek back to 0 for:`, videoId);
                 postMessageToWebPlayer('seekTo', [0, true]);
                 postMessageToWebPlayer('playVideo');
                 updatePlayState(true);
-                console.log('[Web Autoplay] Seek trick complete for:', videoId);
-              }, 800);
-            }, 500);
+              }, 1000);
+            };
+
+            setTimeout(() => webAttempt(1), 800);
+            setTimeout(() => {
+              if (!mountedRef.current || isPlayingRef.current) return;
+              console.log('[Web Autoplay] Retry attempt 2');
+              webAttempt(2);
+            }, 3500);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
