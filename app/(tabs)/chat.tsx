@@ -39,6 +39,46 @@ interface Message {
   isPlaying?: boolean;
 }
 
+const extractTextDeep = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractTextDeep(item);
+      if (nested) return nested;
+    }
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    const directKeys = ['text', 'content', 'message', 'output_text', 'response'];
+    for (const key of directKeys) {
+      const nested = extractTextDeep((value as any)[key]);
+      if (nested) return nested;
+    }
+
+    const commonNestedPaths = [
+      (value as any)?.choices?.[0]?.message?.content,
+      (value as any)?.data?.message,
+      (value as any)?.data?.content,
+      (value as any)?.result?.message,
+      (value as any)?.result?.content,
+    ];
+    for (const candidate of commonNestedPaths) {
+      const nested = extractTextDeep(candidate);
+      if (nested) return nested;
+    }
+  }
+
+  try {
+    const asString = String(value).trim();
+    return asString === '[object Object]' ? '' : asString;
+  } catch {
+    return '';
+  }
+};
+
 const extractAssistantText = (rawResult: any): string => {
   const candidates = [
     rawResult?.message,
@@ -48,19 +88,12 @@ const extractAssistantText = (rawResult: any): string => {
     rawResult?.choices?.[0]?.message?.content,
     rawResult?.output_text,
     rawResult?.content,
+    rawResult,
   ];
 
-  for (const value of candidates) {
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  for (const value of candidates) {
-    if (value != null) {
-      const asString = String(value).trim();
-      if (asString.length > 0) return asString;
-    }
+  for (const candidate of candidates) {
+    const text = extractTextDeep(candidate);
+    if (text) return text;
   }
 
   return '';
@@ -416,7 +449,25 @@ function ChatScreenContent() {
 
         if (!completion) {
           console.error('❌ Empty AI completion payload:', JSON.stringify(rawResult).substring(0, 300));
-          throw new Error('Empty response from AI backend');
+
+          const fallbackMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: "I’m connected, but I received an empty response. Please try again in a moment.",
+            isUser: false,
+            timestamp: new Date(),
+          };
+
+          setMessages(prev => [...prev, fallbackMessage]);
+
+          if (sessionId) {
+            await addMessageToSession(sessionId, {
+              role: 'assistant',
+              content: fallbackMessage.text,
+              timestamp: Date.now(),
+            });
+          }
+
+          return;
         }
 
         const aiMessage: Message = {

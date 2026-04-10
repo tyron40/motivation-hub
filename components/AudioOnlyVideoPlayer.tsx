@@ -229,6 +229,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     autoplayAttemptRef.current = 0;
     mediaLoadedRef.current = false;
     autoplayWarmupDoneRef.current = false;
+    autoplayPulseDoneRef.current = false;
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
@@ -362,6 +363,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const autoplayInProgressRef = useRef(false);
   const autoplayWarmupDoneRef = useRef(false);
   const autoplayRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoplayPulseDoneRef = useRef(false);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
@@ -375,6 +379,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (autoplayRecoveryTimerRef.current) {
       clearTimeout(autoplayRecoveryTimerRef.current);
       autoplayRecoveryTimerRef.current = null;
+    }
+    if (autoplayPulseTimerRef.current) {
+      clearTimeout(autoplayPulseTimerRef.current);
+      autoplayPulseTimerRef.current = null;
+    }
+    if (autoplayWatchdogTimerRef.current) {
+      clearTimeout(autoplayWatchdogTimerRef.current);
+      autoplayWatchdogTimerRef.current = null;
     }
     autoplayInProgressRef.current = false;
   }, []);
@@ -462,6 +474,19 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       });
 
       if (Platform.OS !== 'web') {
+        if (!autoplayPulseDoneRef.current) {
+          autoplayPulseDoneRef.current = true;
+          requestPlayState(true);
+          autoplayPulseTimerRef.current = setTimeout(() => {
+            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+            requestPlayState(false);
+            setTimeout(() => {
+              if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+              requestPlayState(true);
+            }, 180);
+          }, 220);
+        }
+
         if (autoplayRecoveryTimerRef.current) {
           clearTimeout(autoplayRecoveryTimerRef.current);
         }
@@ -482,6 +507,25 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
             console.log('[Autoplay] Native recovery nudge failed:', e);
           }
         }, 1800);
+
+        if (autoplayWatchdogTimerRef.current) {
+          clearTimeout(autoplayWatchdogTimerRef.current);
+        }
+        autoplayWatchdogTimerRef.current = setTimeout(async () => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+          if (isPlayingRef.current || currentTimeRef.current > 0.35) return;
+
+          try {
+            console.log('[Autoplay] Watchdog forcing play retry');
+            await playerRef.current.seekTo(0.08, true);
+            await new Promise(resolve => setTimeout(resolve, 120));
+            await playerRef.current.seekTo(0, true);
+            requestPlayState(true);
+          } catch (e) {
+            console.log('[Autoplay] Watchdog retry failed:', e);
+          }
+        }, 2800);
       }
     }
 
