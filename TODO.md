@@ -1,10 +1,7 @@
-# TODO - Fix autoplay + AI chat runtime stability
+# TODO - Chat + Speech autoplay production fixes
 
-- [x] Inspect speech and short-clip playback files to identify autoplay failure points
-- [x] Verify current speech autoplay behavior in web runtime
-- [ ] Route AI APIs permanently to connected Vercel backend (chat/tts/stt)
-- [ ] Remove hardcoded toolkit STT URL from app/(tabs)/chat.tsx
-- [ ] Harden speeches autoplay behavior in components/AudioOnlyVideoPlayer.tsx
-- [ ] Re-run typecheck/lint verification
-- [ ] Thorough retest: speeches autoplay, short clips autoplay, AI chat end-to-end
-- [ ] Summarize validated behavior and remaining risks
+- [ ] Align AI Chat credit gating with working Voice Coach flow in app/(tabs)/chat.tsx
+- [ ] Add delayed warmup seek (+1s then -1s) after load-ready in components/AudioOnlyVideoPlayer.tsx
+- [ ] Run lint/typecheck verification
+- [ ] Commit and push fixes to main
+- [ ] Submit TestFlight build for version 1.1.10 build 194

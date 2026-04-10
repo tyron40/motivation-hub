@@ -255,7 +255,7 @@ function ChatScreenContent() {
 
     void tryShowInterstitialOnTransition();
 
-    if (!isSuggestion && !usageStats.canUseAI) {
+    if (!isSuggestion && usageStats.credits <= 0) {
       console.log('❌ No credits available');
       if (Platform.OS !== 'web') {
         Alert.alert(

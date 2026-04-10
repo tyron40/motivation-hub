@@ -434,18 +434,27 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const runWarmupSeek = useCallback(async () => {
     if (autoplayWarmupDoneRef.current) return;
     if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    if (!playerReadyRef.current || !mediaLoadedRef.current) return;
+
     autoplayWarmupDoneRef.current = true;
     try {
-      await playerRef.current.seekTo(1, true);
-      setCurrentTime(1);
-      await new Promise(resolve => setTimeout(resolve, 80));
+      await new Promise(resolve => setTimeout(resolve, 900));
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+
+      const oneSecondTarget = Math.min(1, Math.max(durationRef.current - 0.1, 0));
+      await playerRef.current.seekTo(oneSecondTarget, true);
+      setCurrentTime(oneSecondTarget);
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+
       await playerRef.current.seekTo(0, true);
       setCurrentTime(0);
-      console.log('[Autoplay] Warmup seek +1s -> 0s applied');
+      console.log('[Autoplay] Delayed warmup seek +1s -> 0s applied');
     } catch (e) {
       console.log('[Autoplay] Warmup seek failed (continuing):', e);
     }
-  }, []);
+  }, [videoId]);
 
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
@@ -471,6 +480,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (autoplay) {
       desiredPlayRef.current = true;
+      mediaLoadedRef.current = true;
       void runWarmupSeek().finally(() => {
         requestPlayState(true);
       });
