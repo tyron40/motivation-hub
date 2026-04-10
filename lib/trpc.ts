@@ -8,7 +8,7 @@ import { getBackendUrl } from './config';
 
 const getBaseUrl = () => {
   const url = getBackendUrl();
-  console.log('🔧 [tRPC] Using Rork backend URL:', url);
+  console.log('🔧 [tRPC] Using Vercel backend URL:', url);
   return url;
 };
 
