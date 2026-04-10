@@ -357,10 +357,23 @@ function ChatScreenContent() {
         });
       }
 
-      const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
+      const userName = profile.name || 'friend';
+      const systemPrompt = `You are an AI motivation coach named "Coach Alex". You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
 
-      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
+Key traits:
+- Warm, encouraging, and empathetic
+- Use the user's name when provided (${userName})
+- Provide actionable, practical advice
+- Keep responses conversational and natural (under 200 words)
+- Focus on building confidence, resilience, and positive mindset
+- Ask follow-up questions to better understand their situation
+- Share motivational insights or techniques
+
+IMPORTANT: Keep responses concise for natural conversation flow. Always end with encouragement.`;
+
+      const chatHistory = messages
         .filter(msg => msg.id !== '1' || msg.isUser)
+        .slice(-10)
         .map(msg => ({
           role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
           content: msg.text,
@@ -368,9 +381,8 @@ function ChatScreenContent() {
 
       chatHistory.push({ role: 'user', content: text.trim() });
 
-      const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
-        { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
-        { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
+      const allMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: systemPrompt },
         ...chatHistory,
       ];
 
@@ -379,10 +391,7 @@ function ChatScreenContent() {
         console.log('📤 Messages count:', allMessages.length);
 
         const chatResult = await sendChatMessage({
-          messages: allMessages.map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-          })),
+          messages: allMessages,
         });
         const completion = chatResult?.message;
         console.log('✅ AI responded, length:', completion?.length);
