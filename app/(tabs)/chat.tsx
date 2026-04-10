@@ -359,11 +359,20 @@ function ChatScreenContent() {
           })),
         });
 
-        const completion = chatResult?.message;
+        const rawResult: any = chatResult as any;
+        const completionCandidate =
+          rawResult?.message ??
+          rawResult?.text ??
+          rawResult?.response ??
+          rawResult?.data?.message ??
+          '';
+        const completion = typeof completionCandidate === 'string' ? completionCandidate.trim() : '';
+
         console.log('✅ Vercel backend responded, length:', completion?.length);
 
-        if (!completion || typeof completion !== 'string') {
-          throw new Error('Invalid response format from AI');
+        if (!completion) {
+          console.error('❌ Empty AI completion payload:', JSON.stringify(rawResult).substring(0, 300));
+          throw new Error('Empty response from AI backend');
         }
 
         const aiMessage: Message = {

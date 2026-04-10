@@ -1,7 +1,7 @@
-# TODO - Chat + Speech autoplay production fixes
+# TODO - Chat response + speech autostart hotfix
 
-- [ ] Align AI Chat credit gating with working Voice Coach flow in app/(tabs)/chat.tsx
-- [ ] Add delayed warmup seek (+1s then -1s) after load-ready in components/AudioOnlyVideoPlayer.tsx
-- [ ] Run lint/typecheck verification
-- [ ] Commit and push fixes to main
-- [ ] Submit TestFlight build for version 1.1.10 build 194
+- [ ] Add resilient AI chat response parsing in app/(tabs)/chat.tsx
+- [ ] Simplify speech autoplay startup path to avoid loop in components/AudioOnlyVideoPlayer.tsx
+- [ ] Run targeted lint/typecheck for edited files
+- [ ] Commit and push hotfix to main
+- [ ] Submit next iOS production build to App Store Connect

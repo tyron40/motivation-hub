@@ -376,55 +376,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const startAutoplay = useCallback(() => {
     if (!autoplay || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
-    if (autoplayInProgressRef.current) {
-      console.log('[Autoplay] Already in progress, skipping');
-      return;
-    }
+    if (autoplayInProgressRef.current) return;
+
     autoplayInProgressRef.current = true;
-    autoplayAttemptRef.current = 0;
-    console.log('[Autoplay] Starting autoplay for:', videoId);
+    console.log('[Autoplay] Starting deterministic autoplay for:', videoId);
 
-    const attemptPlay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
-        autoplayInProgressRef.current = false;
-        return;
-      }
-      autoplayAttemptRef.current += 1;
-      const attempt = autoplayAttemptRef.current;
-
-      if (attempt > 6) {
-        console.log(`[Autoplay] Giving up after ${attempt} attempts`);
-        autoplayInProgressRef.current = false;
-        return;
-      }
-
-      if (!playerRef.current || !playerReadyRef.current) {
-        console.log(`[Autoplay] Player not ready, retry #${attempt} in 700ms`);
-        autoplayRetryTimerRef.current = setTimeout(attemptPlay, 700);
-        return;
-      }
-
-      console.log(`[Autoplay] Attempt #${attempt} — forcing false->true transition`);
-      requestPlayState(false);
-
-      setTimeout(() => {
-        if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-        requestPlayState(true);
-      }, 150);
-
-      autoplayRetryTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current || activeVideoIdRef.current !== videoId) {
-          autoplayInProgressRef.current = false;
-          return;
-        }
-        if (autoplayInProgressRef.current) {
-          console.log(`[Autoplay] Not confirmed playing yet, retrying...`);
-          attemptPlay();
-        }
-      }, 1800);
+    const kickPlay = () => {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      desiredPlayRef.current = true;
+      requestPlayState(true);
     };
 
-    autoplayRetryTimerRef.current = setTimeout(attemptPlay, 400);
+    kickPlay();
+    autoplayRetryTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      if (!isPlayingRef.current) {
+        console.log('[Autoplay] Single retry kick');
+        kickPlay();
+      }
+      autoplayInProgressRef.current = false;
+    }, 1200);
   }, [autoplay, videoId, requestPlayState]);
 
   useEffect(() => {
