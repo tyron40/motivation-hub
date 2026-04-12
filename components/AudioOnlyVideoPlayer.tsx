@@ -230,6 +230,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     mediaLoadedRef.current = false;
     autoplayWarmupDoneRef.current = false;
     autoplayPulseDoneRef.current = false;
+    autoplayForceSeekDoneRef.current = false;
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
@@ -366,6 +367,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const autoplayPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayPulseDoneRef = useRef(false);
+  const autoplayForceSeekDoneRef = useRef(false);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
@@ -444,6 +446,28 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, [videoId]);
 
+  const runForcedAutoplaySeek = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    if (autoplayForceSeekDoneRef.current) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+
+    autoplayForceSeekDoneRef.current = true;
+    try {
+      const maxSeek = Math.max(durationRef.current - 0.1, 0);
+      const forward = Math.min(1, maxSeek);
+      console.log('[Autoplay] Forced user-like seek bootstrap:', 0, '->', forward, '->', 0);
+      await playerRef.current.seekTo(forward, true);
+      await new Promise(resolve => setTimeout(resolve, 180));
+      await playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
+      requestPlayState(true);
+    } catch (e) {
+      console.log('[Autoplay] Forced seek bootstrap failed:', e);
+      autoplayForceSeekDoneRef.current = false;
+    }
+  }, [requestPlayState, videoId]);
+
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
@@ -474,6 +498,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       });
 
       if (Platform.OS !== 'web') {
+        void runForcedAutoplaySeek();
+
         if (!autoplayPulseDoneRef.current) {
           autoplayPulseDoneRef.current = true;
           requestPlayState(true);
@@ -518,8 +544,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
           try {
             console.log('[Autoplay] Watchdog forcing play retry');
-            await playerRef.current.seekTo(0.08, true);
-            await new Promise(resolve => setTimeout(resolve, 120));
+            await playerRef.current.seekTo(1, true);
+            await new Promise(resolve => setTimeout(resolve, 180));
             await playerRef.current.seekTo(0, true);
             requestPlayState(true);
           } catch (e) {
@@ -534,7 +560,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
       startAutoplay();
     }
-  }, [autoplay, requestPlayState, runWarmupSeek, startAutoplay]);
+  }, [autoplay, requestPlayState, runForcedAutoplaySeek, runWarmupSeek, startAutoplay]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);

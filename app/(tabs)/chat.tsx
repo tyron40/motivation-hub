@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
+import Constants from 'expo-constants';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
@@ -77,6 +78,14 @@ const extractTextDeep = (value: any): string => {
   } catch {
     return '';
   }
+};
+
+const normalizeVisibleText = (value: string): string => {
+  const cleaned = (value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\u0000/g, '')
+    .trim();
+  return cleaned;
 };
 
 const extractAssistantText = (rawResult: any): string => {
@@ -151,6 +160,7 @@ function ChatScreenContent() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const appVersion = `${Constants.expoConfig?.version || 'dev'} (${Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local'})`;
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -443,9 +453,10 @@ function ChatScreenContent() {
         });
 
         const rawResult: any = chatResult as any;
-        const completion = extractAssistantText(rawResult);
+        const completionRaw = extractAssistantText(rawResult);
+        const completion = normalizeVisibleText(completionRaw);
 
-        console.log('✅ Vercel backend responded, length:', completion?.length);
+        console.log('✅ Vercel backend responded, length:', completion?.length, 'keys:', Object.keys(rawResult || {}));
 
         if (!completion) {
           console.error('❌ Empty AI completion payload:', JSON.stringify(rawResult).substring(0, 300));
@@ -472,7 +483,7 @@ function ChatScreenContent() {
 
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
-          text: completion,
+          text: normalizeVisibleText(completion) || "I’m here with you. Please send that again.",
           isUser: false,
           timestamp: new Date(),
         };
@@ -880,7 +891,7 @@ function ChatScreenContent() {
                 <Text style={styles.title}>Coach Alex</Text>
                 <View style={styles.statusIndicator}>
                   <View style={styles.onlineIndicator} />
-                  <Text style={styles.statusText}>Online</Text>
+                  <Text style={styles.statusText}>Online • v{appVersion}</Text>
                 </View>
               </View>
             </View>
