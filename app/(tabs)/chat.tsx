@@ -34,6 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 interface Message {
   id: string;
   text: string;
+  visibleText?: string;
   isUser: boolean;
   timestamp: Date;
   audioUrl?: string;
@@ -86,6 +87,12 @@ const normalizeVisibleText = (value: string): string => {
     .replace(/\u0000/g, '')
     .trim();
   return cleaned;
+};
+
+const toRenderableText = (value: any): string => {
+  const normalized = normalizeVisibleText(typeof value === 'string' ? value : String(value ?? ''));
+  if (normalized.length > 0) return normalized;
+  return '…';
 };
 
 const extractAssistantText = (rawResult: any): string => {
@@ -481,9 +488,11 @@ function ChatScreenContent() {
           return;
         }
 
+        const safeVisible = normalizeVisibleText(completion) || "I’m here with you. Please send that again.";
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
-          text: normalizeVisibleText(completion) || "I’m here with you. Please send that again.",
+          text: safeVisible,
+          visibleText: safeVisible,
           isUser: false,
           timestamp: new Date(),
         };
@@ -824,9 +833,9 @@ function ChatScreenContent() {
           </View>
           <Text style={[
             styles.messageText,
-            { color: message.isUser ? Colors.background : Colors.text }
+            { color: message.isUser ? Colors.background : '#FFFFFF' }
           ]}>
-            {message.text}
+            {toRenderableText(message.visibleText ?? message.text)}
           </Text>
         </LinearGradient>
       </Animated.View>
