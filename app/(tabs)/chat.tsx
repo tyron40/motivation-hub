@@ -170,6 +170,7 @@ function ChatScreenContent() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const requestCounterRef = useRef(0);
+  const hasInitializedGreetingRef = useRef(false);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
   const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
   const appVersion = `${runtimeVersion} (${runtimeBuild})`;
@@ -321,13 +322,14 @@ function ChatScreenContent() {
         if (currentSession.messages.length > 1) {
           setHasStartedChat(true);
         }
+        hasInitializedGreetingRef.current = true;
         return;
       }
     };
 
     if (currentSessionId) {
       loadCurrentSession();
-    } else if (messages.length === 0) {
+    } else if (messages.length === 0 && !hasInitializedGreetingRef.current && !isLoading) {
       const greeting = profile.name 
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
         : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
@@ -340,6 +342,7 @@ function ChatScreenContent() {
       };
       
       setMessages([greetingMessage]);
+      hasInitializedGreetingRef.current = true;
       
       if (profile.voiceEnabled) {
         const timeoutId = setTimeout(() => {
@@ -349,7 +352,7 @@ function ChatScreenContent() {
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession]);
+  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession, isLoading]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -450,7 +453,8 @@ function ChatScreenContent() {
 
       const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-      const chatHistoryBase = messages.filter(msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-'));
+      const baseMessagesSnapshot = [...messages];
+      const chatHistoryBase = baseMessagesSnapshot.filter(msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-'));
       const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
         ...chatHistoryBase.map(msg => ({
           role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
