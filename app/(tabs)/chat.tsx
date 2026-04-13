@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
@@ -167,7 +168,9 @@ function ChatScreenContent() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
-  const appVersion = `${Constants.expoConfig?.version || 'dev'} (${Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local'})`;
+  const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
+  const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
+  const appVersion = `${runtimeVersion} (${runtimeBuild})`;
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
