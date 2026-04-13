@@ -171,6 +171,7 @@ function ChatScreenContent() {
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const requestCounterRef = useRef(0);
   const hasInitializedGreetingRef = useRef(false);
+  const messagesRef = useRef<Message[]>([]);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
   const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
   const appVersion = `${runtimeVersion} (${runtimeBuild})`;
@@ -182,6 +183,10 @@ function ChatScreenContent() {
   const slideAnim = useRef(new Animated.Value(30)).current;
   const typingAnim = useRef(new Animated.Value(0)).current;
   const micAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
     if (isVoiceMuted) return;
@@ -453,7 +458,7 @@ function ChatScreenContent() {
 
       const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-      const baseMessagesSnapshot = [...messages];
+      const baseMessagesSnapshot = [...messagesRef.current];
       const chatHistoryBase = baseMessagesSnapshot.filter(msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-'));
       const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
         ...chatHistoryBase.map(msg => ({
@@ -593,7 +598,7 @@ function ChatScreenContent() {
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition, isVoiceMuted]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition, isVoiceMuted]);
 
 
 
