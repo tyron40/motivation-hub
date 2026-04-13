@@ -2,10 +2,11 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { FavoriteScripture } from '@/types/speech';
-
-const STORAGE_KEY = 'favoriteScriptures';
+import { useAuth } from './auth-context';
 
 export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContextHook(() => {
+  const { user } = useAuth();
+  const storageKey = useMemo(() => `favoriteScriptures:${user?.id ?? 'guest'}`, [user?.id]);
   const [favorites, setFavorites] = useState<FavoriteScripture[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -19,7 +20,7 @@ export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContext
           }, 1000);
         });
         
-        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
+        const loadPromise = AsyncStorage.getItem(storageKey);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
         if (stored && typeof stored === 'string') {
@@ -37,17 +38,18 @@ export const [ScriptureFavoritesProvider, useScriptureFavorites] = createContext
       }
     };
 
+    setFavorites([]);
     loadFavorites();
-  }, []);
+  }, [storageKey]);
 
   const saveFavorites = useCallback(async (newFavorites: FavoriteScripture[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newFavorites));
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newFavorites));
       setFavorites(newFavorites);
     } catch (error) {
       console.error('Error saving favorite scriptures:', error);
     }
-  }, []);
+  }, [storageKey]);
 
   const addFavorite = useCallback(async (text: string, reference: string, category: string, notes?: string) => {
     const newFavorite: FavoriteScripture = {

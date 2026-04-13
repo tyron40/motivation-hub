@@ -1,6 +1,7 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from './auth-context';
 
 interface UserProfile {
   name: string;
@@ -25,6 +26,8 @@ const defaultProfile: UserProfile = {
 };
 
 export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
+  const { user } = useAuth();
+  const storageKey = useMemo(() => `userProfile:${user?.id ?? 'guest'}`, [user?.id]);
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -39,7 +42,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
           }, 1000);
         });
         
-        const loadPromise = AsyncStorage.getItem('userProfile');
+        const loadPromise = AsyncStorage.getItem(storageKey);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
         if (stored && typeof stored === 'string') {
@@ -58,20 +61,21 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       }
     };
 
+    setProfile(defaultProfile);
     loadProfile();
-  }, []);
+  }, [storageKey]);
 
   // Save profile to storage
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     try {
       const newProfile = { ...profile, ...updates };
       setProfile(newProfile);
-      await AsyncStorage.setItem('userProfile', JSON.stringify(newProfile));
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newProfile));
       console.log('✅ User profile updated:', newProfile);
     } catch (error) {
       console.error('Error saving user profile:', error);
     }
-  }, [profile]);
+  }, [profile, storageKey]);
 
   return useMemo(() => ({
     profile,

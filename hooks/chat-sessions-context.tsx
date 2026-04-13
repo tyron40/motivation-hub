@@ -2,10 +2,11 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChatSession, ChatMessage } from '@/types/speech';
-
-const STORAGE_KEY = 'chatSessions';
+import { useAuth } from './auth-context';
 
 export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
+  const { user } = useAuth();
+  const storageKey = useMemo(() => `chatSessions:${user?.id ?? 'guest'}`, [user?.id]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,7 +21,7 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
           }, 1000);
         });
         
-        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
+        const loadPromise = AsyncStorage.getItem(storageKey);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
         
         if (stored && typeof stored === 'string') {
@@ -38,17 +39,19 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
       }
     };
 
+    setSessions([]);
+    setCurrentSessionId(null);
     loadSessions();
-  }, []);
+  }, [storageKey]);
 
   const saveSessions = useCallback(async (newSessions: ChatSession[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newSessions));
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newSessions));
       setSessions(newSessions);
     } catch (error) {
       console.error('Error saving chat sessions:', error);
     }
-  }, []);
+  }, [storageKey]);
 
   const createSession = useCallback(async (title: string, initialMessages: ChatMessage[] = []) => {
     const newSession: ChatSession = {

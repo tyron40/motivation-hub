@@ -28,6 +28,7 @@ const DEFAULT_ENTITLEMENTS_AUTHENTICATED: Entitlements = {
 
 export const [IAPProvider, useIAP] = createContextHook(() => {
   const { isAuthenticated, user } = useAuth();
+  const storageKey = useMemo(() => `entitlements:${user?.id ?? 'guest'}`, [user?.id]);
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -62,7 +63,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         }, 1000);
       });
       
-      const loadPromise = AsyncStorage.getItem('entitlements');
+      const loadPromise = AsyncStorage.getItem(storageKey);
       const stored = await Promise.race([loadPromise, timeoutPromise]);
       
       if (stored && typeof stored === 'string') {
@@ -85,21 +86,22 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       console.error('❌ Error loading entitlements:', error);
       setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
     }
-  }, [isAuthenticated, isDemoAccount]);
+  }, [isAuthenticated, isDemoAccount, storageKey]);
 
   useEffect(() => {
+    setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
     loadEntitlements();
-  }, [loadEntitlements, isAuthenticated]);
+  }, [loadEntitlements, isAuthenticated, user?.id]);
 
   const saveEntitlements = useCallback(async (newEntitlements: Entitlements) => {
     try {
-      await AsyncStorage.setItem('entitlements', JSON.stringify(newEntitlements));
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newEntitlements));
       setEntitlements(newEntitlements);
       console.log('✅ Entitlements saved:', newEntitlements);
     } catch (error) {
       console.error('❌ Error saving entitlements:', error);
     }
-  }, []);
+  }, [storageKey]);
 
   const addCredits = useCallback(async (amount: number) => {
     const newEntitlements = {
