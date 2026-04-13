@@ -468,10 +468,15 @@ function ChatScreenContent() {
         { role: 'user', content: text.trim() },
       ];
 
+      const hasPriorUserTurns = chatHistoryBase.some(msg => msg.isUser);
+      const backendChatHistory = hasPriorUserTurns
+        ? chatHistory
+        : [...chatHistory, { role: 'user' as const, content: text.trim() }];
+
       const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
         { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
         { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
-        ...chatHistory,
+        ...backendChatHistory,
       ];
 
       try {
