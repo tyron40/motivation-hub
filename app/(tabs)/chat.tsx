@@ -168,6 +168,7 @@ function ChatScreenContent() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const requestCounterRef = useRef(0);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
   const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
   const appVersion = `${runtimeVersion} (${runtimeBuild})`;
@@ -412,7 +413,20 @@ function ChatScreenContent() {
         console.log('✅ Suggested question - no credit needed');
       }
 
-      setMessages(prev => [...prev, userMessage]);
+      const currentRequestId = ++requestCounterRef.current;
+      const pendingAssistantId = `pending-${Date.now()}-${currentRequestId}`;
+
+      setMessages(prev => [
+        ...prev,
+        userMessage,
+        {
+          id: pendingAssistantId,
+          text: 'Thinking...',
+          visibleText: 'Thinking...',
+          isUser: false,
+          timestamp: new Date(),
+        },
+      ]);
       setInputText('');
       setIsLoading(true);
       setIsTyping(true);
@@ -435,14 +449,14 @@ function ChatScreenContent() {
 
       const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
 
-      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
-        .filter(msg => msg.id !== '1' || msg.isUser)
-        .map(msg => ({
+      const chatHistoryBase = messages.filter(msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-'));
+      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
+        ...chatHistoryBase.map(msg => ({
           role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
           content: msg.text,
-        }));
-
-      chatHistory.push({ role: 'user', content: text.trim() });
+        })),
+        { role: 'user', content: text.trim() },
+      ];
 
       const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
         { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
@@ -452,7 +466,7 @@ function ChatScreenContent() {
 
       try {
         console.log('🤖 Sending chat message...');
-        console.log('📤 Messages count:', allMessages.length);
+        console.log('📤 Messages count:', allMessages.length, '| isSuggestion:', isSuggestion, '| requestId:', currentRequestId);
 
         console.log('🤖 Using Vercel backend /api/chat...');
         const chatResult = await sendChatMessage({
@@ -474,11 +488,12 @@ function ChatScreenContent() {
           const fallbackMessage: Message = {
             id: (Date.now() + 1).toString(),
             text: "I’m connected, but I received an empty response. Please try again in a moment.",
+            visibleText: "I’m connected, but I received an empty response. Please try again in a moment.",
             isUser: false,
             timestamp: new Date(),
           };
 
-          setMessages(prev => [...prev, fallbackMessage]);
+          setMessages(prev => prev.map(m => m.id === pendingAssistantId ? fallbackMessage : m));
 
           if (sessionId) {
             await addMessageToSession(sessionId, {
@@ -500,10 +515,7 @@ function ChatScreenContent() {
           timestamp: new Date(),
         };
 
-        setMessages(prev => {
-          const next = [...prev, aiMessage];
-          return next;
-        });
+        setMessages(prev => prev.map(m => m.id === pendingAssistantId ? aiMessage : m));
 
         if (sessionId) {
           await addMessageToSession(sessionId, {
@@ -536,11 +548,20 @@ function ChatScreenContent() {
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         text: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Remember, you have the strength to overcome any challenge!",
+        visibleText: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Remember, you have the strength to overcome any challenge!",
         isUser: false,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => {
+        const pendingIndex = prev.findIndex(m => String(m.id).startsWith('pending-'));
+        if (pendingIndex >= 0) {
+          const next = [...prev];
+          next[pendingIndex] = errorMessage;
+          return next;
+        }
+        return [...prev, errorMessage];
+      });
 
       if (Platform.OS !== 'web') {
         Alert.alert('Connection Error', 'Failed to get response. Please check your internet connection and try again.');
