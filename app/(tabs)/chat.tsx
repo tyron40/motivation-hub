@@ -10,11 +10,12 @@ import {
   Platform,
   Alert,
   Modal,
+  Keyboard,
   Animated,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
+import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus, ChevronDown } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Application from 'expo-application';
@@ -1049,7 +1050,9 @@ function ChatScreenContent() {
                         styles.suggestionButton,
                         { borderLeftColor: prompt.color }
                       ]}
-                      onPress={() => sendMessage(prompt.text, true)}
+                      onPress={() => {
+                        setInputText(prompt.text);
+                      }}
                     >
                       <View style={[styles.suggestionIcon, { backgroundColor: prompt.color + '20' }]}>
                         <Icon color={prompt.color} size={18} />
@@ -1137,6 +1140,13 @@ function ChatScreenContent() {
                     maxLength={500}
                     editable={!isTranscribing}
                   />
+                  <TouchableOpacity
+                    style={styles.collapseButton}
+                    onPress={() => Keyboard.dismiss()}
+                    disabled={isLoading}
+                  >
+                    <ChevronDown color={Colors.textSecondary} size={18} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.micButton}
                     onPress={startRecording}
@@ -1629,6 +1639,14 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  collapseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   micButton: {
     width: 40,
