@@ -493,7 +493,15 @@ function ChatScreenContent() {
             timestamp: new Date(),
           };
 
-          setMessages(prev => prev.map(m => m.id === pendingAssistantId ? fallbackMessage : m));
+          setMessages(prev => {
+            const idx = prev.findIndex(m => m.id === pendingAssistantId);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = fallbackMessage;
+              return next;
+            }
+            return [...prev, fallbackMessage];
+          });
 
           if (sessionId) {
             await addMessageToSession(sessionId, {
@@ -515,7 +523,15 @@ function ChatScreenContent() {
           timestamp: new Date(),
         };
 
-        setMessages(prev => prev.map(m => m.id === pendingAssistantId ? aiMessage : m));
+        setMessages(prev => {
+          const idx = prev.findIndex(m => m.id === pendingAssistantId);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = aiMessage;
+            return next;
+          }
+          return [...prev, aiMessage];
+        });
 
         if (sessionId) {
           await addMessageToSession(sessionId, {
