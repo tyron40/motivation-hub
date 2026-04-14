@@ -199,6 +199,76 @@ export async function transcribeAudio(params: {
   }
 }
 
+const extractTextDeep = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractTextDeep(item);
+      if (nested) return nested;
+    }
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    const directKeys = ['text', 'content', 'message', 'output_text', 'response'];
+    for (const key of directKeys) {
+      const nested = extractTextDeep((value as any)[key]);
+      if (nested) return nested;
+    }
+
+    const commonNestedPaths = [
+      (value as any)?.choices?.[0]?.message?.content,
+      (value as any)?.choices?.[0]?.delta?.content,
+      (value as any)?.data?.message,
+      (value as any)?.data?.content,
+      (value as any)?.data?.result,
+      (value as any)?.result?.message,
+      (value as any)?.result?.content,
+      (value as any)?.output?.[0]?.content?.[0]?.text,
+    ];
+
+    for (const candidate of commonNestedPaths) {
+      const nested = extractTextDeep(candidate);
+      if (nested) return nested;
+    }
+  }
+
+  try {
+    const asString = String(value).trim();
+    return asString === '[object Object]' ? '' : asString;
+  } catch {
+    return '';
+  }
+};
+
+const normalizeVisibleText = (value: string): string =>
+  (value || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
+
+const extractAssistantText = (rawResult: any): { text: string; source: string } => {
+  const candidates: Array<{ source: string; value: any }> = [
+    { source: 'message', value: rawResult?.message },
+    { source: 'text', value: rawResult?.text },
+    { source: 'response', value: rawResult?.response },
+    { source: 'data.message', value: rawResult?.data?.message },
+    { source: 'data.result', value: rawResult?.data?.result },
+    { source: 'choices[0].message.content', value: rawResult?.choices?.[0]?.message?.content },
+    { source: 'choices[0].delta.content', value: rawResult?.choices?.[0]?.delta?.content },
+    { source: 'output_text', value: rawResult?.output_text },
+    { source: 'output[0].content[0].text', value: rawResult?.output?.[0]?.content?.[0]?.text },
+    { source: 'content', value: rawResult?.content },
+    { source: 'root', value: rawResult },
+  ];
+
+  for (const candidate of candidates) {
+    const text = extractTextDeep(candidate.value);
+    if (text) return { text, source: candidate.source };
+  }
+
+  return { text: '', source: 'none' };
+};
+
 export async function sendChatMessage(params: {
   messages: {
     role: 'system' | 'user' | 'assistant';
@@ -250,14 +320,15 @@ export async function sendChatMessage(params: {
     throw new Error('Invalid JSON in chat response');
   }
 
-  const message = data?.message;
+  const extracted = extractAssistantText(data);
+  const message = normalizeVisibleText(extracted.text);
 
-  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+  if (!message) {
     console.error('❌ Chat empty message, full response:', JSON.stringify(data).substring(0, 300));
     throw new Error('Backend returned empty message');
   }
 
-  console.log('✅ Chat completed via backend OpenAI | length:', message.length);
+  console.log('✅ Chat completed via backend OpenAI | length:', message.length, '| source:', extracted.source);
   return { message };
 }
 
