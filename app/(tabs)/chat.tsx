@@ -364,7 +364,8 @@ function ChatScreenContent() {
   }, [messages]);
 
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
-    if (!text.trim() || isLoading) return;
+    const trimmedText = text.trim();
+    if (!trimmedText || isLoading) return;
 
     void tryShowInterstitialOnTransition();
 
@@ -385,19 +386,49 @@ function ChatScreenContent() {
       return;
     }
 
+    const currentRequestId = ++requestCounterRef.current;
+    const messageBaseId = Date.now().toString();
+    const pendingAssistantId = `pending-${messageBaseId}-${currentRequestId}`;
+
+    const userMessage: Message = {
+      id: messageBaseId,
+      text: trimmedText,
+      isUser: true,
+      timestamp: new Date(),
+    };
+
+    const baseMessagesSnapshot = [...messagesRef.current];
+    const chatHistoryBase = baseMessagesSnapshot.filter(
+      msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-')
+    );
+    const isFirstRealUserTurn = !chatHistoryBase.some(msg => msg.isUser);
+
+    const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
+
+    const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
+      ...chatHistoryBase.map(msg => ({
+        role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: msg.text,
+      })),
+      { role: 'user', content: trimmedText },
+    ];
+
+    const backendChatHistory = isFirstRealUserTurn
+      ? [...chatHistory, { role: 'user' as const, content: trimmedText }]
+      : chatHistory;
+
+    const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
+      { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
+      { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
+      ...backendChatHistory,
+    ];
+
     try {
-      const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
+      const nameMatch = trimmedText.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
       if (nameMatch && !profile.name) {
         const name = nameMatch[1];
         await updateProfile({ name });
       }
-
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        text: text.trim(),
-        isUser: true,
-        timestamp: new Date(),
-      };
 
       if (!isSuggestion) {
         const creditUsed = await deductCredit();
@@ -422,9 +453,6 @@ function ChatScreenContent() {
         console.log('✅ Suggested question - no credit needed');
       }
 
-      const currentRequestId = ++requestCounterRef.current;
-      const pendingAssistantId = `pending-${Date.now()}-${currentRequestId}`;
-
       setMessages(prev => [
         ...prev,
         userMessage,
@@ -444,134 +472,84 @@ function ChatScreenContent() {
       let sessionId = currentSessionId;
       if (!sessionId) {
         const newSession = await createSession(
-          text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
-          [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
+          trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''),
+          [{ role: 'user', content: trimmedText, timestamp: Date.now() }]
         );
         sessionId = newSession.id;
       } else {
         await addMessageToSession(sessionId, {
           role: 'user',
-          content: text.trim(),
+          content: trimmedText,
           timestamp: Date.now(),
         });
       }
 
-      const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
+      console.log('🤖 Sending chat message...');
+      console.log(
+        '📤 Messages count:',
+        allMessages.length,
+        '| isSuggestion:',
+        isSuggestion,
+        '| requestId:',
+        currentRequestId,
+        '| firstTurn:',
+        isFirstRealUserTurn
+      );
 
-      const baseMessagesSnapshot = [...messagesRef.current];
-      const chatHistoryBase = baseMessagesSnapshot.filter(msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-'));
-      const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
-        ...chatHistoryBase.map(msg => ({
-          role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: msg.text,
+      const chatResult = await sendChatMessage({
+        messages: allMessages.map(m => ({
+          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+          content: m.content,
         })),
-        { role: 'user', content: text.trim() },
-      ];
+      });
 
-      const hasPriorUserTurns = chatHistoryBase.some(msg => msg.isUser);
-      const backendChatHistory = hasPriorUserTurns
-        ? chatHistory
-        : [...chatHistory, { role: 'user' as const, content: text.trim() }];
+      const rawResult: any = chatResult as any;
+      const completionRaw = extractAssistantText(rawResult);
+      const completion = normalizeVisibleText(completionRaw);
 
-      const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
-        { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
-        { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
-        ...backendChatHistory,
-      ];
+      console.log('✅ Vercel backend responded, length:', completion?.length, 'keys:', Object.keys(rawResult || {}));
 
-      try {
-        console.log('🤖 Sending chat message...');
-        console.log('📤 Messages count:', allMessages.length, '| isSuggestion:', isSuggestion, '| requestId:', currentRequestId);
+      const responseText =
+        completion || "I’m connected, but I received an empty response. Please try again in a moment.";
 
-        console.log('🤖 Using Vercel backend /api/chat...');
-        const chatResult = await sendChatMessage({
-          messages: allMessages.map(m => ({
-            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-          })),
-        });
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: responseText,
+        visibleText: responseText,
+        isUser: false,
+        timestamp: new Date(),
+      };
 
-        const rawResult: any = chatResult as any;
-        const completionRaw = extractAssistantText(rawResult);
-        const completion = normalizeVisibleText(completionRaw);
-
-        console.log('✅ Vercel backend responded, length:', completion?.length, 'keys:', Object.keys(rawResult || {}));
-
-        if (!completion) {
-          console.error('❌ Empty AI completion payload:', JSON.stringify(rawResult).substring(0, 300));
-
-          const fallbackMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            text: "I’m connected, but I received an empty response. Please try again in a moment.",
-            visibleText: "I’m connected, but I received an empty response. Please try again in a moment.",
-            isUser: false,
-            timestamp: new Date(),
-          };
-
-          setMessages(prev => {
-            const idx = prev.findIndex(m => m.id === pendingAssistantId);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = fallbackMessage;
-              return next;
-            }
-            return [...prev, fallbackMessage];
-          });
-
-          if (sessionId) {
-            await addMessageToSession(sessionId, {
-              role: 'assistant',
-              content: fallbackMessage.text,
-              timestamp: Date.now(),
-            });
-          }
-
-          return;
+      setMessages(prev => {
+        const idx = prev.findIndex(m => m.id === pendingAssistantId);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = aiMessage;
+          return next;
         }
+        return [...prev, aiMessage];
+      });
 
-        const safeVisible = normalizeVisibleText(completion) || "I’m here with you. Please send that again.";
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: safeVisible,
-          visibleText: safeVisible,
-          isUser: false,
-          timestamp: new Date(),
-        };
-
-        setMessages(prev => {
-          const idx = prev.findIndex(m => m.id === pendingAssistantId);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = aiMessage;
-            return next;
-          }
-          return [...prev, aiMessage];
+      if (sessionId) {
+        await addMessageToSession(sessionId, {
+          role: 'assistant',
+          content: responseText,
+          timestamp: Date.now(),
         });
+      }
 
-        if (sessionId) {
-          await addMessageToSession(sessionId, {
-            role: 'assistant',
-            content: completion,
-            timestamp: Date.now(),
-          });
-        }
-
-        if (profile.voiceEnabled && !isVoiceMuted && completion) {
-          if (usageStats.credits > 0) {
-            const voiceCreditUsed = await deductCredit();
-            if (voiceCreditUsed) {
-              console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
-              void generateVoice(aiMessage.id, completion);
-            } else {
-              console.log('⚠️ Not enough credits for voice generation');
-            }
+      if (profile.voiceEnabled && !isVoiceMuted && completion) {
+        if (usageStats.credits > 0) {
+          const voiceCreditUsed = await deductCredit();
+          if (voiceCreditUsed) {
+            console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
+            void generateVoice(aiMessage.id, completion);
           } else {
             console.log('⚠️ Not enough credits for voice generation');
           }
+        } else {
+          console.log('⚠️ Not enough credits for voice generation');
         }
-      } catch (fetchError) {
-        console.error('🤖 AI generation error:', fetchError);
-        throw fetchError;
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -585,10 +563,10 @@ function ChatScreenContent() {
       };
 
       setMessages(prev => {
-        const pendingIndex = prev.findIndex(m => String(m.id).startsWith('pending-'));
-        if (pendingIndex >= 0) {
+        const idx = prev.findIndex(m => m.id === pendingAssistantId);
+        if (idx >= 0) {
           const next = [...prev];
-          next[pendingIndex] = errorMessage;
+          next[idx] = errorMessage;
           return next;
         }
         return [...prev, errorMessage];
