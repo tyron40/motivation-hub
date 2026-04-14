@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { API_ENDPOINTS } from './config';
+import { API_ENDPOINTS, getBackendUrl } from './config';
 
 console.log('🔧 API Client initialized | Platform:', Platform.OS, '| Using OpenAI via backend');
 
@@ -133,66 +133,42 @@ export async function transcribeAudio(params: {
   audio: FormData;
 }): Promise<{ text: string }> {
   try {
+    const backendUrl = getBackendUrl();
+    const sttUrl = API_ENDPOINTS.stt;
     console.log('🎯 Transcribing audio via Vercel API...');
-    console.log('🎯 API Base URL:', API_BASE);
-    console.log('🎯 Full URL:', `${API_BASE}/api/stt`);
+    console.log('🎯 API Base URL:', backendUrl);
+    console.log('🎯 Full URL:', sttUrl);
 
-    const connectionResult = await testConnection(API_BASE);
-    if (!connectionResult.success) {
-      console.warn('⚠️ Server connectivity probe failed, attempting request anyway');
-      console.warn('⚠️ Attempted URL:', API_BASE);
-      console.warn('⚠️ Probe error:', connectionResult.error);
-    } else {
-      console.log('✅ Server connectivity confirmed');
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
-
-    const response = await fetch(`${API_BASE}/api/stt`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
-        ...getAuthHeader(),
+    const response = await fetchWithTimeout(
+      sttUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        body: params.audio,
       },
-      body: params.audio,
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+      STT_TIMEOUT
+    );
 
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get('content-type');
+    const contentType = response.headers.get('content-type') || '';
     console.log('📡 STT response content-type:', contentType);
     console.log('📡 STT response status:', response.status);
 
     if (!response.ok) {
-      let errorMessage = `STT API error: ${response.status}`;
-      try {
-        const errorText = await response.text();
-        console.error('❌ STT API error response:', errorText.substring(0, 200));
+      const errorText = await response.text().catch(() => '');
+      console.error('❌ STT API error response:', errorText.substring(0, 200));
 
-        if (response.status === 401 || response.status === 403) {
-          errorMessage = 'Unauthorized/Forbidden: Your Vercel deployment is protected. Disable protection for this domain or configure EXPO_PUBLIC_BASIC_AUTH_USER/EXPO_PUBLIC_BASIC_AUTH_PASS (or EXPO_PUBLIC_API_AUTH_HEADER).';
-        } else if (contentType?.includes('application/json')) {
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorJson.message || errorMessage;
-          } catch {
-            errorMessage = errorText.substring(0, 100);
-          }
-        } else {
-          errorMessage = `${errorMessage} - ${errorText.substring(0, 100)}`;
-        }
-      } catch (e) {
-        console.error('❌ Could not read STT error response:', e);
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Unauthorized/Forbidden from backend. Verify deployment protection/auth headers.');
       }
-      throw new Error(errorMessage);
+
+      throw new Error(`STT API error: ${response.status} ${errorText.substring(0, 120)}`);
     }
 
     const responseText = await response.text();
-    if (!contentType?.includes('application/json')) {
+    if (!contentType.includes('application/json')) {
       throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
     }
 
@@ -214,7 +190,10 @@ export async function transcribeAudio(params: {
       throw new Error('Request timeout - please check your internet connection');
     }
     if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
-      throw new Error(`Cannot connect to server at ${API_BASE}. Please check:\n1. Internet connection\n2. Backend deployed and running\n3. URL in .env matches your Vercel URL\n4. Visit ${API_BASE}/api/health in a browser`);
+      const backendUrl = getBackendUrl();
+      throw new Error(
+        `Cannot connect to server at ${backendUrl}. Check internet, deployment status, and /api/health availability.`
+      );
     }
     throw error;
   }
@@ -245,8 +224,15 @@ export async function sendChatMessage(params: {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    console.error('❌ Chat error:', response.status, errorText.substring(0, 200));
-    throw new Error(`Chat request failed: ${response.status}`);
+    const contentType = response.headers.get('content-type') || '';
+    console.error('❌ Chat error:', {
+      status: response.status,
+      contentType,
+      bodyPreview: errorText.substring(0, 300),
+      endpoint: API_ENDPOINTS.chat,
+      platform: Platform.OS,
+    });
+    throw new Error(`Chat request failed: ${response.status} ${errorText.substring(0, 120)}`);
   }
 
   const contentType = response.headers.get('content-type') || '';

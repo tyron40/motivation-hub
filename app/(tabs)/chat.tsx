@@ -594,8 +594,20 @@ function ChatScreenContent() {
           console.log('⚠️ Not enough credits for voice generation');
         }
       }
-    } catch (error) {
-      console.error('Chat error:', error);
+    } catch (error: any) {
+      const errMsg = error?.message || String(error || 'Unknown error');
+      const normalizedReason =
+        errMsg.includes('timed out') ? 'timeout' :
+        (errMsg.includes('Network request failed') || errMsg.includes('Failed to fetch') || errMsg.includes('Cannot connect to server')) ? 'network' :
+        errMsg.includes('401') || errMsg.includes('403') ? 'auth' :
+        errMsg.includes('500') ? 'server' : 'unknown';
+
+      console.error('Chat error:', {
+        requestId: currentRequestId,
+        endpoint: 'API_ENDPOINTS.chat',
+        reason: normalizedReason,
+        message: errMsg,
+      });
 
       if (currentRequestId !== activeRequestIdRef.current) {
         console.log('⚠️ Ignoring stale chat error for requestId:', currentRequestId);
@@ -620,10 +632,21 @@ function ChatScreenContent() {
         return [...prev, errorMessage];
       });
 
+      const userFacingError =
+        normalizedReason === 'timeout'
+          ? 'The request timed out. Please try again.'
+          : normalizedReason === 'network'
+            ? 'Cannot reach server. Please check internet connection and try again.'
+            : normalizedReason === 'auth'
+              ? 'Server authorization error. Please try again shortly.'
+              : normalizedReason === 'server'
+                ? 'Server error while generating response. Please try again.'
+                : 'Failed to get response. Please check your internet connection and try again.';
+
       if (Platform.OS !== 'web') {
-        Alert.alert('Connection Error', 'Failed to get response. Please check your internet connection and try again.');
+        Alert.alert('Connection Error', userFacingError);
       } else {
-        console.error('Failed to get response. Please check your internet connection and try again.');
+        console.error(userFacingError);
       }
     } finally {
       setIsLoading(false);
