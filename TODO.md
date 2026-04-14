@@ -1,4 +1,8 @@
-# TODO - Per-account data isolation hard-fix
+# TODO
+
+- [x] Update chat first-turn behavior to send two quick assistant responses
+- [x] Keep non-first-turn behavior unchanged
+- [x] Run critical-path validation for first and second user messages
 
 - [x] Audit all account-sensitive storage keys and contexts
 - [ ] Scope storage keys by authenticated user id (with guest fallback)

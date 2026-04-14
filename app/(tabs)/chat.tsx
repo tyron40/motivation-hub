@@ -457,17 +457,42 @@ function ChatScreenContent() {
         console.log('✅ Suggested question - no credit needed');
       }
 
-      setMessages(prev => [
-        ...prev,
-        userMessage,
-        {
-          id: pendingAssistantId,
-          text: 'Thinking...',
-          visibleText: 'Thinking...',
-          isUser: false,
-          timestamp: new Date(),
-        },
-      ]);
+      const firstTurnQuickAckId = `first-turn-ack-${messageBaseId}-${currentRequestId}`;
+
+      setMessages(prev => {
+        const base = [...prev, userMessage];
+
+        if (isFirstRealUserTurn) {
+          return [
+            ...base,
+            {
+              id: firstTurnQuickAckId,
+              text: "Got you — I'm here and on it.",
+              visibleText: "Got you — I'm here and on it.",
+              isUser: false,
+              timestamp: new Date(),
+            },
+            {
+              id: pendingAssistantId,
+              text: 'Thinking...',
+              visibleText: 'Thinking...',
+              isUser: false,
+              timestamp: new Date(),
+            },
+          ];
+        }
+
+        return [
+          ...base,
+          {
+            id: pendingAssistantId,
+            text: 'Thinking...',
+            visibleText: 'Thinking...',
+            isUser: false,
+            timestamp: new Date(),
+          },
+        ];
+      });
       setInputText('');
       setIsLoading(true);
       setIsTyping(true);
