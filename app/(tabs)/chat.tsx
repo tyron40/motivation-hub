@@ -475,17 +475,25 @@ function ChatScreenContent() {
 
       let sessionId = currentSessionId;
       if (!sessionId) {
-        const newSession = await createSession(
-          trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''),
-          [{ role: 'user', content: trimmedText, timestamp: Date.now() }]
-        );
-        sessionId = newSession.id;
+        try {
+          const newSession = await createSession(
+            trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''),
+            [{ role: 'user', content: trimmedText, timestamp: Date.now() }]
+          );
+          sessionId = newSession.id;
+        } catch (sessionCreateErr) {
+          console.error('⚠️ Session create failed (non-blocking):', sessionCreateErr);
+        }
       } else {
-        await addMessageToSession(sessionId, {
-          role: 'user',
-          content: trimmedText,
-          timestamp: Date.now(),
-        });
+        try {
+          await addMessageToSession(sessionId, {
+            role: 'user',
+            content: trimmedText,
+            timestamp: Date.now(),
+          });
+        } catch (sessionAddErr) {
+          console.error('⚠️ Session add (user) failed (non-blocking):', sessionAddErr);
+        }
       }
 
       console.log('🤖 Sending chat message...');
@@ -581,11 +589,15 @@ function ChatScreenContent() {
       });
 
       if (sessionId) {
-        await addMessageToSession(sessionId, {
-          role: 'assistant',
-          content: responseText,
-          timestamp: Date.now(),
-        });
+        try {
+          await addMessageToSession(sessionId, {
+            role: 'assistant',
+            content: responseText,
+            timestamp: Date.now(),
+          });
+        } catch (sessionAddErr) {
+          console.error('⚠️ Session add (assistant) failed (non-blocking):', sessionAddErr);
+        }
       }
 
       if (profile.voiceEnabled && !isVoiceMuted && completion) {
@@ -604,6 +616,8 @@ function ChatScreenContent() {
     } catch (error: any) {
       const errMsg = error?.message || String(error || 'Unknown error');
       const normalizedReason =
+        errMsg.includes('No Credits') || errMsg.includes('credit') ? 'credit' :
+        errMsg.includes('session') ? 'session' :
         errMsg.includes('timed out') ? 'timeout' :
         (errMsg.includes('Network request failed') || errMsg.includes('Failed to fetch') || errMsg.includes('Cannot connect to server')) ? 'network' :
         errMsg.includes('401') || errMsg.includes('403') ? 'auth' :
@@ -643,15 +657,19 @@ function ChatScreenContent() {
       });
 
       const userFacingError =
-        normalizedReason === 'timeout'
-          ? 'The request timed out. Please try again.'
-          : normalizedReason === 'network'
-            ? 'Cannot reach server. Please check internet connection and try again.'
-            : normalizedReason === 'auth'
-              ? 'Server authorization error. Please try again shortly.'
-              : normalizedReason === 'server'
-                ? 'Server error while generating response. Please try again.'
-                : 'Failed to get response. Please check your internet connection and try again.';
+        normalizedReason === 'credit'
+          ? 'You need credits to send chat messages.'
+          : normalizedReason === 'session'
+            ? 'Message sent, but chat history save failed. Please continue chatting.'
+            : normalizedReason === 'timeout'
+              ? 'The request timed out. Please try again.'
+              : normalizedReason === 'network'
+                ? 'Cannot reach server. Please check internet connection and try again.'
+                : normalizedReason === 'auth'
+                  ? 'Server authorization error. Please try again shortly.'
+                  : normalizedReason === 'server'
+                    ? 'Server error while generating response. Please try again.'
+                    : 'Failed to get response. Please check your internet connection and try again.';
 
       if (Platform.OS !== 'web') {
         Alert.alert('Connection Error', userFacingError);
