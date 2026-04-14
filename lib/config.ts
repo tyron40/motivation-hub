@@ -1,10 +1,10 @@
 const FALLBACK_VERCEL_BACKEND_URL = 'https://motivation-hub-iota.vercel.app';
 
-const envBackendUrl =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_RORK_API_BASE_URL) ||
+const envVercelBackendUrl =
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_VERCEL_API_BASE_URL) ||
   '';
 
-const sanitizedEnvBackendUrl = envBackendUrl.trim().replace(/\/+$/, '');
+const sanitizedEnvBackendUrl = envVercelBackendUrl.trim().replace(/\/+$/, '');
 const VERCEL_BACKEND_URL = sanitizedEnvBackendUrl || FALLBACK_VERCEL_BACKEND_URL;
 
 export function getBackendUrl(): string {
@@ -24,4 +24,4 @@ export const API_ENDPOINTS = {
   flyers: `${VERCEL_BACKEND_URL}/api/flyers`,
 } as const;
 
-console.log('🔧 Config | Vercel Backend URL:', VERCEL_BACKEND_URL);
+console.log('🔧 Config | Active Vercel API Base URL:', VERCEL_BACKEND_URL);
