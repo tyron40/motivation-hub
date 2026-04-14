@@ -97,24 +97,32 @@ const toRenderableText = (value: any): string => {
   return '…';
 };
 
-const extractAssistantText = (rawResult: any): string => {
-  const candidates = [
-    rawResult?.message,
-    rawResult?.text,
-    rawResult?.response,
-    rawResult?.data?.message,
-    rawResult?.choices?.[0]?.message?.content,
-    rawResult?.output_text,
-    rawResult?.content,
-    rawResult,
+const extractAssistantText = (rawResult: any): { text: string; source: string } => {
+  const candidates: Array<{ source: string; value: any }> = [
+    { source: 'message', value: rawResult?.message },
+    { source: 'text', value: rawResult?.text },
+    { source: 'response', value: rawResult?.response },
+    { source: 'data.message', value: rawResult?.data?.message },
+    { source: 'data.result', value: rawResult?.data?.result },
+    { source: 'choices[0].message.content', value: rawResult?.choices?.[0]?.message?.content },
+    { source: 'choices[0].delta.content', value: rawResult?.choices?.[0]?.delta?.content },
+    { source: 'output_text', value: rawResult?.output_text },
+    { source: 'output[0].content[0].text', value: rawResult?.output?.[0]?.content?.[0]?.text },
+    { source: 'content', value: rawResult?.content },
+    { source: 'root', value: rawResult },
   ];
 
   for (const candidate of candidates) {
-    const text = extractTextDeep(candidate);
-    if (text) return text;
+    const text = extractTextDeep(candidate.value);
+    if (text) return { text, source: candidate.source };
   }
 
-  return '';
+  try {
+    const preview = JSON.stringify(rawResult).slice(0, 280);
+    if (preview) return { text: preview, source: 'json-preview' };
+  } catch {}
+
+  return { text: '', source: 'none' };
 };
 
 const suggestedPrompts = [
@@ -491,18 +499,46 @@ function ChatScreenContent() {
         isFirstRealUserTurn
       );
 
-      const chatResult = await sendChatMessage({
-        messages: allMessages.map(m => ({
-          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        })),
-      });
+      const timeoutMs = 25000;
+      const timeoutResult = await new Promise<{ __timeout: true }>((resolve) =>
+        setTimeout(() => resolve({ __timeout: true }), timeoutMs)
+      );
 
-      const rawResult: any = chatResult as any;
-      const completionRaw = extractAssistantText(rawResult);
-      const completion = normalizeVisibleText(completionRaw);
+      const chatRace = await Promise.race([
+        sendChatMessage({
+          messages: allMessages.map(m => ({
+            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
+        }),
+        timeoutResult,
+      ]);
 
-      console.log('✅ Vercel backend responded, length:', completion?.length, 'keys:', Object.keys(rawResult || {}));
+      if ((chatRace as any)?.__timeout) {
+        throw new Error(`Chat request timed out after ${timeoutMs}ms`);
+      }
+
+      const rawResult: any = chatRace as any;
+      const extracted = extractAssistantText(rawResult);
+      const completion = normalizeVisibleText(extracted.text);
+
+      console.log(
+        '✅ Vercel backend responded, length:',
+        completion?.length,
+        'keys:',
+        Object.keys(rawResult || {}),
+        '| source:',
+        extracted.source
+      );
+
+      if (isFirstRealUserTurn) {
+        console.log('🧪 First-turn parse diagnostics:', {
+          requestId: currentRequestId,
+          source: extracted.source,
+          completionLength: completion.length,
+          keys: Object.keys(rawResult || {}),
+        });
+      }
 
       if (currentRequestId !== activeRequestIdRef.current) {
         console.log('⚠️ Ignoring stale chat response for requestId:', currentRequestId);
@@ -517,7 +553,7 @@ function ChatScreenContent() {
       );
 
       const responseText =
-        completion || "I’m connected, but I received an empty response. Please try again in a moment.";
+        completion || `I received an empty first response (request ${currentRequestId}). Please try again.`;
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
