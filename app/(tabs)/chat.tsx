@@ -180,6 +180,7 @@ function ChatScreenContent() {
   const requestCounterRef = useRef(0);
   const activeRequestIdRef = useRef<number>(0);
   const hasInitializedGreetingRef = useRef(false);
+  const responseCommittedRef = useRef(false);
   const messagesRef = useRef<Message[]>([]);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
   const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
@@ -563,14 +564,20 @@ function ChatScreenContent() {
         timestamp: new Date(),
       };
 
+      responseCommittedRef.current = true;
+      setIsTyping(false);
+
       setMessages(prev => {
-        const idx = prev.findIndex(m => m.id === pendingAssistantId);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = aiMessage;
-          return next;
-        }
-        return [...prev, aiMessage];
+        const withoutPending = prev.filter(m => m.id !== pendingAssistantId);
+        const hasSameAssistant = withoutPending.some(
+          m => !m.isUser && normalizeVisibleText(m.text) === normalizeVisibleText(aiMessage.text)
+        );
+        const next = hasSameAssistant ? withoutPending : [...withoutPending, aiMessage];
+        return next;
+      });
+
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
       });
 
       if (sessionId) {
@@ -622,14 +629,17 @@ function ChatScreenContent() {
         timestamp: new Date(),
       };
 
+      responseCommittedRef.current = true;
+      setIsTyping(false);
+
       setMessages(prev => {
-        const idx = prev.findIndex(m => m.id === pendingAssistantId);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = errorMessage;
-          return next;
-        }
-        return [...prev, errorMessage];
+        const withoutPending = prev.filter(m => m.id !== pendingAssistantId);
+        const next = [...withoutPending, errorMessage];
+        return next;
+      });
+
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
       });
 
       const userFacingError =
@@ -650,7 +660,10 @@ function ChatScreenContent() {
       }
     } finally {
       setIsLoading(false);
-      setIsTyping(false);
+      if (!responseCommittedRef.current) {
+        setIsTyping(false);
+      }
+      responseCommittedRef.current = false;
     }
   }, [isLoading, usageStats, deductCredit, profile, updateProfile, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition, isVoiceMuted]);
 
