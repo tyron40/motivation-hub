@@ -1,6 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChatSession, ChatMessage } from '@/types/speech';
 import { useAuth } from './auth-context';
 
@@ -8,6 +8,7 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
   const { user } = useAuth();
   const storageKey = useMemo(() => `chatSessions:${user?.id ?? 'guest'}`, [user?.id]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const sessionsRef = useRef<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,7 +27,9 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
         
         if (stored && typeof stored === 'string') {
           try {
-            setSessions(JSON.parse(stored));
+            const parsed = JSON.parse(stored) as ChatSession[];
+            sessionsRef.current = parsed;
+            setSessions(parsed);
           } catch (parseError) {
             console.error('❌ Error parsing chat sessions:', parseError);
             setSessions([]);
@@ -39,15 +42,28 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
       }
     };
 
+    sessionsRef.current = [];
     setSessions([]);
     setCurrentSessionId(null);
     loadSessions();
   }, [storageKey]);
 
-  const saveSessions = useCallback(async (newSessions: ChatSession[]) => {
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  const saveSessions = useCallback(async (
+    updater: ChatSession[] | ((prev: ChatSession[]) => ChatSession[])
+  ) => {
     try {
-      await AsyncStorage.setItem(storageKey, JSON.stringify(newSessions));
-      setSessions(newSessions);
+      const nextSessions =
+        typeof updater === 'function'
+          ? (updater as (prev: ChatSession[]) => ChatSession[])(sessionsRef.current)
+          : updater;
+
+      sessionsRef.current = nextSessions;
+      setSessions(nextSessions);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(nextSessions));
     } catch (error) {
       console.error('Error saving chat sessions:', error);
     }
@@ -62,22 +78,20 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
       updatedAt: Date.now(),
     };
     
-    const updated = [...sessions, newSession];
-    await saveSessions(updated);
+    await saveSessions(prev => [...prev, newSession]);
     setCurrentSessionId(newSession.id);
     return newSession;
-  }, [sessions, saveSessions]);
+  }, [saveSessions]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
-    const updated = sessions.filter(s => s.id !== sessionId);
-    await saveSessions(updated);
+    await saveSessions(prev => prev.filter(s => s.id !== sessionId));
     if (currentSessionId === sessionId) {
       setCurrentSessionId(null);
     }
-  }, [sessions, currentSessionId, saveSessions]);
+  }, [currentSessionId, saveSessions]);
 
   const updateSession = useCallback(async (sessionId: string, updates: Partial<ChatSession>) => {
-    const updated = sessions.map(s => {
+    await saveSessions(prev => prev.map(s => {
       if (s.id === sessionId) {
         return {
           ...s,
@@ -86,12 +100,11 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
         };
       }
       return s;
-    });
-    await saveSessions(updated);
-  }, [sessions, saveSessions]);
+    }));
+  }, [saveSessions]);
 
   const addMessageToSession = useCallback(async (sessionId: string, message: ChatMessage) => {
-    const updated = sessions.map(s => {
+    await saveSessions(prev => prev.map(s => {
       if (s.id === sessionId) {
         return {
           ...s,
@@ -100,9 +113,8 @@ export const [ChatSessionsProvider, useChatSessions] = createContextHook(() => {
         };
       }
       return s;
-    });
-    await saveSessions(updated);
-  }, [sessions, saveSessions]);
+    }));
+  }, [saveSessions]);
 
   const getCurrentSession = useCallback(() => {
     if (!currentSessionId) return null;

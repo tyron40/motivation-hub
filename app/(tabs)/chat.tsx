@@ -182,6 +182,7 @@ function ChatScreenContent() {
   const hasInitializedGreetingRef = useRef(false);
   const responseCommittedRef = useRef(false);
   const messagesRef = useRef<Message[]>([]);
+  const skipNextSessionReloadRef = useRef(false);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
   const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
   const appVersion = `${runtimeVersion} (${runtimeBuild})`;
@@ -343,7 +344,11 @@ function ChatScreenContent() {
     };
 
     if (currentSessionId) {
-      loadCurrentSession();
+      if (skipNextSessionReloadRef.current) {
+        skipNextSessionReloadRef.current = false;
+      } else {
+        loadCurrentSession();
+      }
     } else if (messages.length === 0 && !hasInitializedGreetingRef.current && !isLoading) {
       const greeting = profile.name 
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
@@ -457,42 +462,17 @@ function ChatScreenContent() {
         console.log('✅ Suggested question - no credit needed');
       }
 
-      const firstTurnQuickAckId = `first-turn-ack-${messageBaseId}-${currentRequestId}`;
-
-      setMessages(prev => {
-        const base = [...prev, userMessage];
-
-        if (isFirstRealUserTurn) {
-          return [
-            ...base,
-            {
-              id: firstTurnQuickAckId,
-              text: "Got you — I'm here and on it.",
-              visibleText: "Got you — I'm here and on it.",
-              isUser: false,
-              timestamp: new Date(),
-            },
-            {
-              id: pendingAssistantId,
-              text: 'Thinking...',
-              visibleText: 'Thinking...',
-              isUser: false,
-              timestamp: new Date(),
-            },
-          ];
-        }
-
-        return [
-          ...base,
-          {
-            id: pendingAssistantId,
-            text: 'Thinking...',
-            visibleText: 'Thinking...',
-            isUser: false,
-            timestamp: new Date(),
-          },
-        ];
-      });
+      setMessages(prev => ([
+        ...prev,
+        userMessage,
+        {
+          id: pendingAssistantId,
+          text: 'Thinking...',
+          visibleText: 'Thinking...',
+          isUser: false,
+          timestamp: new Date(),
+        },
+      ]));
       setInputText('');
       setIsLoading(true);
       setIsTyping(true);
@@ -501,6 +481,7 @@ function ChatScreenContent() {
       let sessionId = currentSessionId;
       if (!sessionId) {
         try {
+          skipNextSessionReloadRef.current = true;
           const newSession = await createSession(
             trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''),
             [{ role: 'user', content: trimmedText, timestamp: Date.now() }]
