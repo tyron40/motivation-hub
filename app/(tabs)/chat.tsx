@@ -170,6 +170,7 @@ function ChatScreenContent() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const requestCounterRef = useRef(0);
+  const activeRequestIdRef = useRef<number>(0);
   const hasInitializedGreetingRef = useRef(false);
   const messagesRef = useRef<Message[]>([]);
   const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
@@ -398,14 +399,14 @@ function ChatScreenContent() {
     };
 
     const baseMessagesSnapshot = [...messagesRef.current];
+    activeRequestIdRef.current = currentRequestId;
+
     const chatHistoryBase = baseMessagesSnapshot.filter(
       msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-')
     );
     const isFirstRealUserTurn = !chatHistoryBase.some(msg => msg.isUser);
 
-    const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
-
-    const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [
+    const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
       ...chatHistoryBase.map(msg => ({
         role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
         content: msg.text,
@@ -413,15 +414,9 @@ function ChatScreenContent() {
       { role: 'user', content: trimmedText },
     ];
 
-    const backendChatHistory = isFirstRealUserTurn
-      ? [...chatHistory, { role: 'user' as const, content: trimmedText }]
-      : chatHistory;
-
-    const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
-      { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
-      { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
-      ...backendChatHistory,
-    ];
+    if (isFirstRealUserTurn) {
+      console.log('🧪 First turn outbound payload:', allMessages.map(m => `${m.role}:${m.content.slice(0, 40)}`));
+    }
 
     try {
       const nameMatch = trimmedText.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
@@ -509,6 +504,18 @@ function ChatScreenContent() {
 
       console.log('✅ Vercel backend responded, length:', completion?.length, 'keys:', Object.keys(rawResult || {}));
 
+      if (currentRequestId !== activeRequestIdRef.current) {
+        console.log('⚠️ Ignoring stale chat response for requestId:', currentRequestId);
+        return;
+      }
+
+      console.log(
+        '📥 Assistant parse result | completion length:',
+        completion.length,
+        '| usedFallback:',
+        completion.length === 0
+      );
+
       const responseText =
         completion || "I’m connected, but I received an empty response. Please try again in a moment.";
 
@@ -553,6 +560,11 @@ function ChatScreenContent() {
       }
     } catch (error) {
       console.error('Chat error:', error);
+
+      if (currentRequestId !== activeRequestIdRef.current) {
+        console.log('⚠️ Ignoring stale chat error for requestId:', currentRequestId);
+        return;
+      }
 
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
