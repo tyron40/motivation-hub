@@ -1,6 +1,7 @@
+import os
 import requests
 
-BASE = "https://motivation-hub-iota.vercel.app"
+BASE = os.getenv("RORK_API_BASE_URL", "https://motivation-hub-iota.vercel.app").rstrip("/")
 
 def run_post(name, endpoint, payload):
     try:
@@ -29,6 +30,7 @@ def run_options(endpoint):
         print(f"OPTIONS {endpoint}: EXCEPTION | {e}")
 
 if __name__ == "__main__":
+    print(f"=== BASE URL ===\n{BASE}\n")
     print("=== HAPPY PATHS ===")
     run_post("youtube_category_ok", "/api/youtube/category", {"category": "motivation", "maxResults": 5})
     run_post("youtube_search_ok", "/api/youtube/search", {"query": "motivation", "maxResults": 5})
@@ -40,7 +42,9 @@ if __name__ == "__main__":
     run_post("youtube_search_missing", "/api/youtube/search", {})
     run_post("youtube_search_edge_long", "/api/youtube/search", {"query": "motivation " * 60, "maxResults": 1})
     run_post("youtube_trending_edge_zero", "/api/youtube/trending", {"maxResults": 0})
-    run_post("chat_minimal", "/api/chat", {"message": "hello"})
+    run_post("chat_minimal", "/api/chat", {
+        "messages": [{"role": "user", "content": "Say 'backend connected' in 3 words."}]
+    })
     run_post("tts_minimal", "/api/tts", {"text": "hello"})
 
     print("\n=== CORS / OPTIONS ===")

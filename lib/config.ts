@@ -1,4 +1,11 @@
-const VERCEL_BACKEND_URL = 'https://motivation-hub-iota.vercel.app';
+const FALLBACK_VERCEL_BACKEND_URL = 'https://motivation-hub-iota.vercel.app';
+
+const envBackendUrl =
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_RORK_API_BASE_URL) ||
+  '';
+
+const sanitizedEnvBackendUrl = envBackendUrl.trim().replace(/\/+$/, '');
+const VERCEL_BACKEND_URL = sanitizedEnvBackendUrl || FALLBACK_VERCEL_BACKEND_URL;
 
 export function getBackendUrl(): string {
   return VERCEL_BACKEND_URL;
