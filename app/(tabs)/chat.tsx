@@ -508,14 +508,21 @@ function ChatScreenContent() {
         isFirstRealUserTurn
       );
 
-      const rawResult: any = await sendChatMessage({
-        messages: allMessages.map(m => ({
-          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        })),
-      });
-      const extracted = extractAssistantText(rawResult);
-      const completion = normalizeVisibleText(extracted.text);
+      const sendPayload = allMessages.map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }));
+
+      let rawResult: any = await sendChatMessage({ messages: sendPayload });
+      let extracted = extractAssistantText(rawResult);
+      let completion = normalizeVisibleText(extracted.text);
+
+      if (isFirstRealUserTurn && !completion) {
+        console.warn('⚠️ First-turn empty response. Retrying once...');
+        rawResult = await sendChatMessage({ messages: sendPayload });
+        extracted = extractAssistantText(rawResult);
+        completion = normalizeVisibleText(extracted.text);
+      }
 
       console.log(
         '✅ Vercel backend responded, length:',
