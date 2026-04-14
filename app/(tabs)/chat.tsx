@@ -508,26 +508,12 @@ function ChatScreenContent() {
         isFirstRealUserTurn
       );
 
-      const timeoutMs = 25000;
-      const timeoutResult = await new Promise<{ __timeout: true }>((resolve) =>
-        setTimeout(() => resolve({ __timeout: true }), timeoutMs)
-      );
-
-      const chatRace = await Promise.race([
-        sendChatMessage({
-          messages: allMessages.map(m => ({
-            role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-          })),
-        }),
-        timeoutResult,
-      ]);
-
-      if ((chatRace as any)?.__timeout) {
-        throw new Error(`Chat request timed out after ${timeoutMs}ms`);
-      }
-
-      const rawResult: any = chatRace as any;
+      const rawResult: any = await sendChatMessage({
+        messages: allMessages.map(m => ({
+          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+          content: m.content,
+        })),
+      });
       const extracted = extractAssistantText(rawResult);
       const completion = normalizeVisibleText(extracted.text);
 
