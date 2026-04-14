@@ -55,6 +55,13 @@ export default function PlayerScreen() {
       void tryShowInterstitialOnTransition();
     }
     return () => {
+      try {
+        if (localPlayerRef.current) {
+          localPlayerRef.current.pause();
+        }
+      } catch (err) {
+        console.warn('Failed to pause player on leave:', err);
+      }
       audioPlayerRef.current = null;
     };
   }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
@@ -66,9 +73,10 @@ export default function PlayerScreen() {
     } else if (wasPlayingBeforeAdRef.current) {
       console.log('[Ad] Ad finished, resuming playback');
       adJustFinishedRef.current = true;
+      const shouldResume = wasPlayingBeforeAdRef.current;
       wasPlayingBeforeAdRef.current = false;
       setTimeout(() => {
-        if (localPlayerRef.current) {
+        if (shouldResume && localPlayerRef.current) {
           localPlayerRef.current.resumeAfterAd();
         }
         adJustFinishedRef.current = false;

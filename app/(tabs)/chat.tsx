@@ -688,13 +688,17 @@ function ChatScreenContent() {
 
 
 
-  const stopAudio = async () => {
-    if (sound) {
-      await sound.stopAsync();
-
+  const stopAudio = useCallback(async () => {
+    try {
+      if (sound) {
+        await sound.stopAsync();
+      }
+    } catch (error) {
+      console.warn('Error stopping chat audio:', error);
+    } finally {
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
     }
-  };
+  }, [sound]);
 
   const startRecording = async () => {
     try {
@@ -863,20 +867,21 @@ function ChatScreenContent() {
 
   useEffect(() => {
     return () => {
+      void stopAudio();
       if (recording) {
         console.log('🧹 Cleaning up recording on unmount');
-        recording.stopAndUnloadAsync().catch((err: unknown) => 
+        recording.stopAndUnloadAsync().catch((err: unknown) =>
           console.error('Error cleaning up recording:', err)
         );
       }
       if (sound) {
         console.log('🧹 Cleaning up sound on unmount');
-        sound.unloadAsync().catch((err: unknown) => 
+        sound.unloadAsync().catch((err: unknown) =>
           console.error('Error cleaning up sound:', err)
         );
       }
     };
-  }, [recording, sound]);
+  }, [recording, sound, stopAudio]);
 
   const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
     const bubbleAnim = useRef(new Animated.Value(0)).current;
