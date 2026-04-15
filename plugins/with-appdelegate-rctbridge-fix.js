@@ -5,21 +5,19 @@ const path = require('path');
 function patchAppDelegate(contents) {
   let out = contents;
 
-  // RN/Expo SDK 54 AppDelegate templates can reference RCTBridge where module import is unavailable.
-  // Prefer adapting signature to avoid requiring React_RCTBridge module import.
+  // Remove obsolete sourceURL overrides entirely (Expo/RN template drift)
   out = out.replace(
-    /override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{/g,
-    'override func sourceURL() -> URL? {'
+    /\n\s*override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{\n[\s\S]*?\n\s*\}\n/gm,
+    '\n'
   );
 
-  // Method body can continue using bundleURL helper directly.
   out = out.replace(
-    /bridge\.bundleURL \?\? bundleURL\(\)/g,
-    'bundleURL()'
+    /\n\s*override func sourceURL\(\) -> URL\? \{\n[\s\S]*?\n\s*\}\n/gm,
+    '\n'
   );
 
-  // Remove invalid import if previously inserted
-  out = out.replace(/^\s*import React_RCTBridge\s*[\r\n]+/m, '');
+  // Remove invalid imports that may have been added by previous attempts
+  out = out.replace(/^\s*import React_RCTBridge\s*[\r\n]+/gm, '');
 
   return out;
 }
