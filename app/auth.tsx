@@ -152,10 +152,10 @@ export default function AuthScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.featuresContainer}>
+                <View style={styles.featuresGrid}>
                   <View style={styles.featureCard}>
                     <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(108, 92, 231, 0.15)' }]}>
-                      <Mic color="#6C5CE7" size={28} />
+                      <Mic color="#6C5CE7" size={22} />
                     </View>
                     <Text style={styles.featureTitle}>Inspiring Speeches</Text>
                     <Text style={styles.featureText}>Access thousands of motivational talks</Text>
@@ -163,7 +163,7 @@ export default function AuthScreen() {
 
                   <View style={styles.featureCard}>
                     <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(0, 217, 255, 0.15)' }]}>
-                      <MessageCircle color="#00D9FF" size={28} />
+                      <MessageCircle color="#00D9FF" size={22} />
                     </View>
                     <Text style={styles.featureTitle}>AI Voice Coach</Text>
                     <Text style={styles.featureText}>Get personalized guidance anytime</Text>
@@ -171,7 +171,7 @@ export default function AuthScreen() {
 
                   <View style={styles.featureCard}>
                     <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(255, 107, 107, 0.15)' }]}>
-                      <BookOpen color="#FF6B6B" size={28} />
+                      <BookOpen color="#FF6B6B" size={22} />
                     </View>
                     <Text style={styles.featureTitle}>Scripture Wisdom</Text>
                     <Text style={styles.featureText}>Daily inspiration from sacred texts</Text>
@@ -422,25 +422,31 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 10,
   },
-  featuresContainer: {
-    marginBottom: 32,
+  featuresGrid: {
+    marginBottom: 28,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   featureCard: {
+    width: '48.5%',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
+    minHeight: 180,
   },
   featureIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -448,16 +454,16 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   featureTitle: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   featureText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#B0B0B0',
-    lineHeight: 20,
+    lineHeight: 16,
     textAlign: 'center',
   },
   ctaContainer: {
