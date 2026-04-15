@@ -128,25 +128,41 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const wasPlayingBeforeAdRef = useRef(false);
   const manualPauseRef = useRef(false);
 
-  const requestPlayState = useCallback((newState: boolean) => {
+  const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
+
+    if (Platform.OS === 'web') {
+      isPlayingRef.current = newState;
+      setIsPlaying(newState);
+      onPlayingChangeRef.current?.(newState);
+      return;
+    }
+
+    if (playerRef.current) {
+      try {
+        if (newState && typeof playerRef.current.playVideo === 'function') {
+          await playerRef.current.playVideo();
+        } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
+          await playerRef.current.pauseVideo();
+        } else {
+          isPlayingRef.current = newState;
+          setIsPlaying(newState);
+          onPlayingChangeRef.current?.(newState);
+        }
+      } catch (err) {
+        console.log('Native direct play/pause command failed, falling back to UI state:', err);
+        isPlayingRef.current = newState;
+        setIsPlaying(newState);
+        onPlayingChangeRef.current?.(newState);
+      }
+      return;
+    }
+
     isPlayingRef.current = newState;
     setIsPlaying(newState);
     onPlayingChangeRef.current?.(newState);
-
-    if (Platform.OS !== 'web' && playerRef.current) {
-      try {
-        if (newState && typeof playerRef.current.playVideo === 'function') {
-          void playerRef.current.playVideo();
-        } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
-          void playerRef.current.pauseVideo();
-        }
-      } catch (err) {
-        console.log('Native direct play/pause command skipped:', err);
-      }
-    }
   }, []);
 
 
@@ -158,7 +174,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       const newState = !isPlayingRef.current;
       console.log('Ref togglePlay:', isPlayingRef.current, '->', newState);
-      requestPlayState(newState);
+      void requestPlayState(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
@@ -670,7 +686,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     manualPauseRef.current = !nextState;
 
     try {
-      requestPlayState(nextState);
+      void requestPlayState(nextState);
 
       if (!nextState) {
         stopProgressTracking();
