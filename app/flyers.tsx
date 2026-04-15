@@ -267,41 +267,55 @@ export default function FlyersScreen() {
         return;
       }
 
+      if (!flyer.imageUrl) {
+        throw new Error('Missing flyer image URL');
+      }
+
       const permission = await MediaLibrary.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission Required', 'Please allow Photos access to save flyers locally.');
+        Alert.alert('Permission Required', 'Please allow Photos access to save flyers.');
         return;
       }
 
       const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
       if (!baseDir) {
-        throw new Error('No writable local directory available');
+        throw new Error('No writable directory available');
       }
 
-      let extension = '.jpg';
+      const cleanName = (flyer.title || 'flyer').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const fileUri = `${baseDir}${cleanName}_${Date.now()}.jpg`;
+
+      console.log('Downloading flyer:', flyer.imageUrl);
+      console.log('Saving to:', fileUri);
+
       try {
-        const parsed = new URL(flyer.imageUrl);
-        const pathname = parsed.pathname || '';
-        if (pathname.match(/\.(png|jpg|jpeg|webp)$/i)) {
-          extension = `.${pathname.split('.').pop()}`;
+        const headResponse = await fetch(flyer.imageUrl, { method: 'HEAD' });
+        if (!headResponse.ok) {
+          console.warn('HEAD check failed status:', headResponse.status);
+        } else {
+          const contentType = headResponse.headers.get('content-type') || '';
+          if (contentType && !contentType.startsWith('image/')) {
+            throw new Error(`URL is not an image response (${contentType})`);
+          }
         }
-      } catch {
-        // ignore URL parsing failure and keep .jpg default
+      } catch (precheckError) {
+        console.log('HEAD precheck skipped/failed:', precheckError);
       }
 
-      const fileName = `flyer_${flyer.id}_${Date.now()}${extension}`;
-      const fileUri = `${baseDir}${fileName}`;
-
-      console.log('Downloading flyer to local file:', fileUri);
       const downloadResult = await FileSystem.downloadAsync(flyer.imageUrl, fileUri);
 
       if (!downloadResult?.uri) {
-        throw new Error('Download failed - no URI returned');
+        throw new Error('Download returned no local file');
+      }
+
+      const statusCode = (downloadResult as any).status;
+      if (typeof statusCode === 'number' && statusCode >= 400) {
+        throw new Error(`Download request failed with status ${statusCode}`);
       }
 
       const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
       if (!fileInfo.exists) {
-        throw new Error('Downloaded file does not exist locally');
+        throw new Error('Downloaded file does not exist');
       }
 
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);

@@ -126,6 +126,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const desiredPlayRef = useRef(false);
   const wasPlayingBeforeAdRef = useRef(false);
+  const manualPauseRef = useRef(false);
 
   const requestPlayState = useCallback((newState: boolean) => {
     if (!mountedRef.current) return;
@@ -181,6 +182,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     getIsPlaying: () => isPlayingRef.current,
     resumeAfterAd: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      if (manualPauseRef.current) return;
       const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
       if (shouldResume) {
         requestPlayState(true);
@@ -225,6 +227,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     activeVideoIdRef.current = videoId;
+    manualPauseRef.current = false;
     onEndCalledRef.current = false;
     autoplayTriggeredRef.current = false;
     autoplayAttemptRef.current = 0;
@@ -396,6 +399,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const startAutoplay = useCallback(() => {
     if (!autoplay || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
+    if (manualPauseRef.current) return;
     if (autoplayInProgressRef.current) return;
 
     autoplayInProgressRef.current = true;
@@ -424,6 +428,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const runWarmupSeek = useCallback(async () => {
     if (autoplayWarmupDoneRef.current) return;
+    if (manualPauseRef.current) return;
     if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
     if (!playerReadyRef.current || !mediaLoadedRef.current) return;
 
@@ -449,6 +454,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const runForcedAutoplaySeek = useCallback(async () => {
     if (Platform.OS === 'web') return;
+    if (manualPauseRef.current) return;
     if (autoplayForceSeekDoneRef.current) return;
     if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
     if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
@@ -491,7 +497,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
-    if (autoplay) {
+    if (autoplay && !manualPauseRef.current) {
       desiredPlayRef.current = true;
       mediaLoadedRef.current = true;
       void runWarmupSeek().finally(() => {
@@ -634,19 +640,40 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   };
 
   const handlePlayPause = useCallback(() => {
-    if (playerError) {
-      console.log('Player error state, cannot play/pause');
+    if (playerError || !playerReady) {
+      console.log('Player not ready for play/pause');
       return;
     }
-    if (!playerReady) {
-      console.log('Player not ready yet');
-      return;
-    }
+
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newState = !isPlayingRef.current;
-    console.log(isPlayingRef.current ? 'Pausing video' : 'Playing video');
-    requestPlayState(newState);
-  }, [playerReady, playerError, requestPlayState]);
+
+    const nextState = !isPlayingRef.current;
+    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
+
+    clearAutoplayTimer();
+    autoplayInProgressRef.current = false;
+    desiredPlayRef.current = nextState;
+    manualPauseRef.current = !nextState;
+
+    try {
+      requestPlayState(nextState);
+
+      if (!nextState) {
+        stopProgressTracking();
+      } else {
+        startProgressTracking();
+      }
+    } catch (err) {
+      console.error('Manual play/pause failed:', err);
+    }
+  }, [
+    playerError,
+    playerReady,
+    clearAutoplayTimer,
+    requestPlayState,
+    stopProgressTracking,
+    startProgressTracking,
+  ]);
 
   useEffect(() => {
     wasPlayingBeforeAdRef.current = isPlayingRef.current;
