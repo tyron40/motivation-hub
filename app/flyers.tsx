@@ -25,6 +25,8 @@ import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 52) / 2);
@@ -265,32 +267,41 @@ export default function FlyersScreen() {
         return;
       }
 
-      const FileSystem = require('expo-file-system');
-      const Sharing = require('expo-sharing');
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Required', 'Please allow Photos access to save flyers locally.');
+        return;
+      }
 
-      console.log('Downloading flyer to cache...');
+      const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
+      if (!baseDir) {
+        throw new Error('No writable local directory available');
+      }
+
       const fileName = `flyer_${flyer.id}_${Date.now()}.jpg`;
-      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+      const fileUri = `${baseDir}${fileName}`;
 
+      console.log('Downloading flyer to local file:', fileUri);
       const downloadResult = await FileSystem.downloadAsync(flyer.imageUrl, fileUri);
-      console.log('Download complete:', downloadResult.uri);
 
-      if (!downloadResult.uri) {
+      if (!downloadResult?.uri) {
         throw new Error('Download failed - no URI returned');
       }
 
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-      if (isSharingAvailable) {
-        await Sharing.shareAsync(downloadResult.uri, {
-          mimeType: 'image/jpeg',
-          dialogTitle: `Save "${flyer.title}"`,
-        });
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      const albumName = 'Motivation Fuel';
+      const existingAlbum = await MediaLibrary.getAlbumAsync(albumName);
+
+      if (existingAlbum) {
+        await MediaLibrary.addAssetsToAlbumAsync([asset], existingAlbum, false);
       } else {
-        Alert.alert('Error', 'Sharing is not available on this device.');
+        await MediaLibrary.createAlbumAsync(albumName, asset, false);
       }
+
+      Alert.alert('Saved', 'Flyer was saved to your Photos.');
     } catch (error) {
-      console.error('Error downloading flyer:', error);
-      Alert.alert('Error', 'Failed to save flyer to photos. Please try again.');
+      console.error('Error saving flyer locally:', error);
+      Alert.alert('Error', 'Failed to save flyer to your device. Please try again.');
     } finally {
       setIsDownloading(false);
     }

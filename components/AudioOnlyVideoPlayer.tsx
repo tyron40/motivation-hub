@@ -131,6 +131,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
+    isPlayingRef.current = newState;
     setIsPlaying(newState);
     onPlayingChangeRef.current?.(newState);
   }, []);

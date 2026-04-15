@@ -289,7 +289,7 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={[...motivationalFlyers, ...customFlyers]}
+              data={[...motivationalFlyers, ...customFlyers].slice(0, 7)}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (

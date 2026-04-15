@@ -1,9 +1,8 @@
-# TODO - Audio lifecycle, speech resume, and flyer preview improvements
+# TODO
 
-- [ ] Add chat screen leave/unmount audio stop behavior in `app/(tabs)/chat.tsx`
-- [ ] Add speech player leave/unmount stop behavior in speech playback components/screens
-- [ ] Ensure speech play/pause controls are robust and synchronized
-- [ ] Add resume-after-interstitial-ad behavior for speeches
-- [ ] Improve flyer preview UX in `app/flyers.tsx` (better close/preview controls)
-- [ ] Run targeted lint verification on changed files
-- [ ] Run runtime validation checklist for chat/speech/flyers behaviors
+- [x] Cap Home featured motivation flyers list to first 7 items
+- [x] Replace flyer save flow with true local photo-library save on device
+- [x] Verify/fix speech play-pause reliability in AudioOnlyVideoPlayer
+- [x] Run targeted validation checks
+- [ ] Commit and push updates to GitHub main
+- [ ] Trigger iOS build and submit to App Store
