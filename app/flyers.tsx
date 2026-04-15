@@ -277,9 +277,18 @@ export default function FlyersScreen() {
         return;
       }
 
-      const baseDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory;
-      if (!baseDir) {
-        throw new Error('No writable directory available');
+      const fsAny = FileSystem as any;
+      const baseDir =
+        fsAny.cacheDirectory ??
+        fsAny.documentDirectory ??
+        `${fsAny.documentDirectory || 'file:///'}tmp/`;
+
+      console.log('FileSystem.cacheDirectory:', fsAny.cacheDirectory);
+      console.log('FileSystem.documentDirectory:', fsAny.documentDirectory);
+      console.log('Using baseDir:', baseDir);
+
+      if (!baseDir || typeof baseDir !== 'string') {
+        throw new Error('No writable local directory available');
       }
 
       const cleanName = (flyer.title || 'flyer').replace(/[^a-z0-9]/gi, '_').toLowerCase();

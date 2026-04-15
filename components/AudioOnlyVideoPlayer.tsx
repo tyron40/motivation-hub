@@ -525,6 +525,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         }
         autoplayRecoveryTimerRef.current = setTimeout(async () => {
           if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (manualPauseRef.current) return;
           if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
           if (isPlayingRef.current || currentTimeRef.current > 0.25) return;
 
@@ -546,6 +547,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         }
         autoplayWatchdogTimerRef.current = setTimeout(async () => {
           if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (manualPauseRef.current) return;
           if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
           if (isPlayingRef.current || currentTimeRef.current > 0.35) return;
 
