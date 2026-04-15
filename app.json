@@ -93,7 +93,8 @@
           "androidAppId": "ca-app-pub-7788769813708919~4966903177",
           "iosAppId": "ca-app-pub-7788769813708919~4966903177"
         }
-      ]
+      ],
+      "./plugins/with-appdelegate-rctbridge-fix.js"
     ],
     "extra": {
       "eas": {
