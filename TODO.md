@@ -1,8 +1,7 @@
 # TODO
 
-- [x] Cap Home featured motivation flyers list to first 7 items
-- [x] Replace flyer save flow with true local photo-library save on device
-- [x] Verify/fix speech play-pause reliability in AudioOnlyVideoPlayer
-- [x] Run targeted validation checks
+- [x] Fix play/pause to reliably control active speech playback in player flow
+- [x] Harden flyer save-to-device flow for real-device Photos reliability
+- [x] Add "Save to Playlist" action for current/selected speech
+- [ ] Run targeted validation checks for the three requested behaviors
 - [ ] Commit and push updates to GitHub main
-- [ ] Trigger iOS build and submit to App Store

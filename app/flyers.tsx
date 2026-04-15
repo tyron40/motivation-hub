@@ -278,7 +278,18 @@ export default function FlyersScreen() {
         throw new Error('No writable local directory available');
       }
 
-      const fileName = `flyer_${flyer.id}_${Date.now()}.jpg`;
+      let extension = '.jpg';
+      try {
+        const parsed = new URL(flyer.imageUrl);
+        const pathname = parsed.pathname || '';
+        if (pathname.match(/\.(png|jpg|jpeg|webp)$/i)) {
+          extension = `.${pathname.split('.').pop()}`;
+        }
+      } catch {
+        // ignore URL parsing failure and keep .jpg default
+      }
+
+      const fileName = `flyer_${flyer.id}_${Date.now()}${extension}`;
       const fileUri = `${baseDir}${fileName}`;
 
       console.log('Downloading flyer to local file:', fileUri);
@@ -286,6 +297,11 @@ export default function FlyersScreen() {
 
       if (!downloadResult?.uri) {
         throw new Error('Download failed - no URI returned');
+      }
+
+      const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
+      if (!fileInfo.exists) {
+        throw new Error('Downloaded file does not exist locally');
       }
 
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
@@ -299,9 +315,10 @@ export default function FlyersScreen() {
       }
 
       Alert.alert('Saved', 'Flyer was saved to your Photos.');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving flyer locally:', error);
-      Alert.alert('Error', 'Failed to save flyer to your device. Please try again.');
+      const message = error?.message ? `Failed to save flyer: ${error.message}` : 'Failed to save flyer to your device. Please try again.';
+      Alert.alert('Error', message);
     } finally {
       setIsDownloading(false);
     }

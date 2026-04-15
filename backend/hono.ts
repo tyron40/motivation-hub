@@ -276,7 +276,8 @@ const handleImageGenerate = async (c: Context) => {
       response_format: "url",
     });
 
-    const imageUrl = imageResponse.data[0]?.url;
+    const imageData = imageResponse.data;
+    const imageUrl = Array.isArray(imageData) ? imageData[0]?.url : undefined;
     if (!imageUrl) {
       throw new Error("No image URL returned from OpenAI");
     }

@@ -9,15 +9,17 @@ import {
   Animated,
   Share,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2 } from 'lucide-react-native';
+import { ChevronDown, Heart, Share2, Plus } from 'lucide-react-native';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
+import { usePlaylists } from '@/hooks/playlist-context';
 import * as Haptics from 'expo-haptics';
 
 
@@ -36,6 +38,7 @@ export default function PlayerScreen() {
     setDuration,
   } = useSpeechContext();
   const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition, isShowingAd } = useAdMob();
+  const { playlists, addToPlaylist } = usePlaylists();
   const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -165,6 +168,36 @@ export default function PlayerScreen() {
     }
   }, [handleProgressChange, canShowAds, showInterstitialAd]);
 
+  const handleAddToPlaylist = useCallback(async () => {
+    if (!currentSpeech) return;
+    if (!playlists.length) {
+      Alert.alert('No Playlists', 'Create a playlist first from the Playlists screen.');
+      return;
+    }
+
+    const options = playlists.map((playlist) => ({
+      text: playlist.name,
+      onPress: async () => {
+        try {
+          await addToPlaylist(playlist.id, currentSpeech.id);
+          Alert.alert('Saved', `"${currentSpeech.title}" was added to "${playlist.name}".`);
+        } catch (error) {
+          console.error('Error adding to playlist:', error);
+          Alert.alert('Error', 'Failed to add speech to playlist.');
+        }
+      },
+    }));
+
+    Alert.alert(
+      'Save to Playlist',
+      'Choose a playlist:',
+      [
+        ...options,
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }, [currentSpeech, playlists, addToPlaylist]);
+
   const handleShare = async () => {
     if (!currentSpeech) return;
     try {
@@ -292,6 +325,10 @@ export default function PlayerScreen() {
               ]}>
                 {currentSpeech.isFavorite ? 'Saved' : 'Save'}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={handleAddToPlaylist}>
+              <Plus color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
+              <Text style={styles.actionLabel}>Playlist</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={handleShare}>
               <Share2 color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
