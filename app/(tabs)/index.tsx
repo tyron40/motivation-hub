@@ -476,11 +476,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyersList: {
     paddingHorizontal: 20,
-    gap: 14,
+    gap: 10,
   },
   flyerPoster: {
-    width: 220,
-    height: 340,
+    width: 170,
+    height: 250,
     borderRadius: 18,
     overflow: 'hidden' as const,
     elevation: 6,
@@ -505,11 +505,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyerPosterQuote: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600' as const,
-    lineHeight: 21,
+    lineHeight: 18,
     fontStyle: 'italic' as const,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   flyerPosterAccentLine: {
     width: 32,
@@ -557,8 +557,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600' as const,
   },
   clipPoster: {
-    width: 260,
-    height: 170,
+    width: 210,
+    height: 136,
     borderRadius: 14,
     overflow: 'hidden' as const,
     elevation: 4,
@@ -570,7 +570,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   clipPosterGradient: {
     flex: 1,
     justifyContent: 'flex-end' as const,
-    padding: 12,
+    padding: 10,
   },
   clipPlayIcon: {
     position: 'absolute' as const,
@@ -586,13 +586,13 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   clipPosterTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600' as const,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   clipPosterChannel: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '500' as const,
     marginTop: 3,
   },
