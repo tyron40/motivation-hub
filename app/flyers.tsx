@@ -25,7 +25,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;

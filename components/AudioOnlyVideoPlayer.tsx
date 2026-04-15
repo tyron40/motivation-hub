@@ -135,6 +135,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     isPlayingRef.current = newState;
     setIsPlaying(newState);
     onPlayingChangeRef.current?.(newState);
+
+    if (Platform.OS !== 'web' && playerRef.current) {
+      try {
+        if (newState && typeof playerRef.current.playVideo === 'function') {
+          void playerRef.current.playVideo();
+        } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
+          void playerRef.current.pauseVideo();
+        }
+      } catch (err) {
+        console.log('Native direct play/pause command skipped:', err);
+      }
+    }
   }, []);
 
 

@@ -8,7 +8,8 @@
 - [x] Run targeted validation checks (tsc + runtime checks for flyer save/play-pause)
 - [x] Commit and push fixes to GitHub main
 - [x] Build updated iOS binary (remote build number 236)
-- [ ] Improve landing screen card sizing/layout to avoid oversized single-stacked visuals
-- [ ] Run tsc after landing screen UI updates
-- [ ] Commit and push landing screen updates
-- [ ] Submit latest iOS binary to App Store Connect
+- [ ] Fix Expo SDK54 flyer download deprecation (`expo-file-system` -> legacy/new API)
+- [ ] Ensure play/pause button is hard-synced to hidden YouTube player state/actions
+- [ ] Run tsc after flyer + play/pause sync fixes
+- [ ] Commit and push flyer/play-pause sync fixes
+- [ ] Trigger next iOS build/submission with latest fixes
