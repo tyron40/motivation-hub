@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
   Animated,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Switch } from 'react-native';
@@ -31,6 +32,8 @@ function ProfileContent() {
   const { colors } = useTheme();
   const [isInitialized, setIsInitialized] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingName, setEditingName] = useState('');
   const { user, signOut } = useAuth();
   const { profile: userProfileData, updateProfile } = useUserProfile();
   const { entitlements } = useIAP();
@@ -112,8 +115,24 @@ function ProfileContent() {
     );
   }, [signOut]);
 
-  const displayName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const displayName = userProfileData?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const displayEmail = user?.email || '';
+
+  useEffect(() => {
+    setEditingName(displayName);
+  }, [displayName]);
+
+  const saveName = useCallback(async () => {
+    const trimmed = editingName.trim();
+    if (!trimmed) {
+      Alert.alert('Invalid Name', 'Please enter a valid name.');
+      return;
+    }
+
+    await updateProfile({ name: trimmed });
+    setIsEditingName(false);
+    Alert.alert('Updated', 'Your profile name has been updated.');
+  }, [editingName, updateProfile]);
   
   const styles = getStyles(colors);
   
@@ -152,7 +171,25 @@ function ProfileContent() {
                   <Camera color="#fff" size={14} />
                 </View>
               </TouchableOpacity>
-              <Text style={styles.name}>{displayName}</Text>
+              {isEditingName ? (
+                <View style={styles.nameEditorRow}>
+                  <TextInput
+                    value={editingName}
+                    onChangeText={setEditingName}
+                    style={styles.nameInput}
+                    placeholder="Enter your name"
+                    placeholderTextColor={colors.textSecondary}
+                    maxLength={40}
+                  />
+                  <TouchableOpacity style={styles.nameSaveButton} onPress={saveName} activeOpacity={0.8}>
+                    <Text style={styles.nameSaveButtonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => setIsEditingName(true)} activeOpacity={0.8}>
+                  <Text style={styles.name}>{displayName}</Text>
+                </TouchableOpacity>
+              )}
               <Text style={styles.email}>{displayEmail}</Text>
 
               {entitlements.isPremium && (
@@ -457,6 +494,37 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 24,
     fontWeight: '700' as const,
     letterSpacing: -0.5,
+  },
+  nameEditorRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginTop: 2,
+  },
+  nameInput: {
+    minWidth: 170,
+    maxWidth: 230,
+    borderWidth: 1,
+    borderColor: colors.primary + '55',
+    backgroundColor: colors.cardBackground,
+    color: colors.text,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
+  },
+  nameSaveButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  nameSaveButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700' as const,
   },
   email: {
     color: colors.textSecondary,

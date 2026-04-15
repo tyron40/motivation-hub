@@ -68,14 +68,17 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
   // Save profile to storage
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     try {
-      const newProfile = { ...profile, ...updates };
-      setProfile(newProfile);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(newProfile));
-      console.log('✅ User profile updated:', newProfile);
+      setProfile((prev) => {
+        const next = { ...prev, ...updates };
+        void AsyncStorage.setItem(storageKey, JSON.stringify(next))
+          .then(() => console.log('✅ User profile updated:', next))
+          .catch((error) => console.error('Error saving user profile:', error));
+        return next;
+      });
     } catch (error) {
       console.error('Error saving user profile:', error);
     }
-  }, [profile, storageKey]);
+  }, [storageKey]);
 
   return useMemo(() => ({
     profile,

@@ -153,7 +153,7 @@ export default function AuthScreen() {
                 </View>
 
                 <View style={styles.featuresGrid}>
-                  <View style={styles.featureCard}>
+                  <View style={[styles.featureCard, styles.featureCardFull]}>
                     <View style={[styles.featureIconCircle, { backgroundColor: 'rgba(108, 92, 231, 0.15)' }]}>
                       <Mic color="#6C5CE7" size={22} />
                     </View>
@@ -427,7 +427,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 10,
+    rowGap: 10,
+    columnGap: 10,
   },
   featureCard: {
     width: '48.5%',
@@ -439,6 +440,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     minHeight: 180,
+  },
+  featureCardFull: {
+    width: '100%',
+    minHeight: 160,
   },
   featureIconCircle: {
     width: 56,

@@ -308,12 +308,13 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const playPauseLockedRef = useRef(false);
 
   const playPause = useCallback(() => {
+    // Much shorter lock window to prevent accidental double taps
+    // while still allowing responsive user control.
     if (playPauseLockedRef.current) {
-      console.log('🎵 Play/pause locked, ignoring rapid tap');
       return;
     }
     playPauseLockedRef.current = true;
-    setTimeout(() => { playPauseLockedRef.current = false; }, 1000);
+    setTimeout(() => { playPauseLockedRef.current = false; }, 180);
 
     const newState = !isPlayingRef.current;
     console.log('🎵 Toggle play/pause:', isPlayingRef.current, '->', newState);
