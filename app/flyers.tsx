@@ -27,8 +27,8 @@ import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 52) / 2);
-const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.45);
+const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 40) / 2);
+const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.52);
 
 const LIKED_FLYERS_KEY_PREFIX = 'liked_flyers:';
 
@@ -517,7 +517,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   grid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 16,
     paddingBottom: 100,
   },
@@ -526,7 +526,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     height: CARD_HEIGHT,
     borderRadius: 18,
     overflow: 'hidden' as const,
-    marginBottom: 14,
+    marginBottom: 16,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -534,10 +534,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 8,
   },
   cardLeft: {
-    marginRight: 7,
+    marginRight: 8,
   },
   cardRight: {
-    marginLeft: 7,
+    marginLeft: 8,
   },
   cardImage: {
     width: '100%' as const,

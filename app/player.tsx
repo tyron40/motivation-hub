@@ -58,13 +58,6 @@ export default function PlayerScreen() {
       void tryShowInterstitialOnTransition();
     }
     return () => {
-      try {
-        if (localPlayerRef.current) {
-          localPlayerRef.current.pause();
-        }
-      } catch (err) {
-        console.warn('Failed to pause player on leave:', err);
-      }
       audioPlayerRef.current = null;
     };
   }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);

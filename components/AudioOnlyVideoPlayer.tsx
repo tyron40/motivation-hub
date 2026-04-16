@@ -133,10 +133,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
 
+    isPlayingRef.current = newState;
+    setIsPlaying(newState);
+    onPlayingChangeRef.current?.(newState);
+
     if (Platform.OS === 'web') {
-      isPlayingRef.current = newState;
-      setIsPlaying(newState);
-      onPlayingChangeRef.current?.(newState);
       return;
     }
 
@@ -146,23 +147,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           await playerRef.current.playVideo();
         } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
           await playerRef.current.pauseVideo();
-        } else {
-          isPlayingRef.current = newState;
-          setIsPlaying(newState);
-          onPlayingChangeRef.current?.(newState);
         }
       } catch (err) {
-        console.log('Native direct play/pause command failed, falling back to UI state:', err);
-        isPlayingRef.current = newState;
-        setIsPlaying(newState);
-        onPlayingChangeRef.current?.(newState);
+        console.log('Native direct play/pause command failed:', err);
       }
-      return;
     }
-
-    isPlayingRef.current = newState;
-    setIsPlaying(newState);
-    onPlayingChangeRef.current?.(newState);
   }, []);
 
 

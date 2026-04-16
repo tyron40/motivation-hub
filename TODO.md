@@ -1,7 +1,7 @@
-- [ ] Implement real RevenueCat purchase/restore flow in hooks/iap-context.tsx
-- [ ] Add safe fallback for unsupported environments only (web/Expo Go)
-- [ ] Sync entitlements/credits from RevenueCat customer info
-- [ ] Update app version to 1.1.11
-- [ ] Run TypeScript validation (bunx tsc --noEmit)
-- [ ] Commit and push changes
-- [ ] Build iOS production and submit to App Store
+# TODO
+
+- [ ] Increase flyer card sizes in `app/flyers.tsx`
+- [ ] Fix play/pause command reliability with hidden YouTube in `components/AudioOnlyVideoPlayer.tsx`
+- [ ] Keep speech playback active when minimizing/leaving player screen in `app/player.tsx`
+- [ ] Run TypeScript check (`bunx tsc --noEmit`)
+- [ ] Run critical-path validation for flyer size, playback controls, background/minimized playback, and seek/next/prev
