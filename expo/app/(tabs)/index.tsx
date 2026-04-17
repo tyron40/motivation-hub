@@ -289,7 +289,7 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={[...motivationalFlyers, ...customFlyers].slice(0, 7)}
+              data={[...motivationalFlyers, ...customFlyers]}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
@@ -476,11 +476,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyersList: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 14,
   },
   flyerPoster: {
-    width: 170,
-    height: 250,
+    width: 220,
+    height: 340,
     borderRadius: 18,
     overflow: 'hidden' as const,
     elevation: 6,
@@ -505,11 +505,11 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyerPosterQuote: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600' as const,
-    lineHeight: 18,
+    lineHeight: 21,
     fontStyle: 'italic' as const,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   flyerPosterAccentLine: {
     width: 32,
@@ -557,8 +557,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600' as const,
   },
   clipPoster: {
-    width: 210,
-    height: 136,
+    width: 260,
+    height: 170,
     borderRadius: 14,
     overflow: 'hidden' as const,
     elevation: 4,
@@ -570,7 +570,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   clipPosterGradient: {
     flex: 1,
     justifyContent: 'flex-end' as const,
-    padding: 10,
+    padding: 12,
   },
   clipPlayIcon: {
     position: 'absolute' as const,
@@ -586,13 +586,13 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   clipPosterTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600' as const,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   clipPosterChannel: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '500' as const,
     marginTop: 3,
   },

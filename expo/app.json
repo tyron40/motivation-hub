@@ -2,7 +2,7 @@
   "expo": {
     "name": "Motivation Fuel",
     "slug": "motivational-app",
-    "version": "1.1.11",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "243",
+      "buildNumber": "124",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -54,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tyron40.motivationalapp",
-      "versionCode": 243,
+      "versionCode": 124,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
@@ -86,15 +86,7 @@
           "photosPermission": "Motivation Fuel lets you personalize your profile by selecting a photo from your library.",
           "cameraPermission": "Motivation Fuel allows you to take a new photo for your profile picture."
         }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-7788769813708919~4966903177",
-          "iosAppId": "ca-app-pub-7788769813708919~4966903177"
-        }
-      ],
-      "./plugins/with-appdelegate-rctbridge-fix.js"
+      ]
     ],
     "extra": {
       "eas": {

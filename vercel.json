@@ -1,0 +1,10 @@
+{
+  "installCommand": "bun install",
+  "buildCommand": "bunx expo export --platform web",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    }
+  ]
+}
