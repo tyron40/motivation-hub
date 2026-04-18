@@ -130,7 +130,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
-    console.log('requestPlayState:', isPlayingRef.current, '->', newState);
+    if (Platform.OS !== 'web' && !playerRef.current) return;
+
+    console.log('requestPlayState:', newState);
     desiredPlayRef.current = newState;
 
     isPlayingRef.current = newState;
@@ -141,16 +143,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
 
-    if (playerRef.current) {
-      try {
-        if (newState && typeof playerRef.current.playVideo === 'function') {
-          await playerRef.current.playVideo();
-        } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
-          await playerRef.current.pauseVideo();
-        }
-      } catch (err) {
-        console.log('Native direct play/pause command failed:', err);
+    try {
+      if (newState && typeof playerRef.current.playVideo === 'function') {
+        await playerRef.current.playVideo();
+      } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
+        await playerRef.current.pauseVideo();
       }
+    } catch (err) {
+      console.log('Direct play/pause failed:', err);
     }
   }, []);
 
@@ -424,6 +424,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     const kickPlay = () => {
       if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+      if (manualPauseRef.current) return;
       desiredPlayRef.current = true;
       requestPlayState(true);
     };
@@ -522,16 +523,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       });
 
       if (Platform.OS !== 'web') {
-        void runForcedAutoplaySeek();
+        if (!manualPauseRef.current) {
+          void runForcedAutoplaySeek();
+        }
 
         if (!autoplayPulseDoneRef.current) {
           autoplayPulseDoneRef.current = true;
-          requestPlayState(true);
+          if (!manualPauseRef.current) {
+            requestPlayState(true);
+          }
           autoplayPulseTimerRef.current = setTimeout(() => {
             if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+            if (manualPauseRef.current) return;
             requestPlayState(false);
             setTimeout(() => {
               if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+              if (manualPauseRef.current) return;
               requestPlayState(true);
             }, 180);
           }, 220);
@@ -658,8 +665,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handlePlayPause = useCallback(() => {
-    if (playerError || !playerReady) {
+  const handlePlayPause = useCallback(async () => {
+    if (!playerReady || playerError) {
       console.log('Player not ready for play/pause');
       return;
     }
@@ -667,32 +674,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const nextState = !isPlayingRef.current;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
+    console.log('BUTTON CLICK:', nextState ? 'PLAY' : 'PAUSE');
+
+    manualPauseRef.current = !nextState;
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
     desiredPlayRef.current = nextState;
-    manualPauseRef.current = !nextState;
 
-    try {
-      void requestPlayState(nextState);
-
-      if (!nextState) {
-        stopProgressTracking();
-      } else {
-        startProgressTracking();
-      }
-    } catch (err) {
-      console.error('Manual play/pause failed:', err);
-    }
-  }, [
-    playerError,
-    playerReady,
-    clearAutoplayTimer,
-    requestPlayState,
-    stopProgressTracking,
-    startProgressTracking,
-  ]);
+    await requestPlayState(nextState);
+  }, [playerReady, playerError, clearAutoplayTimer, requestPlayState]);
 
   useEffect(() => {
     wasPlayingBeforeAdRef.current = isPlayingRef.current;
@@ -880,7 +871,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         videoId={videoId}
         height={1}
         width={1}
-        play={isPlaying}
+        play={false}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
         onError={onPlayerError}
