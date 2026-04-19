@@ -479,8 +479,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     gap: 10,
   },
   flyerPoster: {
-    width: 192,
-    height: 282,
+    width: 170,
+    height: 250,
     borderRadius: 18,
     overflow: 'hidden' as const,
     elevation: 6,
