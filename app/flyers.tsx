@@ -13,30 +13,29 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
-  Share,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Share2, Heart, Quote, Plus, Trash2, X, ImagePlus, Camera, Upload, Download } from 'lucide-react-native';
+import { ArrowLeft, Heart, Quote, Plus, Trash2, X, ImagePlus, Camera, Upload } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
+import { useAuth } from '@/hooks/auth-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 52) / 2);
-const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.45);
+const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 40) / 2);
+const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.52);
 
-const LIKED_FLYERS_KEY = 'liked_flyers';
+const LIKED_FLYERS_KEY_PREFIX = 'liked_flyers:';
 
 export default function FlyersScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { isAdmin, customFlyers, addFlyer, removeFlyer } = useAdmin();
   const [selectedFlyer, setSelectedFlyer] = useState<MotivationalFlyer | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -45,24 +44,31 @@ export default function FlyersScreen() {
   const [newQuote, setNewQuote] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [isPickingImage, setIsPickingImage] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [supabaseFlyers, setSupabaseFlyers] = useState<MotivationalFlyer[]>([]);
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
+
+  const likedFlyersKey = React.useMemo(
+    () => `${LIKED_FLYERS_KEY_PREFIX}${user?.id ?? 'guest'}`,
+    [user?.id]
+  );
 
   useEffect(() => {
     const loadLikedIds = async () => {
       try {
-        const stored = await AsyncStorage.getItem(LIKED_FLYERS_KEY);
+        const stored = await AsyncStorage.getItem(likedFlyersKey);
         if (stored) {
           const parsed = JSON.parse(stored) as string[];
           setLikedIds(new Set(parsed));
+        } else {
+          setLikedIds(new Set());
         }
       } catch (error) {
         console.error('Error loading liked flyers:', error);
+        setLikedIds(new Set());
       }
     };
     void loadLikedIds();
-  }, []);
+  }, [likedFlyersKey]);
 
   useEffect(() => {
     const fetchSupabaseFlyers = async () => {
@@ -104,11 +110,11 @@ export default function FlyersScreen() {
 
   const saveLikedIds = useCallback(async (ids: Set<string>) => {
     try {
-      await AsyncStorage.setItem(LIKED_FLYERS_KEY, JSON.stringify(Array.from(ids)));
+      await AsyncStorage.setItem(likedFlyersKey, JSON.stringify(Array.from(ids)));
     } catch (error) {
       console.error('Error saving liked flyers:', error);
     }
-  }, []);
+  }, [likedFlyersKey]);
 
   const pickImageFromGallery = useCallback(async () => {
     try {
@@ -250,128 +256,6 @@ export default function FlyersScreen() {
     setShowAddModal(false);
   }, [newTitle, newQuote, newImageUrl, addFlyer]);
 
-  const handleDownloadFlyer = useCallback(async (flyer: MotivationalFlyer) => {
-    if (isDownloading) return;
-    setIsDownloading(true);
-
-    try {
-      if (Platform.OS === 'web') {
-        const link = document.createElement('a');
-        link.href = flyer.imageUrl;
-        link.target = '_blank';
-        link.download = `${flyer.title.replace(/\s+/g, '_')}.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        Alert.alert('Downloaded', 'Flyer download started.');
-        return;
-      }
-
-      if (!flyer.imageUrl) {
-        throw new Error('Missing flyer image URL');
-      }
-
-      const permission = await MediaLibrary.requestPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Required', 'Please allow Photos access to save flyers.');
-        return;
-      }
-
-      const fsAny = FileSystem as any;
-      const baseDir =
-        fsAny.cacheDirectory ??
-        fsAny.documentDirectory ??
-        `${fsAny.documentDirectory || 'file:///'}tmp/`;
-
-      console.log('FileSystem.cacheDirectory:', fsAny.cacheDirectory);
-      console.log('FileSystem.documentDirectory:', fsAny.documentDirectory);
-      console.log('Using baseDir:', baseDir);
-
-      if (!baseDir || typeof baseDir !== 'string') {
-        throw new Error('No writable local directory available');
-      }
-
-      const cleanName = (flyer.title || 'flyer').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const fileUri = `${baseDir}${cleanName}_${Date.now()}.jpg`;
-
-      console.log('Downloading flyer:', flyer.imageUrl);
-      console.log('Saving to:', fileUri);
-
-      try {
-        const headResponse = await fetch(flyer.imageUrl, { method: 'HEAD' });
-        if (!headResponse.ok) {
-          console.warn('HEAD check failed status:', headResponse.status);
-        } else {
-          const contentType = headResponse.headers.get('content-type') || '';
-          if (contentType && !contentType.startsWith('image/')) {
-            throw new Error(`URL is not an image response (${contentType})`);
-          }
-        }
-      } catch (precheckError) {
-        console.log('HEAD precheck skipped/failed:', precheckError);
-      }
-
-      const downloadResult = await FileSystem.downloadAsync(flyer.imageUrl, fileUri);
-
-      if (!downloadResult?.uri) {
-        throw new Error('Download returned no local file');
-      }
-
-      const statusCode = (downloadResult as any).status;
-      if (typeof statusCode === 'number' && statusCode >= 400) {
-        throw new Error(`Download request failed with status ${statusCode}`);
-      }
-
-      const fileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
-      if (!fileInfo.exists) {
-        throw new Error('Downloaded file does not exist');
-      }
-
-      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-      const albumName = 'Motivation Fuel';
-      const existingAlbum = await MediaLibrary.getAlbumAsync(albumName);
-
-      if (existingAlbum) {
-        await MediaLibrary.addAssetsToAlbumAsync([asset], existingAlbum, false);
-      } else {
-        await MediaLibrary.createAlbumAsync(albumName, asset, false);
-      }
-
-      Alert.alert('Saved', 'Flyer was saved to your Photos.');
-    } catch (error: any) {
-      console.error('Error saving flyer locally:', error);
-      const message = error?.message ? `Failed to save flyer: ${error.message}` : 'Failed to save flyer to your device. Please try again.';
-      Alert.alert('Error', message);
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [isDownloading]);
-
-  const handleShareFlyer = useCallback(async (flyer: MotivationalFlyer) => {
-    try {
-      const message = `Check out this motivational flyer: "${flyer.title}"${flyer.quote ? `\n\n"${flyer.quote}"` : ''}`;
-      
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({
-            title: flyer.title,
-            text: message,
-            url: flyer.imageUrl,
-          });
-        } else {
-          await navigator.clipboard.writeText(message);
-          Alert.alert('Copied', 'Flyer info copied to clipboard.');
-        }
-      } else {
-        await Share.share({
-          message,
-          url: flyer.imageUrl,
-        });
-      }
-    } catch (error) {
-      console.error('Error sharing flyer:', error);
-    }
-  }, []);
 
   const handleDeleteFlyer = useCallback((id: string) => {
     Alert.alert('Delete Flyer', 'Are you sure you want to remove this flyer?', [
@@ -498,25 +382,6 @@ export default function FlyersScreen() {
                           color={likedIds.has(selectedFlyer.id) ? '#E84393' : '#fff'}
                           fill={likedIds.has(selectedFlyer.id) ? '#E84393' : 'transparent'}
                         />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.modalActionBtn}
-                        onPress={() => handleDownloadFlyer(selectedFlyer)}
-                        activeOpacity={0.7}
-                        disabled={isDownloading}
-                      >
-                        {isDownloading ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Download size={20} color="#fff" />
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.modalActionBtn}
-                        onPress={() => handleShareFlyer(selectedFlyer)}
-                        activeOpacity={0.7}
-                      >
-                        <Share2 size={20} color="#fff" />
                       </TouchableOpacity>
                     </View>
                   </LinearGradient>
@@ -652,7 +517,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   grid: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 16,
     paddingBottom: 100,
   },
@@ -661,7 +526,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     height: CARD_HEIGHT,
     borderRadius: 18,
     overflow: 'hidden' as const,
-    marginBottom: 14,
+    marginBottom: 16,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -669,10 +534,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 8,
   },
   cardLeft: {
-    marginRight: 7,
+    marginRight: 8,
   },
   cardRight: {
-    marginLeft: 7,
+    marginLeft: 8,
   },
   cardImage: {
     width: '100%' as const,

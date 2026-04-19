@@ -2,10 +2,18 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
+import Purchases, { LOG_LEVEL, PurchasesPackage } from 'react-native-purchases';
+import Constants from 'expo-constants';
 import { IAPProductId, ALL_VOICES, IAP_PRODUCT_IDS } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
 const isWeb = Platform.OS === 'web';
+const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+
+const REVENUECAT_API_KEY =
+  Platform.OS === 'ios'
+    ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
+    : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
 
 interface Entitlements {
   credits: number;
@@ -37,8 +45,38 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const isDemoAccount = user?.email === 'demo@motivationhub.app';
 
   useEffect(() => {
-    console.log('⚠️ RevenueCat not available in Expo Go - IAP features disabled');
-    setIsConfigured(true);
+    const configureRevenueCat = async () => {
+      try {
+        if (!isNative) {
+          console.log('ℹ️ RevenueCat disabled on web');
+          setIsConfigured(false);
+          return;
+        }
+
+        const appOwnership = Constants.appOwnership;
+        if (appOwnership === 'expo') {
+          console.log('⚠️ RevenueCat not available in Expo Go');
+          setIsConfigured(false);
+          return;
+        }
+
+        if (!REVENUECAT_API_KEY) {
+          console.error('❌ Missing RevenueCat API key');
+          setIsConfigured(false);
+          return;
+        }
+
+        Purchases.setLogLevel(LOG_LEVEL.INFO);
+        await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+        console.log('✅ RevenueCat configured');
+        setIsConfigured(true);
+      } catch (error) {
+        console.error('❌ Failed to configure RevenueCat:', error);
+        setIsConfigured(false);
+      }
+    };
+
+    void configureRevenueCat();
   }, []);
 
   const loadEntitlements = useCallback(async () => {
@@ -133,14 +171,84 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, [entitlements, saveEntitlements]);
 
   const purchase = useCallback(async (productId: IAPProductId) => {
-    console.log('⚠️ In-app purchases not available in Expo Go');
-    Alert.alert('Not Available', 'In-app purchases are only available in production builds.');
-  }, []);
+    if (!isConfigured) {
+      Alert.alert('Not Available', 'In-app purchases are not configured for this environment.');
+      return;
+    }
+
+    try {
+      setIsPurchasing(true);
+
+      const offerings = await Purchases.getOfferings();
+      const current = offerings.current;
+      if (!current) {
+        throw new Error('No current offering found');
+      }
+
+      const pkg = current.availablePackages.find((p: PurchasesPackage) => p.product.identifier === productId);
+      if (!pkg) {
+        throw new Error(`Product not found in current offering: ${productId}`);
+      }
+
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+
+      let updated = { ...entitlements };
+
+      if (productId === IAP_PRODUCT_IDS.CREDITS_100) updated.credits += 100;
+      if (productId === IAP_PRODUCT_IDS.CREDITS_500) updated.credits += 500;
+      if (productId === IAP_PRODUCT_IDS.CREDITS_1000) updated.credits += 1000;
+
+      const premiumActive = !!(
+        customerInfo.entitlements.active['premium'] ||
+        customerInfo.entitlements.active['Premium']
+      );
+
+      if (premiumActive) {
+        updated.isPremium = true;
+        updated.premiumExpiresAt = null;
+      }
+
+      await saveEntitlements(updated);
+      Alert.alert('Purchase Successful', 'Your purchase has been applied.');
+    } catch (error: any) {
+      if (error?.userCancelled) return;
+      console.error('❌ Purchase failed:', error);
+      Alert.alert('Purchase Failed', error?.message ?? 'Unable to complete purchase.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  }, [isConfigured, entitlements, saveEntitlements]);
 
   const restorePurchases = useCallback(async () => {
-    console.log('⚠️ Purchase restoration not available in Expo Go');
-    Alert.alert('Not Available', 'Purchase restoration is only available in production builds.');
-  }, []);
+    if (!isConfigured) {
+      Alert.alert('Not Available', 'Purchase restoration is not configured for this environment.');
+      return;
+    }
+
+    try {
+      setIsRestoring(true);
+      const customerInfo = await Purchases.restorePurchases();
+
+      const premiumActive = !!(
+        customerInfo.entitlements.active['premium'] ||
+        customerInfo.entitlements.active['Premium']
+      );
+
+      const restored: Entitlements = {
+        ...entitlements,
+        isPremium: premiumActive,
+        premiumExpiresAt: premiumActive ? null : entitlements.premiumExpiresAt,
+      };
+
+      await saveEntitlements(restored);
+      Alert.alert('Restored', 'Purchases restored successfully.');
+    } catch (error: any) {
+      console.error('❌ Restore failed:', error);
+      Alert.alert('Restore Failed', error?.message ?? 'Unable to restore purchases.');
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [isConfigured, entitlements, saveEntitlements]);
 
   const usageStats: UsageStats = useMemo(() => {
     const isPremiumActive = entitlements.isPremium && 
