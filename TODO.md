@@ -1,9 +1,11 @@
-# AdMob Fix TODO
+# Ad Trigger Verification TODO
 
-- [x] Verify current AdManager implementation state
-- [x] Verify wiring/import usage across contexts
-- [x] Replace `lib/AdManager.ts` stub with real AdMob implementation
-- [x] Replace `expo/lib/AdManager.ts` stub with real AdMob implementation
-- [ ] Validate TypeScript/build sanity
-- [ ] Commit and push to `main`
-- [ ] Trigger iOS build + App Store submission
+- [x] Verify AdManager is initialized via global provider mount
+- [x] Confirm root cause of 0 requests (banner component returns null)
+- [x] Implement functional `components/AdBanner.tsx` with production unit ID
+- [x] Trace ad trigger callsites in speeches, short videos, and chat screens
+- [x] Wire missing trigger calls to `useAdMob()` methods
+- [x] Add minimal debug logs/counters for trigger visibility
+- [ ] Run critical-path runtime checks (init/load/show/close/reward)
+- [ ] Commit and push fixes to `main`
+- [ ] Build and submit updated iOS build if requested
