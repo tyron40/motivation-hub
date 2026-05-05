@@ -83,6 +83,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playerPlayCommand, setPlayerPlayCommand] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -133,25 +134,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
 
-    isPlayingRef.current = newState;
-    setIsPlaying(newState);
-    onPlayingChangeRef.current?.(newState);
-
     if (Platform.OS === 'web') {
+      postMessageToWebPlayerRef.current?.(newState ? 'playVideo' : 'pauseVideo');
       return;
     }
 
-    if (playerRef.current) {
-      try {
-        if (newState && typeof playerRef.current.playVideo === 'function') {
-          await playerRef.current.playVideo();
-        } else if (!newState && typeof playerRef.current.pauseVideo === 'function') {
-          await playerRef.current.pauseVideo();
-        }
-      } catch (err) {
-        console.log('Native direct play/pause command failed:', err);
-      }
-    }
+    setPlayerPlayCommand(newState);
   }, []);
 
 
@@ -605,6 +593,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayInProgressRef.current = false;
       clearAutoplayTimer();
       isPlayingRef.current = true;
+      setPlayerPlayCommand(true);
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);
       startProgressTracking();
@@ -614,6 +603,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (state === 'paused') {
       if (!autoplayInProgressRef.current) {
         isPlayingRef.current = false;
+        setPlayerPlayCommand(false);
         setIsPlaying(false);
         onPlayingChangeRef.current?.(false);
         stopProgressTracking();
@@ -629,6 +619,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       onEndCalledRef.current = true;
       autoplayInProgressRef.current = false;
       isPlayingRef.current = false;
+      setPlayerPlayCommand(false);
       setIsPlaying(false);
       stopProgressTracking();
       setCurrentTime(0);
@@ -758,6 +749,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const postMessageToWebPlayerRef = useRef<((command: string, args?: any) => void) | null>(null);
   const webPlayerReadyRef = useRef(false);
   const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -771,6 +763,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('Error posting message to web player:', e);
     }
   }, []);
+
+  useEffect(() => {
+    postMessageToWebPlayerRef.current = postMessageToWebPlayer;
+  }, [postMessageToWebPlayer]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -880,7 +876,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         videoId={videoId}
         height={1}
         width={1}
-        play={isPlaying}
+        play={playerPlayCommand}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
         onError={onPlayerError}
