@@ -61,6 +61,8 @@ class AdManager {
   private onRewardEarned: ((reward: any) => void) | null = null;
   private interstitialRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private rewardedRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private interstitialCloseResolver: ((shown: boolean) => void) | null = null;
+  private interstitialCloseTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {}
 
@@ -136,6 +138,7 @@ class AdManager {
         this.log('Interstitial ad failed to load ❌', error);
         this.state.isInterstitialReady = false;
         this.state.isInterstitialLoading = false;
+        this.resolveInterstitialClose(false);
         this.scheduleInterstitialRetry();
       });
 
@@ -143,11 +146,13 @@ class AdManager {
         this.log('Interstitial ad dismissed');
         this.state.isInterstitialReady = false;
         this.state.isInterstitialLoading = false;
+        this.resolveInterstitialClose(true);
         this.preloadInterstitial();
       });
 
       const onOpened = ad.addAdEventListener(AdEventType.OPENED, () => {
         this.log('Interstitial ad shown');
+        this.state.lastInterstitialShownAt = Date.now();
       });
 
       this.interstitialListeners = [onLoaded, onError, onClosed, onOpened];
@@ -183,6 +188,18 @@ class AdManager {
     this.interstitialListeners = [];
   }
 
+  private resolveInterstitialClose(shown: boolean) {
+    if (this.interstitialCloseTimeout) {
+      clearTimeout(this.interstitialCloseTimeout);
+      this.interstitialCloseTimeout = null;
+    }
+    if (this.interstitialCloseResolver) {
+      const resolver = this.interstitialCloseResolver;
+      this.interstitialCloseResolver = null;
+      resolver(shown);
+    }
+  }
+
   canShowInterstitial(): boolean {
     if (!this.state.isInterstitialReady) return false;
     const elapsed = Date.now() - this.state.lastInterstitialShownAt;
@@ -213,14 +230,22 @@ class AdManager {
 
     try {
       this.log('Showing interstitial ad...');
+      const closedPromise = new Promise<boolean>((resolve) => {
+        this.interstitialCloseResolver = resolve;
+        this.interstitialCloseTimeout = setTimeout(() => {
+          this.log('Interstitial close wait timed out — continuing');
+          this.resolveInterstitialClose(true);
+        }, 120000);
+      });
+
       await this.interstitialAd.show();
-      this.state.lastInterstitialShownAt = Date.now();
       this.state.isInterstitialReady = false;
       this.resetInteractionCount();
-      return true;
+      return await closedPromise;
     } catch (error) {
       this.log('Error showing interstitial', error);
       this.state.isInterstitialReady = false;
+      this.resolveInterstitialClose(false);
       this.preloadInterstitial();
       return false;
     }
@@ -349,6 +374,9 @@ class AdManager {
     this.cleanupRewardedListeners();
     if (this.interstitialRetryTimer) clearTimeout(this.interstitialRetryTimer);
     if (this.rewardedRetryTimer) clearTimeout(this.rewardedRetryTimer);
+    if (this.interstitialCloseTimeout) clearTimeout(this.interstitialCloseTimeout);
+    this.interstitialCloseResolver = null;
+    this.interstitialCloseTimeout = null;
     this.interstitialAd = null;
     this.rewardedAd = null;
     this.isInitialized = false;

@@ -47,6 +47,7 @@ export default function PlayerScreen() {
   const openAdShownRef = useRef(false);
   const onEndLockedRef = useRef(false);
   const wasPlayingBeforeAdRef = useRef(false);
+  const pendingOpenAdResumeRef = useRef(false);
   const adJustFinishedRef = useRef(false);
   const styles = getStyles(colors);
 
@@ -54,8 +55,15 @@ export default function PlayerScreen() {
     setIsMinimized(false);
     if (!openAdShownRef.current && canShowAds) {
       openAdShownRef.current = true;
-      console.log('[Ad] Player opened — attempting interstitial');
-      void tryShowInterstitialOnTransition();
+      pendingOpenAdResumeRef.current = true;
+      localPlayerRef.current?.pause();
+      console.log('[Ad] Player opened — attempting interstitial before speech starts');
+      void tryShowInterstitialOnTransition().then(() => {
+        pendingOpenAdResumeRef.current = false;
+        setTimeout(() => {
+          localPlayerRef.current?.resumeAfterAd();
+        }, 400);
+      });
     }
     return () => {
       audioPlayerRef.current = null;
@@ -65,7 +73,8 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (isShowingAd) {
       console.log('[Ad] Ad started showing, saving play state');
-      wasPlayingBeforeAdRef.current = localPlayerRef.current?.getIsPlaying() ?? false;
+      wasPlayingBeforeAdRef.current = (localPlayerRef.current?.getIsPlaying() ?? false) || pendingOpenAdResumeRef.current;
+      localPlayerRef.current?.pause();
     } else if (wasPlayingBeforeAdRef.current) {
       console.log('[Ad] Ad finished, resuming playback');
       adJustFinishedRef.current = true;
