@@ -240,6 +240,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     autoplayWarmupDoneRef.current = false;
     autoplayPulseDoneRef.current = false;
     autoplayForceSeekDoneRef.current = false;
+    startupEndedRecoveryAttemptRef.current = 0;
+    if (startupAdRecoveryTimerRef.current) {
+      clearTimeout(startupAdRecoveryTimerRef.current);
+      startupAdRecoveryTimerRef.current = null;
+    }
     if (autoplayRetryTimerRef.current) {
       clearTimeout(autoplayRetryTimerRef.current);
       autoplayRetryTimerRef.current = null;
@@ -377,6 +382,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const autoplayWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoplayPulseDoneRef = useRef(false);
   const autoplayForceSeekDoneRef = useRef(false);
+  const startupAdRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupEndedRecoveryAttemptRef = useRef(0);
 
   const clearAutoplayTimer = useCallback(() => {
     if (autoplayRetryTimerRef.current) {
@@ -398,6 +405,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (autoplayWatchdogTimerRef.current) {
       clearTimeout(autoplayWatchdogTimerRef.current);
       autoplayWatchdogTimerRef.current = null;
+    }
+    if (startupAdRecoveryTimerRef.current) {
+      clearTimeout(startupAdRecoveryTimerRef.current);
+      startupAdRecoveryTimerRef.current = null;
     }
     autoplayInProgressRef.current = false;
   }, []);
@@ -612,6 +623,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'ended') {
+      const endedAtStartup = currentTimeRef.current < 2 && (desiredPlayRef.current || autoplayInProgressRef.current);
+      if (endedAtStartup && startupEndedRecoveryAttemptRef.current < 2) {
+        startupEndedRecoveryAttemptRef.current += 1;
+        console.log('[Autoplay] Ignoring premature startup ended state, likely preroll ad handoff');
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setPlayerPlayCommand(false);
+        stopProgressTracking();
+        if (startupAdRecoveryTimerRef.current) {
+          clearTimeout(startupAdRecoveryTimerRef.current);
+        }
+        startupAdRecoveryTimerRef.current = setTimeout(() => {
+          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+          if (manualPauseRef.current) return;
+          desiredPlayRef.current = true;
+          void requestPlayState(true);
+        }, 900);
+        return;
+      }
+
       if (onEndCalledRef.current) {
         console.log('onEnd already called for this video, ignoring');
         return;
@@ -637,7 +668,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } else if (state === 'unstarted') {
       console.log('[Autoplay] Player unstarted');
     }
-  }, [clearAutoplayTimer, startProgressTracking, stopProgressTracking]);
+  }, [autoplay, clearAutoplayTimer, requestPlayState, startProgressTracking, stopProgressTracking, videoId]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
