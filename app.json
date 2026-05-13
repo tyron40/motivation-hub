@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "247",
+      "buildNumber": "264",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -54,7 +54,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tyron40.motivationalapp",
-      "versionCode": 247,
+      "versionCode": 264,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
