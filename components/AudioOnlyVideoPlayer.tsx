@@ -629,13 +629,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (state === 'paused') {
       clearCommandWatchdog();
       lastRequestedStateRef.current = false;
-      if (!autoplayInProgressRef.current) {
-        isPlayingRef.current = false;
-        setPlayerPlayCommand(false);
-        setIsPlaying(false);
-        onPlayingChangeRef.current?.(false);
-        stopProgressTracking();
-      }
+      // Always trust real player paused state (prevents UI-only pause masking)
+      autoplayInProgressRef.current = false;
+      isPlayingRef.current = false;
+      setPlayerPlayCommand(false);
+      setIsPlaying(false);
+      onPlayingChangeRef.current?.(false);
+      stopProgressTracking();
       return;
     }
 

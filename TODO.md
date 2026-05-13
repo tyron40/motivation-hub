@@ -1,6 +1,4 @@
-- [x] Create `scripts/git-safe.ps1` lock-recovery + single-command wrapper
-- [x] Create `scripts/git-safe-add-commit-push.ps1` preset workflow wrapper
-- [x] Update `package.json` scripts (`git:safe`, `git:acp`)
-- [ ] Update `GIT_COMMIT_INSTRUCTIONS.md` with wrapper usage
-- [ ] Run dry test with wrapper (`git status`)
-- [ ] Run critical-path wrapper test (`add/commit/push`)
+- [x] Update AudioOnlyVideoPlayer play/pause state synchronization to follow actual YouTube player state
+- [x] Keep manual play/pause commands imperative + prop-driven without UI-only masking
+- [x] Validate no unrelated files changed
+- [ ] Run critical-path verification for play/pause behavior
