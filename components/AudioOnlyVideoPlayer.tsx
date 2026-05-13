@@ -128,11 +128,33 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const desiredPlayRef = useRef(false);
   const wasPlayingBeforeAdRef = useRef(false);
   const manualPauseRef = useRef(false);
+  const lastRequestedStateRef = useRef<boolean | null>(null);
+  const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCommandWatchdog = useCallback(() => {
+    if (commandWatchdogRef.current) {
+      clearTimeout(commandWatchdogRef.current);
+      commandWatchdogRef.current = null;
+    }
+  }, []);
+
+  const sendNativeImperativeCommand = useCallback((newState: boolean) => {
+    try {
+      if (!playerRef.current) return;
+      const fn = newState ? playerRef.current.playVideo : playerRef.current.pauseVideo;
+      if (typeof fn === 'function') {
+        fn.call(playerRef.current);
+      }
+    } catch (e) {
+      console.log('Imperative player command failed:', e);
+    }
+  }, []);
 
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
+    lastRequestedStateRef.current = newState;
 
     if (Platform.OS === 'web') {
       postMessageToWebPlayerRef.current?.(newState ? 'playVideo' : 'pauseVideo');
@@ -140,7 +162,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     setPlayerPlayCommand(newState);
-  }, []);
+    sendNativeImperativeCommand(newState);
+  }, [sendNativeImperativeCommand]);
 
 
   useImperativeHandle(ref, () => ({
@@ -223,12 +246,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     return () => {
+      clearCommandWatchdog();
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
         progressInterval.current = null;
       }
     };
-  }, []);
+  }, [clearCommandWatchdog]);
 
   useEffect(() => {
     activeVideoIdRef.current = videoId;
@@ -590,6 +614,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
     if (state === 'playing') {
+      clearCommandWatchdog();
+      lastRequestedStateRef.current = true;
       autoplayInProgressRef.current = false;
       clearAutoplayTimer();
       isPlayingRef.current = true;
@@ -601,6 +627,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'paused') {
+      clearCommandWatchdog();
+      lastRequestedStateRef.current = false;
       if (!autoplayInProgressRef.current) {
         isPlayingRef.current = false;
         setPlayerPlayCommand(false);
@@ -637,7 +665,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } else if (state === 'unstarted') {
       console.log('[Autoplay] Player unstarted');
     }
-  }, [clearAutoplayTimer, startProgressTracking, stopProgressTracking]);
+  }, [clearAutoplayTimer, clearCommandWatchdog, startProgressTracking, stopProgressTracking]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -663,10 +691,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
     desiredPlayRef.current = nextState;
+    lastRequestedStateRef.current = nextState;
     manualPauseRef.current = !nextState;
 
     try {
       void requestPlayState(nextState);
+
+      clearCommandWatchdog();
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        const actual = isPlayingRef.current;
+        if (actual !== nextState) {
+          console.log('[PlayPause] Watchdog retry imperative command:', nextState);
+          sendNativeImperativeCommand(nextState);
+        }
+      }, 350);
 
       if (!nextState) {
         stopProgressTracking();
@@ -680,7 +719,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     playerError,
     playerReady,
     clearAutoplayTimer,
+    clearCommandWatchdog,
     requestPlayState,
+    sendNativeImperativeCommand,
     stopProgressTracking,
     startProgressTracking,
   ]);
