@@ -1,5 +1,9 @@
-- [ ] Add deterministic manual toggle target tracking in AudioOnlyVideoPlayer
-- [ ] Ensure each play/pause tap alternates intended state even when player state callback is delayed
-- [ ] Keep existing imperative + prop-based playback control intact
-- [ ] Verify only focused files changed (AudioOnlyVideoPlayer.tsx and TODO.md)
-- [ ] Provide critical-path manual verification steps for device testing
+# TODO - Speech Player Play/Pause Fix
+
+- [x] Analyze short-clips playback control behavior
+- [x] Analyze AudioOnlyVideoPlayer hidden-player control behavior
+- [x] Prepare approved simplification plan
+- [x] Refactor `components/AudioOnlyVideoPlayer.tsx` play/pause control path to short-clips-style intent flow
+- [x] Remove conflicting manual toggle/watchdog branches causing desync
+- [ ] Run critical-path verification steps
+- [ ] Summarize test findings and final status

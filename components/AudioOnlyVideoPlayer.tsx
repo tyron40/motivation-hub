@@ -130,7 +130,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const manualPauseRef = useRef(false);
   const lastRequestedStateRef = useRef<boolean | null>(null);
   const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastManualToggleTargetRef = useRef<boolean | null>(null);
 
   const clearCommandWatchdog = useCallback(() => {
     if (commandWatchdogRef.current) {
@@ -632,7 +631,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       lastRequestedStateRef.current = false;
       // Always trust real player paused state (prevents UI-only pause masking)
       autoplayInProgressRef.current = false;
-      lastManualToggleTargetRef.current = null;
       isPlayingRef.current = false;
       setPlayerPlayCommand(false);
       setIsPlaying(false);
@@ -687,11 +685,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const nextState = lastManualToggleTargetRef.current === null
-      ? !isPlayingRef.current
-      : !lastManualToggleTargetRef.current;
-    lastManualToggleTargetRef.current = nextState;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState, '(manual target)');
+    const nextState = !isPlayingRef.current;
+    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
@@ -707,8 +702,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         if (!mountedRef.current) return;
         const actual = isPlayingRef.current;
         if (actual !== nextState) {
-          console.log('[PlayPause] Watchdog retry imperative command:', nextState);
-          sendNativeImperativeCommand(nextState);
+          console.log('[PlayPause] Retry command to match user intent:', nextState);
+          void requestPlayState(nextState);
         }
       }, 350);
 
@@ -726,7 +721,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     clearAutoplayTimer,
     clearCommandWatchdog,
     requestPlayState,
-    sendNativeImperativeCommand,
     stopProgressTracking,
     startProgressTracking,
   ]);
