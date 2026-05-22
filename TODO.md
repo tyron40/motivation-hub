@@ -1,4 +1,5 @@
-- [x] Update AudioOnlyVideoPlayer play/pause state synchronization to follow actual YouTube player state
-- [x] Keep manual play/pause commands imperative + prop-driven without UI-only masking
-- [x] Validate no unrelated files changed
-- [ ] Run critical-path verification for play/pause behavior
+- [ ] Add deterministic manual toggle target tracking in AudioOnlyVideoPlayer
+- [ ] Ensure each play/pause tap alternates intended state even when player state callback is delayed
+- [ ] Keep existing imperative + prop-based playback control intact
+- [ ] Verify only focused files changed (AudioOnlyVideoPlayer.tsx and TODO.md)
+- [ ] Provide critical-path manual verification steps for device testing
