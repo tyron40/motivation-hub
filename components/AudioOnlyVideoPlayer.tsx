@@ -83,7 +83,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playerPlayCommand, setPlayerPlayCommand] = useState(false);
+  const [shouldPlay, setShouldPlay] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -161,7 +161,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
 
-    setPlayerPlayCommand(newState);
+    setShouldPlay(newState);
     sendNativeImperativeCommand(newState);
   }, [sendNativeImperativeCommand]);
 
@@ -619,7 +619,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayInProgressRef.current = false;
       clearAutoplayTimer();
       isPlayingRef.current = true;
-      setPlayerPlayCommand(true);
+      setShouldPlay(true);
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);
       startProgressTracking();
@@ -632,7 +632,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       // Always trust real player paused state (prevents UI-only pause masking)
       autoplayInProgressRef.current = false;
       isPlayingRef.current = false;
-      setPlayerPlayCommand(false);
+      setShouldPlay(false);
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
       stopProgressTracking();
@@ -647,7 +647,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       onEndCalledRef.current = true;
       autoplayInProgressRef.current = false;
       isPlayingRef.current = false;
-      setPlayerPlayCommand(false);
+      setShouldPlay(false);
       setIsPlaying(false);
       stopProgressTracking();
       setCurrentTime(0);
@@ -685,8 +685,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const nextState = !isPlayingRef.current;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
+    const nextState = !shouldPlay;
+    console.log('Manual play/pause:', shouldPlay, '->', nextState);
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
@@ -723,6 +723,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     requestPlayState,
     stopProgressTracking,
     startProgressTracking,
+    shouldPlay,
   ]);
 
   useEffect(() => {
@@ -891,12 +892,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    if (isPlaying) {
+    if (shouldPlay) {
       postMessageToWebPlayer('playVideo');
     } else {
       postMessageToWebPlayer('pauseVideo');
     }
-  }, [isPlaying, postMessageToWebPlayer]);
+  }, [shouldPlay, postMessageToWebPlayer]);
 
   const webPlayerElement = Platform.OS === 'web' ? (
     <View style={styles.hiddenPlayer}>
@@ -916,7 +917,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         videoId={videoId}
         height={1}
         width={1}
-        play={playerPlayCommand}
+        play={shouldPlay}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
         onError={onPlayerError}
