@@ -195,6 +195,14 @@ export default function AuthScreen() {
                   >
                     <Text style={styles.secondaryButtonText}>Sign In</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    testID="landing-signin-link"
+                    style={styles.secondaryInlineLink}
+                    onPress={() => navigateToScreen('signin')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.secondaryInlineLinkText}>Already have an account? Sign In</Text>
+                  </TouchableOpacity>
 
                 </View>
               </Animated.View>
@@ -506,6 +514,17 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
+    fontWeight: '600' as const,
+  },
+  secondaryInlineLink: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    marginTop: 2,
+  },
+  secondaryInlineLinkText: {
+    color: '#A9A9C8',
+    fontSize: 15,
     fontWeight: '600' as const,
   },
   keyboardView: {
