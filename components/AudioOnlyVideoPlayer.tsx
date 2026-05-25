@@ -132,6 +132,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualPlayRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pausedRetryCountRef = useRef(0);
+  const pauseIntentLockRef = useRef(false);
 
   const clearCommandWatchdog = useCallback(() => {
     if (commandWatchdogRef.current) {
@@ -669,7 +670,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayInProgressRef.current = false;
 
       const intendedPlay = desiredPlayRef.current || lastRequestedStateRef.current === true;
-      if (manualPauseRef.current) {
+      if (manualPauseRef.current || pauseIntentLockRef.current) {
         lastRequestedStateRef.current = false;
         desiredPlayRef.current = false;
         isPlayingRef.current = false;
@@ -753,6 +754,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     desiredPlayRef.current = nextState;
     lastRequestedStateRef.current = nextState;
     manualPauseRef.current = !nextState;
+    pauseIntentLockRef.current = !nextState;
 
     try {
       void requestPlayState(nextState);
@@ -769,7 +771,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
       if (!nextState) {
         clearManualPlayRecovery();
+        clearCommandWatchdog();
         pausedRetryCountRef.current = 0;
+        desiredPlayRef.current = false;
+        lastRequestedStateRef.current = false;
+        setShouldPlay(false);
+        setIsPlaying(false);
+        isPlayingRef.current = false;
         stopProgressTracking();
       } else {
         clearManualPlayRecovery();
@@ -908,11 +916,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
-          if (state === 1) {
-            autoplayInProgressRef.current = false;
-            isPlayingRef.current = true;
-            setIsPlaying(true);
-            onPlayingChangeRef.current?.(true);
+      if (state === 1) {
+        autoplayInProgressRef.current = false;
+        pauseIntentLockRef.current = false;
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        onPlayingChangeRef.current?.(true);
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
