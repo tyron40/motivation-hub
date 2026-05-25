@@ -619,6 +619,32 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     stopProgressTracking();
   }, [requestPlayState, stopProgressTracking]);
 
+  const runDeterministicPlayRecovery = useCallback(async () => {
+    if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') {
+      void requestPlayState(true);
+      return;
+    }
+
+    try {
+      const base = Math.max(currentTimeRef.current, 0);
+      const nearStart = base < 0.35;
+      const epsilon = 0.12;
+      const maxSeek = Math.max(durationRef.current - 0.05, epsilon);
+      const from = nearStart ? 0 : base;
+      const nudge = Math.min(from + epsilon, maxSeek);
+
+      console.log('[PlayPause] Deterministic recovery nudge:', from, '->', nudge, '->', from);
+      await playerRef.current.seekTo(nudge, true);
+      await new Promise(resolve => setTimeout(resolve, 120));
+      await playerRef.current.seekTo(from, true);
+      void requestPlayState(true);
+    } catch (e) {
+      console.log('[PlayPause] Deterministic recovery failed, retrying play only:', e);
+      void requestPlayState(true);
+    }
+  }, [requestPlayState, videoId]);
+
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
@@ -643,6 +669,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayInProgressRef.current = false;
 
       const intendedPlay = desiredPlayRef.current || lastRequestedStateRef.current === true;
+      if (manualPauseRef.current) {
+        lastRequestedStateRef.current = false;
+        desiredPlayRef.current = false;
+        isPlayingRef.current = false;
+        setShouldPlay(false);
+        setIsPlaying(false);
+        onPlayingChangeRef.current?.(false);
+        stopProgressTracking();
+        return;
+      }
+
       if (intendedPlay && pausedRetryCountRef.current < 1) {
         pausedRetryCountRef.current += 1;
         console.log('[PlayPause] Unexpected paused while play intended, retrying play once');
@@ -708,8 +745,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const nextState = !shouldPlay;
-    console.log('Manual play/pause:', shouldPlay, '->', nextState);
+    const nextState = !isPlayingRef.current;
+    console.log('Manual play/pause (actual state):', isPlayingRef.current, '->', nextState);
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
@@ -739,24 +776,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         manualPlayRecoveryTimerRef.current = setTimeout(async () => {
           if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
           if (isPlayingRef.current) return;
-          if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') {
-            void requestPlayState(true);
-            return;
-          }
-
-          try {
-            const base = Math.max(currentTimeRef.current, 0);
-            const maxSeek = Math.max(durationRef.current - 0.05, 0.12);
-            const nudge = Math.min(base + 0.12, maxSeek);
-            console.log('[PlayPause] Manual play recovery nudge:', base, '->', nudge, '->', base);
-            await playerRef.current.seekTo(nudge, true);
-            await new Promise(resolve => setTimeout(resolve, 120));
-            await playerRef.current.seekTo(base, true);
-            void requestPlayState(true);
-          } catch (e) {
-            console.log('[PlayPause] Manual play recovery failed, retrying play only:', e);
-            void requestPlayState(true);
-          }
+          await runDeterministicPlayRecovery();
         }, 380);
 
         startProgressTracking();
@@ -772,9 +792,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     requestPlayState,
     stopProgressTracking,
     startProgressTracking,
-    shouldPlay,
     clearManualPlayRecovery,
     videoId,
+    runDeterministicPlayRecovery,
   ]);
 
   useEffect(() => {
