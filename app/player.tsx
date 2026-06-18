@@ -56,7 +56,7 @@ export default function PlayerScreen() {
     if (!openAdShownRef.current && canShowAds) {
       openAdShownRef.current = true;
       pendingOpenAdResumeRef.current = true;
-      localPlayerRef.current?.pause();
+      localPlayerRef.current?.pauseForAd();
       console.log('[Ad] Player opened — attempting interstitial before speech starts');
       void tryShowInterstitialOnTransition().then(() => {
         pendingOpenAdResumeRef.current = false;
@@ -74,7 +74,7 @@ export default function PlayerScreen() {
     if (isShowingAd) {
       console.log('[Ad] Ad started showing, saving play state');
       wasPlayingBeforeAdRef.current = (localPlayerRef.current?.getIsPlaying() ?? false) || pendingOpenAdResumeRef.current;
-      localPlayerRef.current?.pause();
+      localPlayerRef.current?.pauseForAd();
     } else if (wasPlayingBeforeAdRef.current) {
       console.log('[Ad] Ad finished, resuming playback');
       adJustFinishedRef.current = true;

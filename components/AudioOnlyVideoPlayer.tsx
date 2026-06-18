@@ -48,6 +48,7 @@ export interface AudioOnlyVideoPlayerRef {
   togglePlay: () => void;
   play: () => void;
   pause: () => void;
+  pauseForAd: () => void;
   seekForward: (seconds?: number) => void;
   seekBackward: (seconds?: number) => void;
   seekTo: (position: number) => void;
@@ -212,6 +213,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       if (!isPlayingRef.current) return;
       requestPlayState(false, { force: true, source: 'manual' });
     },
+    pauseForAd: () => {
+      if (!playerReadyRef.current || playerErrorRef.current) return;
+
+      wasPlayingBeforeAdRef.current = isPlayingRef.current || desiredPlayRef.current;
+
+      // IMPORTANT: this is not a manual pause
+      manualPauseRef.current = false;
+      pauseIntentLockRef.current = false;
+
+      requestPlayState(false, { force: true, source: 'recovery' });
+    },
     seekForward: (seconds = 15) => {
       if (!playerReadyRef.current || !playerRef.current) return;
       const newPos = Math.min(currentTimeRef.current + seconds, durationRef.current);
@@ -236,10 +248,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     getIsPlaying: () => isPlayingRef.current,
     resumeAfterAd: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
-      if (manualPauseRef.current) return;
+
       const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
+
       if (shouldResume) {
-        requestPlayState(true, { source: 'recovery' });
+        manualPauseRef.current = false;
+        pauseIntentLockRef.current = false;
+        desiredPlayRef.current = true;
+        requestPlayState(true, { force: true, source: 'manual' });
       }
     },
   }), [requestPlayState]);
