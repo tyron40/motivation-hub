@@ -1,7 +1,9 @@
-# TODO - Play Store Photo/Video Permission Policy Fix
+# TODO - Hidden Video Play/Pause Reliability Fix
 
-- [x] Identify policy-violating Android permissions in `app.json`
-- [x] Remove `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` from Android permissions
-- [x] Bump Android `versionCode` for compliant resubmission
-- [x] Validate final Expo config does not include broad media/storage permissions
-- [x] Prepare build+submit commands for Google Play rollout
+- [ ] Add manual-control-priority state handling in `components/AudioOnlyVideoPlayer.tsx`
+- [ ] Add forced/manual request path and grace window for contradictory paused events
+- [ ] Ensure manual pause cancels recovery/autoplay retries and timers
+- [ ] Ensure manual play retries deterministically once when mismatch persists
+- [ ] Run focused validation (`lint` and targeted `tsc` check)
+- [ ] Commit and push fix branch
+- [ ] User runtime verify on device/TestFlight (play, pause, play again, seek)
