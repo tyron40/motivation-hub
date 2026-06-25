@@ -52,10 +52,19 @@ export default function PlayerScreen() {
   const styles = getStyles(colors);
 
   useEffect(() => {
+    console.log('[BUILD MARKER] playpause-runtime-debug-286a755');
+  }, []);
+
+  useEffect(() => {
     setIsMinimized(false);
     if (!openAdShownRef.current && canShowAds) {
       openAdShownRef.current = true;
       pendingOpenAdResumeRef.current = true;
+      console.log('[TRACE][PlayerScreen] before pauseForAd() on open ad', {
+        canShowAds,
+        pendingOpenAdResume: pendingOpenAdResumeRef.current,
+        isShowingAd,
+      });
       localPlayerRef.current?.pauseForAd();
       console.log('[Ad] Player opened — attempting interstitial before speech starts');
       void tryShowInterstitialOnTransition().then(() => {
@@ -71,9 +80,14 @@ export default function PlayerScreen() {
   }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
 
   useEffect(() => {
+    console.log('[TRACE][PlayerScreen] isShowingAd changed', { isShowingAd });
     if (isShowingAd) {
       console.log('[Ad] Ad started showing, saving play state');
       wasPlayingBeforeAdRef.current = (localPlayerRef.current?.getIsPlaying() ?? false) || pendingOpenAdResumeRef.current;
+      console.log('[TRACE][PlayerScreen] before pauseForAd() on ad start', {
+        wasPlayingBeforeAd: wasPlayingBeforeAdRef.current,
+        pendingOpenAdResume: pendingOpenAdResumeRef.current,
+      });
       localPlayerRef.current?.pauseForAd();
     } else if (wasPlayingBeforeAdRef.current) {
       console.log('[Ad] Ad finished, resuming playback');
@@ -82,6 +96,10 @@ export default function PlayerScreen() {
       wasPlayingBeforeAdRef.current = false;
       setTimeout(() => {
         if (shouldResume && localPlayerRef.current) {
+          console.log('[TRACE][PlayerScreen] before resumeAfterAd()', {
+            shouldResume,
+            isShowingAd,
+          });
           localPlayerRef.current.resumeAfterAd();
         }
         adJustFinishedRef.current = false;

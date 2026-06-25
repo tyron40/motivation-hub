@@ -123,6 +123,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     mountedRef.current = true;
+    console.log('[BUILD MARKER] playpause-runtime-debug-286a755');
     return () => { mountedRef.current = false; };
   }, []);
 
@@ -169,7 +170,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     const source = options?.source ?? 'recovery';
     const force = options?.force === true;
-    console.log('requestPlayState:', isPlayingRef.current, '->', newState, 'source:', source, 'force:', force);
+    console.log('[TRACE][AudioOnlyVideoPlayer] requestPlayState', {
+      from: isPlayingRef.current,
+      to: newState,
+      source,
+      force,
+      desiredPlay: desiredPlayRef.current,
+      manualPause: manualPauseRef.current,
+      pauseIntentLock: pauseIntentLockRef.current,
+    });
 
     if (!force && !newState && pauseIntentLockRef.current && source !== 'manual') {
       return;
@@ -216,6 +225,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     pauseForAd: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
 
+      console.log('[TRACE][AudioOnlyVideoPlayer] pauseForAd() called', {
+        isPlaying: isPlayingRef.current,
+        desiredPlay: desiredPlayRef.current,
+        manualPause: manualPauseRef.current,
+        pauseIntentLock: pauseIntentLockRef.current,
+      });
+
       wasPlayingBeforeAdRef.current = isPlayingRef.current || desiredPlayRef.current;
 
       // IMPORTANT: this is not a manual pause
@@ -251,9 +267,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
       const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
 
+      console.log('[TRACE][AudioOnlyVideoPlayer] resumeAfterAd() called', {
+        shouldResume,
+        wasPlayingBeforeAd: wasPlayingBeforeAdRef.current,
+        desiredPlay: desiredPlayRef.current,
+        manualPause: manualPauseRef.current,
+        pauseIntentLock: pauseIntentLockRef.current,
+      });
+
+      manualPauseRef.current = false;
+      pauseIntentLockRef.current = false;
+
       if (shouldResume) {
-        manualPauseRef.current = false;
-        pauseIntentLockRef.current = false;
         desiredPlayRef.current = true;
         requestPlayState(true, { force: true, source: 'manual' });
       }
@@ -680,7 +705,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
-    console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
+    console.log('[TRACE][AudioOnlyVideoPlayer] onStateChange', {
+      state,
+      videoId: activeVideoIdRef.current,
+      isPlaying: isPlayingRef.current,
+      desiredPlay: desiredPlayRef.current,
+      manualPause: manualPauseRef.current,
+      pauseIntentLock: pauseIntentLockRef.current,
+    });
 
     if (state === 'playing') {
       clearCommandWatchdog();
