@@ -240,7 +240,7 @@ const handleChat = async (c: Context) => {
 app.post("/api/chat", handleChat);
 app.post("/chat", handleChat);
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from './lib/youtube-keys';
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 60 * 12;
@@ -404,154 +404,182 @@ function parseDuration(duration: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-async function fetchYouTubeVideos(query: string, maxResults: number = 10) {
-  const cacheKey = `${query}-${maxResults}`;
-  const cached = REQUEST_CACHE.get(cacheKey);
-  
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log(`[YouTube] ✅ Using cached data for: "${query}"`);
-    return cached.data;
-  }
+async function fetchYouTubeVideosWithKey(
+  query: string,
+  maxResults: number,
+  apiKey: string,
+): Promise<{ videos: any[]; sourceKey: string }> {
+  const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+  searchUrl.searchParams.set('part', 'snippet');
+  searchUrl.searchParams.set('q', query);
+  searchUrl.searchParams.set('type', 'video');
+  searchUrl.searchParams.set('maxResults', maxResults.toString());
+  searchUrl.searchParams.set('order', 'relevance');
+  searchUrl.searchParams.set('videoDuration', 'medium');
+  searchUrl.searchParams.set('videoEmbeddable', 'true');
+  searchUrl.searchParams.set('videoSyndicated', 'true');
+  searchUrl.searchParams.set('key', apiKey);
 
-  if (!YOUTUBE_API_KEY) {
-    console.error('[YouTube] ❌ API key not configured!');
-    console.error('[YouTube] Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables');
-    console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
-    
-    if (cached) {
-      console.warn('[YouTube] ⚠️ Using expired cache as fallback');
-      return cached.data;
+  console.log('[YouTube] Fetching search results...');
+  console.log('[YouTube] API Key used:', apiKey.substring(0, 10) + '...');
+
+  const searchResponse = await fetch(searchUrl.toString());
+  const searchErrorText = await searchResponse.text();
+
+  if (!searchResponse.ok) {
+    console.error('[YouTube] Search API error:', searchResponse.status, searchErrorText);
+    if (isQuotaError(searchResponse.status, searchErrorText)) {
+      markYouTubeKeyIssue(apiKey, true);
+    } else {
+      markYouTubeKeyIssue(apiKey, false);
     }
-    
-    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables.');
-  }
 
-  try {
-    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-    searchUrl.searchParams.set('part', 'snippet');
-    searchUrl.searchParams.set('q', query);
-    searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', maxResults.toString());
-    searchUrl.searchParams.set('order', 'relevance');
-    searchUrl.searchParams.set('videoDuration', 'medium');
-    searchUrl.searchParams.set('videoEmbeddable', 'true');
-    searchUrl.searchParams.set('videoSyndicated', 'true');
-    searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+    let errorDetails = searchErrorText;
+    try {
+      const errorJson = JSON.parse(searchErrorText);
+      if (errorJson.error) {
+        errorDetails = errorJson.error.message || errorJson.error;
+        console.error('[YouTube] Error details:', errorJson.error);
 
-    console.log('[YouTube] Fetching search results...');
-    console.log('[YouTube] API Key present:', YOUTUBE_API_KEY ? `Yes (${YOUTUBE_API_KEY.substring(0, 10)}...)` : 'No');
-    const searchResponse = await fetch(searchUrl.toString());
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      console.error('[YouTube] Search API error:', searchResponse.status, errorText);
-      
-      let errorDetails = errorText;
-      try {
-        const errorJson = JSON.parse(errorText);
-        if (errorJson.error) {
-          errorDetails = errorJson.error.message || errorJson.error;
-          console.error('[YouTube] Error details:', errorJson.error);
-          
-          if (searchResponse.status === 403) {
-            if (errorDetails.includes('quotaExceeded') || errorDetails.includes('quota')) {
-              errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
-            } else if (errorDetails.includes('API key')) {
-              errorDetails = `YouTube API key is invalid or restricted. Please check:
+        if (searchResponse.status === 403) {
+          if (errorDetails.toLowerCase().includes('quota') || errorDetails.toLowerCase().includes('exceeded')) {
+            errorDetails = 'YouTube API quota exceeded. Please check your quota at https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas';
+          } else if (errorDetails.toLowerCase().includes('api key')) {
+            errorDetails = `YouTube API key is invalid or restricted. Please check:
 1. API key is correct in environment variables
 2. YouTube Data API v3 is enabled in Google Cloud Console
 3. API key restrictions (if any) allow requests from your server`;
-            } else {
-              errorDetails = `YouTube API forbidden (403). Possible reasons:
+          } else {
+            errorDetails = `YouTube API forbidden (403). Possible reasons:
 1. Invalid API key
 2. YouTube Data API v3 not enabled
 3. API key has restrictions
 4. Daily quota exceeded
 
 Details: ${errorDetails}`;
-            }
           }
         }
-      } catch {
-        // Not JSON, use raw error
       }
-      
-      throw new Error(`YouTube API error: ${searchResponse.status} - ${errorDetails}`);
+    } catch {
+      // Not JSON, use raw error
     }
 
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    throw new Error(`YouTube API error: ${searchResponse.status} - ${errorDetails}`);
+  }
 
-    if (!videoIds) {
-      return [];
-    }
+  const searchData = JSON.parse(searchErrorText);
+  const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
 
-    const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
-    detailsUrl.searchParams.set('id', videoIds);
-    detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
+  if (!videoIds) {
+    return { videos: [], sourceKey: apiKey };
+  }
 
-    console.log('[YouTube] Fetching video details...');
-    const detailsResponse = await fetch(detailsUrl.toString());
-    if (!detailsResponse.ok) {
-      const errorText = await detailsResponse.text();
-      console.error('[YouTube] Videos API error:', detailsResponse.status, errorText);
-      throw new Error(`YouTube API error: ${detailsResponse.status}`);
-    }
+  const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+  detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
+  detailsUrl.searchParams.set('id', videoIds);
+  detailsUrl.searchParams.set('key', apiKey);
 
-    const detailsData = await detailsResponse.json();
+  console.log('[YouTube] Fetching video details...');
+  const detailsResponse = await fetch(detailsUrl.toString());
+  if (!detailsResponse.ok) {
+    const errorText = await detailsResponse.text();
+    console.error('[YouTube] Videos API error:', detailsResponse.status, errorText);
+    throw new Error(`YouTube API error: ${detailsResponse.status}`);
+  }
 
-    const videos = detailsData.items
-      .filter((item: any) => {
-        const isEmbeddable = item.status?.embeddable !== false;
-        const isPublic = item.status?.privacyStatus === 'public';
-        const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
-        
-        if (!isEmbeddable) {
-          console.log(`[YouTube] ⏭️ Skipping non-embeddable: ${item.snippet.title}`);
-        }
-        if (!isPublic) {
-          console.log(`[YouTube] ⏭️ Skipping non-public: ${item.snippet.title}`);
-        }
-        
-        return isEmbeddable && isPublic && hasValidDuration;
-      })
-      .map((item: any) => ({
-        id: item.id,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-        channelTitle: item.snippet.channelTitle,
-        channelId: item.snippet.channelId,
-        publishedAt: item.snippet.publishedAt,
-        duration: parseDuration(item.contentDetails.duration),
-        viewCount: parseInt(item.statistics.viewCount || '0'),
-        category: query,
-        embeddable: true,
-      }));
+  const detailsData = await detailsResponse.json();
 
-    REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
-    
-    if (REQUEST_CACHE.size > 100) {
-      const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
-      REQUEST_CACHE.delete(oldestKey);
-    }
+  const videos = detailsData.items
+    .filter((item: any) => {
+      const isEmbeddable = item.status?.embeddable !== false;
+      const isPublic = item.status?.privacyStatus === 'public';
+      const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
 
-    console.log(`[YouTube] ✅ Successfully fetched ${videos.length} embeddable videos (from ${detailsData.items.length} total)`);
-    
-    if (videos.length === 0 && detailsData.items.length > 0) {
-      console.warn(`[YouTube] ⚠️ All videos were filtered out - none were embeddable`);
-    }
-    return videos;
-  } catch (error) {
-    console.error('[YouTube] Error fetching videos:', error);
-    
+      if (!isEmbeddable) {
+        console.log(`[YouTube] ⏭️ Skipping non-embeddable: ${item.snippet.title}`);
+      }
+      if (!isPublic) {
+        console.log(`[YouTube] ⏭️ Skipping non-public: ${item.snippet.title}`);
+      }
+
+      return isEmbeddable && isPublic && hasValidDuration;
+    })
+    .map((item: any) => ({
+      id: item.id,
+      title: item.snippet.title,
+      description: item.snippet.description,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+      channelTitle: item.snippet.channelTitle,
+      channelId: item.snippet.channelId,
+      publishedAt: item.snippet.publishedAt,
+      duration: parseDuration(item.contentDetails.duration),
+      viewCount: parseInt(item.statistics.viewCount || '0'),
+      category: query,
+      embeddable: true,
+    }));
+
+  console.log(`[YouTube] ✅ Key ${apiKey.substring(0, 10)}... fetched ${videos.length} embeddable videos (from ${detailsData.items.length} total)`);
+
+  return { videos, sourceKey: apiKey };
+}
+
+async function fetchYouTubeVideos(query: string, maxResults: number = 10, preferKeyIndex?: number) {
+  const cacheKey = `${query}-${maxResults}`;
+  const cached = REQUEST_CACHE.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log(`[YouTube] ✅ Using cached data for: "${query}"`);
+    return cached.data;
+  }
+
+  if (YOUTUBE_API_KEYS.length === 0) {
+    console.error('[YouTube] ❌ API key not configured!');
+    console.error('[YouTube] Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables');
+    console.error('[YouTube] Get your API key from: https://console.cloud.google.com/apis/credentials');
+
     if (cached) {
-      console.warn('[YouTube] ⚠️ Using expired cache as fallback due to API error');
+      console.warn('[YouTube] ⚠️ Using expired cache as fallback');
       return cached.data;
     }
-    
-    throw error;
+
+    throw new Error('YouTube API key not configured. Please set YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables.');
   }
+
+  let startIndex = preferKeyIndex ?? 0;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
+    const key = getNextYouTubeKey(startIndex);
+    if (!key) break;
+
+    try {
+      const { videos } = await fetchYouTubeVideosWithKey(query, maxResults, key);
+
+      REQUEST_CACHE.set(cacheKey, { data: videos, timestamp: Date.now() });
+      if (REQUEST_CACHE.size > 100) {
+        const oldestKey = Array.from(REQUEST_CACHE.keys())[0];
+        REQUEST_CACHE.delete(oldestKey);
+      }
+
+      if (videos.length === 0) {
+        console.warn(`[YouTube] ⚠️ All videos were filtered out - none were embeddable`);
+      }
+      return videos;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`[YouTube] ⚠️ Attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
+      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
+    }
+  }
+
+  console.error('[YouTube] ❌ All API keys exhausted or failed');
+
+  if (cached) {
+    console.warn('[YouTube] ⚠️ Using expired cache as fallback due to API error');
+    return cached.data;
+  }
+
+  throw lastError || new Error('YouTube API keys failed');
 }
 
 const handleYouTubeCategory = async (c: Context) => {
@@ -566,16 +594,37 @@ const handleYouTubeCategory = async (c: Context) => {
 
     const categoryKey = category.toLowerCase();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
-    const queryIndex = new Date().getDate() % searchQueries.length;
-    const todayQuery = searchQueries[queryIndex];
 
-    console.log(`[YouTube] Fetching category: ${category}, query: "${todayQuery}"`);
-    const videos = await fetchYouTubeVideos(todayQuery, limit);
+    const queriesToRun = searchQueries.slice(0, Math.max(1, YOUTUBE_API_KEYS.length || 1));
+    const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
+
+    console.log(`[YouTube] Fetching category: ${category}, queries: ${queriesToRun.length}, per-query limit: ${perQueryLimit}, keys: ${YOUTUBE_API_KEYS.length}`);
+
+    const results = await Promise.allSettled(
+      queriesToRun.map((q, idx) => fetchYouTubeVideos(q, perQueryLimit, idx))
+    );
+
+    const seen = new Set<string>();
+    const videos: any[] = [];
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        result.value.forEach((video: any) => {
+          if (!seen.has(video.id)) {
+            seen.add(video.id);
+            videos.push(video);
+          }
+        });
+      } else {
+        console.warn(`[YouTube] Query ${queriesToRun[idx]} failed:`, result.reason);
+      }
+    });
+
+    console.log(`[YouTube] Category ${category} returning ${videos.length} unique videos`);
 
     return c.json({
-      videos,
+      videos: videos.slice(0, limit),
       category,
-      query: todayQuery,
+      queries: queriesToRun,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -603,6 +652,7 @@ const handleYouTubeSearch = async (c: Context) => {
     return c.json({
       videos,
       query,
+      keysAvailable: YOUTUBE_API_KEYS.length,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -635,6 +685,7 @@ const handleYouTubeTrending = async (c: Context) => {
     return c.json({
       videos,
       query,
+      keysAvailable: YOUTUBE_API_KEYS.length,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {

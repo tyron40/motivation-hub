@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { publicProcedure } from '../../create-context';
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from '../../../lib/youtube-keys';
 
 interface YouTubeVideo {
   id: string;
@@ -13,8 +14,6 @@ interface YouTubeVideo {
   viewCount: number;
   category: string;
 }
-
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
 
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
@@ -86,84 +85,113 @@ function parseDuration(duration: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+async function fetchYouTubeVideosWithKey(
+  query: string,
+  maxResults: number,
+  apiKey: string,
+): Promise<YouTubeVideo[]> {
+  const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+  searchUrl.searchParams.set('part', 'snippet');
+  searchUrl.searchParams.set('q', query);
+  searchUrl.searchParams.set('type', 'video');
+  searchUrl.searchParams.set('maxResults', maxResults.toString());
+  searchUrl.searchParams.set('order', 'relevance');
+  searchUrl.searchParams.set('videoDuration', 'any');
+  searchUrl.searchParams.set('videoEmbeddable', 'true');
+  searchUrl.searchParams.set('videoSyndicated', 'true');
+  searchUrl.searchParams.set('videoLicense', 'any');
+  searchUrl.searchParams.set('key', apiKey);
+
+  const searchResponse = await fetch(searchUrl.toString());
+  const searchErrorText = await searchResponse.text();
+
+  if (!searchResponse.ok) {
+    if (isQuotaError(searchResponse.status, searchErrorText)) {
+      markYouTubeKeyIssue(apiKey, true);
+    } else {
+      markYouTubeKeyIssue(apiKey, false);
+    }
+    throw new Error(`YouTube API error: ${searchResponse.status}`);
+  }
+
+  const searchData = JSON.parse(searchErrorText);
+  const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+
+  if (!videoIds) {
+    return [];
+  }
+
+  const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+  detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
+  detailsUrl.searchParams.set('id', videoIds);
+  detailsUrl.searchParams.set('key', apiKey);
+
+  const detailsResponse = await fetch(detailsUrl.toString());
+  if (!detailsResponse.ok) {
+    throw new Error(`YouTube API error: ${detailsResponse.status}`);
+  }
+
+  const detailsData = await detailsResponse.json();
+
+  return detailsData.items
+    .filter((item: any) => {
+      const isEmbeddable = item.status?.embeddable !== false;
+      const isPublic = item.status?.privacyStatus === 'public';
+      const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
+
+      if (!isEmbeddable) {
+        console.log(`⏭️ Skipping non-embeddable: ${item.snippet.title}`);
+      }
+      if (!isPublic) {
+        console.log(`⏭️ Skipping non-public: ${item.snippet.title}`);
+      }
+
+      return isEmbeddable && isPublic && hasValidDuration;
+    })
+    .map((item: any) => ({
+      id: item.id,
+      title: item.snippet.title,
+      description: item.snippet.description,
+      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+      channelTitle: item.snippet.channelTitle,
+      channelId: item.snippet.channelId,
+      publishedAt: item.snippet.publishedAt,
+      duration: parseDuration(item.contentDetails.duration),
+      viewCount: parseInt(item.statistics.viewCount || '0'),
+      category: query,
+      embeddable: true,
+    }));
+}
+
 async function fetchYouTubeVideos(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 10,
+  preferKeyIndex?: number,
 ): Promise<YouTubeVideo[]> {
-  if (!YOUTUBE_API_KEY) {
+  if (YOUTUBE_API_KEYS.length === 0) {
     console.warn('⚠️ YouTube API key not configured');
     return [];
   }
 
-  try {
-    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-    searchUrl.searchParams.set('part', 'snippet');
-    searchUrl.searchParams.set('q', query);
-    searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', maxResults.toString());
-    searchUrl.searchParams.set('order', 'relevance');
-    searchUrl.searchParams.set('videoDuration', 'any');
-    searchUrl.searchParams.set('videoEmbeddable', 'true');
-    searchUrl.searchParams.set('videoSyndicated', 'true');
-    searchUrl.searchParams.set('videoLicense', 'any');
-    searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+  let startIndex = preferKeyIndex ?? 0;
+  let lastError: Error | null = null;
 
-    const searchResponse = await fetch(searchUrl.toString());
-    if (!searchResponse.ok) {
-      throw new Error(`YouTube API error: ${searchResponse.status}`);
+  for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
+    const key = getNextYouTubeKey(startIndex);
+    if (!key) break;
+
+    try {
+      const videos = await fetchYouTubeVideosWithKey(query, maxResults, key);
+      return videos;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`⚠️ YouTube attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
+      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
     }
-
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-
-    if (!videoIds) {
-      return [];
-    }
-
-    const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics,status');
-    detailsUrl.searchParams.set('id', videoIds);
-    detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
-
-    const detailsResponse = await fetch(detailsUrl.toString());
-    if (!detailsResponse.ok) {
-      throw new Error(`YouTube API error: ${detailsResponse.status}`);
-    }
-
-    const detailsData = await detailsResponse.json();
-
-    return detailsData.items
-      .filter((item: any) => {
-        const isEmbeddable = item.status?.embeddable !== false;
-        const isPublic = item.status?.privacyStatus === 'public';
-        const hasValidDuration = parseDuration(item.contentDetails.duration) > 0;
-        
-        if (!isEmbeddable) {
-          console.log(`⏭️ Skipping non-embeddable: ${item.snippet.title}`);
-        }
-        if (!isPublic) {
-          console.log(`⏭️ Skipping non-public: ${item.snippet.title}`);
-        }
-        
-        return isEmbeddable && isPublic && hasValidDuration;
-      })
-      .map((item: any) => ({
-        id: item.id,
-        title: item.snippet.title,
-        description: item.snippet.description,
-        thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-        channelTitle: item.snippet.channelTitle,
-        channelId: item.snippet.channelId,
-        publishedAt: item.snippet.publishedAt,
-        duration: parseDuration(item.contentDetails.duration),
-        viewCount: parseInt(item.statistics.viewCount || '0'),
-        category: query,
-        embeddable: true,
-      }));
-  } catch (error) {
-    console.error('❌ Error fetching YouTube videos:', error);
-    return [];
   }
+
+  console.error('❌ Error fetching YouTube videos:', lastError);
+  return [];
 }
 
 export const fetchContentProcedure = publicProcedure
@@ -175,25 +203,41 @@ export const fetchContentProcedure = publicProcedure
     })
   )
   .query(async ({ input }) => {
-    const { category, limit, refresh } = input;
-    
+    const { category, limit } = input;
+
     console.log(`📺 Fetching content for category: ${category}`);
-    
+
     const categoryKey = category.toLowerCase();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
-    
-    const today = new Date().toISOString().split('T')[0];
-    const queryIndex = new Date().getDate() % searchQueries.length;
-    const todayQuery = searchQueries[queryIndex];
-    
-    console.log(`🔍 Using search query: "${todayQuery}" (rotates daily)`);
-    
-    const videos = await fetchYouTubeVideos(todayQuery, limit);
-    
+
+    const queriesToRun = searchQueries.slice(0, Math.max(1, YOUTUBE_API_KEYS.length || 1));
+    const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
+
+    console.log(`🔍 Running ${queriesToRun.length} queries with ${YOUTUBE_API_KEYS.length} key(s), per-query limit: ${perQueryLimit}`);
+
+    const results = await Promise.allSettled(
+      queriesToRun.map((q, idx) => fetchYouTubeVideos(q, perQueryLimit, idx))
+    );
+
+    const seen = new Set<string>();
+    const videos: YouTubeVideo[] = [];
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        result.value.forEach((video) => {
+          if (!seen.has(video.id)) {
+            seen.add(video.id);
+            videos.push(video);
+          }
+        });
+      } else {
+        console.warn(`⚠️ Query ${queriesToRun[idx]} failed:`, result.reason);
+      }
+    });
+
     return {
-      videos,
+      videos: videos.slice(0, limit),
       category,
-      query: todayQuery,
+      queries: queriesToRun,
       fetchedAt: new Date().toISOString(),
       nextRotation: new Date(new Date().setHours(24, 0, 0, 0)).toISOString(),
     };
@@ -208,14 +252,15 @@ export const searchContentProcedure = publicProcedure
   )
   .query(async ({ input }) => {
     const { query, limit } = input;
-    
+
     console.log(`🔍 Searching YouTube for: "${query}"`);
-    
+
     const videos = await fetchYouTubeVideos(query, limit);
-    
+
     return {
       videos,
       query,
+      keysAvailable: YOUTUBE_API_KEYS.length,
       fetchedAt: new Date().toISOString(),
     };
   });
@@ -228,23 +273,24 @@ export const trendingContentProcedure = publicProcedure
   )
   .query(async ({ input }) => {
     const { limit } = input;
-    
+
     console.log('📈 Fetching trending motivational content');
-    
+
     const trendingQueries = [
       'motivational speech 2024',
       'best motivational speech',
       'powerful motivation',
     ];
-    
+
     const queryIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24)) % trendingQueries.length;
     const query = trendingQueries[queryIndex];
-    
+
     const videos = await fetchYouTubeVideos(query, limit);
-    
+
     return {
       videos,
       query,
+      keysAvailable: YOUTUBE_API_KEYS.length,
       fetchedAt: new Date().toISOString(),
     };
   });

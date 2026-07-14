@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { publicProcedure } from '../../create-context';
 import { supabaseBackend } from '../../../lib/supabase';
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from '../../../lib/youtube-keys';
 
 interface YouTubeVideo {
   id: string;
@@ -15,8 +16,6 @@ interface YouTubeVideo {
   category: string;
   query: string;
 }
-
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
 
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
@@ -88,68 +87,97 @@ function parseDuration(duration: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+async function fetchYouTubeVideosWithKey(
+  query: string,
+  maxResults: number,
+  apiKey: string,
+): Promise<YouTubeVideo[]> {
+  console.log(`📡 Fetching YouTube videos for query: "${query}" with key ${apiKey.substring(0, 10)}...`);
+
+  const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+  searchUrl.searchParams.set('part', 'snippet');
+  searchUrl.searchParams.set('q', query);
+  searchUrl.searchParams.set('type', 'video');
+  searchUrl.searchParams.set('maxResults', maxResults.toString());
+  searchUrl.searchParams.set('order', 'relevance');
+  searchUrl.searchParams.set('videoDuration', 'medium');
+  searchUrl.searchParams.set('key', apiKey);
+
+  const searchResponse = await fetch(searchUrl.toString());
+  const searchErrorText = await searchResponse.text();
+
+  if (!searchResponse.ok) {
+    if (isQuotaError(searchResponse.status, searchErrorText)) {
+      markYouTubeKeyIssue(apiKey, true);
+    } else {
+      markYouTubeKeyIssue(apiKey, false);
+    }
+    throw new Error(`YouTube API error: ${searchResponse.status}`);
+  }
+
+  const searchData = JSON.parse(searchErrorText);
+  const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+
+  if (!videoIds) {
+    return [];
+  }
+
+  const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+  detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+  detailsUrl.searchParams.set('id', videoIds);
+  detailsUrl.searchParams.set('key', apiKey);
+
+  const detailsResponse = await fetch(detailsUrl.toString());
+  if (!detailsResponse.ok) {
+    throw new Error(`YouTube API error: ${detailsResponse.status}`);
+  }
+
+  const detailsData = await detailsResponse.json();
+
+  return detailsData.items.map((item: any) => ({
+    id: item.id,
+    title: item.snippet.title,
+    description: item.snippet.description,
+    thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
+    channelTitle: item.snippet.channelTitle,
+    channelId: item.snippet.channelId,
+    publishedAt: item.snippet.publishedAt,
+    duration: parseDuration(item.contentDetails.duration),
+    viewCount: parseInt(item.statistics.viewCount || '0'),
+    category: '',
+    query,
+  }));
+}
+
 async function fetchYouTubeVideos(
   query: string,
-  maxResults: number = 10
+  maxResults: number = 10,
+  preferKeyIndex?: number,
 ): Promise<YouTubeVideo[]> {
-  if (!YOUTUBE_API_KEY) {
+  if (YOUTUBE_API_KEYS.length === 0) {
     console.warn('⚠️ YouTube API key not configured');
     return [];
   }
 
-  try {
-    console.log(`📡 Fetching YouTube videos for query: "${query}"`);
-    
-    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
-    searchUrl.searchParams.set('part', 'snippet');
-    searchUrl.searchParams.set('q', query);
-    searchUrl.searchParams.set('type', 'video');
-    searchUrl.searchParams.set('maxResults', maxResults.toString());
-    searchUrl.searchParams.set('order', 'relevance');
-    searchUrl.searchParams.set('videoDuration', 'medium');
-    searchUrl.searchParams.set('key', YOUTUBE_API_KEY);
+  let startIndex = preferKeyIndex ?? 0;
+  let lastError: Error | null = null;
 
-    const searchResponse = await fetch(searchUrl.toString());
-    if (!searchResponse.ok) {
-      throw new Error(`YouTube API error: ${searchResponse.status}`);
+  for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
+    const key = getNextYouTubeKey(startIndex);
+    if (!key) break;
+
+    try {
+      const videos = await fetchYouTubeVideosWithKey(query, maxResults, key);
+      return videos;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`⚠️ YouTube attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
+      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
     }
-
-    const searchData = await searchResponse.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-
-    if (!videoIds) {
-      return [];
-    }
-
-    const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
-    detailsUrl.searchParams.set('id', videoIds);
-    detailsUrl.searchParams.set('key', YOUTUBE_API_KEY);
-
-    const detailsResponse = await fetch(detailsUrl.toString());
-    if (!detailsResponse.ok) {
-      throw new Error(`YouTube API error: ${detailsResponse.status}`);
-    }
-
-    const detailsData = await detailsResponse.json();
-
-    return detailsData.items.map((item: any) => ({
-      id: item.id,
-      title: item.snippet.title,
-      description: item.snippet.description,
-      thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.default.url,
-      channelTitle: item.snippet.channelTitle,
-      channelId: item.snippet.channelId,
-      publishedAt: item.snippet.publishedAt,
-      duration: parseDuration(item.contentDetails.duration),
-      viewCount: parseInt(item.statistics.viewCount || '0'),
-      category: '',
-      query,
-    }));
-  } catch (error) {
-    console.error('❌ Error fetching YouTube videos:', error);
-    return [];
   }
+
+  console.error('❌ Error fetching YouTube videos:', lastError);
+  return [];
 }
 
 async function storeVideosInCache(videos: YouTubeVideo[], expiresAt: Date): Promise<number> {
@@ -261,25 +289,27 @@ export const runDailyBatchProcedure = publicProcedure
       const expiresAt = new Date();
       expiresAt.setHours(24, 0, 0, 0);
 
+      let keyIndex = 0;
       for (const [category, queries] of Object.entries(CATEGORY_SEARCH_QUERIES)) {
         const queryIndex = new Date().getDate() % queries.length;
         const todayQuery = queries[queryIndex];
-        
+
         console.log(`📺 Fetching category: ${category}, query: "${todayQuery}"`);
-        
-        const videos = await fetchYouTubeVideos(todayQuery, videosPerQuery);
+
+        const videos = await fetchYouTubeVideos(todayQuery, videosPerQuery, keyIndex);
         apiCallsMade += 2;
-        
+        keyIndex = (keyIndex + 1) % Math.max(1, YOUTUBE_API_KEYS.length);
+
         const videosWithCategory = videos.map(v => ({
           ...v,
           category,
           query: todayQuery,
         }));
-        
+
         allVideos.push(...videosWithCategory);
         categoriesProcessed.push(category);
         queriesUsed.push(todayQuery);
-        
+
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
