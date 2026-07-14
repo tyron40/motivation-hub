@@ -57,6 +57,13 @@ export const motivationalFlyers: MotivationalFlyer[] = [
     accent: '#E74C3C',
   },
   {
+    id: 'flyer-featured-8',
+    title: 'No Easy Days',
+    quote: 'Strength isn\'t given. It\'s forged in the reps nobody sees, the early mornings, and the refusal to quit.',
+    imageUrl: 'https://r2-pub.rork.com/attachments/oks08iy57442gmz0y310r.png',
+    accent: '#C0392B',
+  },
+  {
     id: 'flyer-1',
     title: 'Discipline Over Mood',
     quote: 'You don\'t need to feel ready. You need to move anyway.',
