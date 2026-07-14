@@ -1,3 +1,4 @@
+import { AD_CONFIG, AD_UNIT_IDS } from '@/constants/admob';
 import mobileAds, {
   InterstitialAd,
   RewardedAd,
@@ -5,7 +6,6 @@ import mobileAds, {
   RewardedAdEventType,
   TestIds,
 } from 'react-native-google-mobile-ads';
-import { AD_CONFIG, AD_UNIT_IDS } from '@/constants/admob';
 
 type AdEventCallback = (event: string, data?: any) => void;
 
@@ -102,7 +102,7 @@ class AdManager {
       this.log('Interstitial loaded');
     });
 
-    this.interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
+    this.interstitial.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
       this.state.isInterstitialLoading = false;
       this.state.isInterstitialReady = false;
       this.log('Interstitial error', error);
@@ -130,13 +130,13 @@ class AdManager {
       this.log('Rewarded loaded');
     });
 
-    this.rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
+    this.rewarded.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
       this.state.isRewardedLoading = false;
       this.state.isRewardedReady = false;
       this.log('Rewarded error', error);
     });
 
-    this.rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
+    this.rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward: unknown) => {
       this.log('Reward earned', reward);
       this.onRewardEarned?.(reward);
     });
