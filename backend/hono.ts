@@ -513,6 +513,17 @@ function parseDuration(duration: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+async function fetchWithTimeout(url: string, timeoutMs = 20000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchYouTubeVideosWithKey(
   query: string,
   maxResults: number,
@@ -532,7 +543,7 @@ async function fetchYouTubeVideosWithKey(
   console.log('[YouTube] Fetching search results...');
   console.log('[YouTube] API Key used:', apiKey.substring(0, 10) + '...');
 
-  const searchResponse = await fetch(searchUrl.toString());
+  const searchResponse = await fetchWithTimeout(searchUrl.toString());
   const searchErrorText = await searchResponse.text();
 
   if (!searchResponse.ok) {
@@ -589,7 +600,7 @@ Details: ${errorDetails}`;
   detailsUrl.searchParams.set('key', apiKey);
 
   console.log('[YouTube] Fetching video details...');
-  const detailsResponse = await fetch(detailsUrl.toString());
+  const detailsResponse = await fetchWithTimeout(detailsUrl.toString());
   if (!detailsResponse.ok) {
     const errorText = await detailsResponse.text();
     console.error('[YouTube] Videos API error:', detailsResponse.status, errorText);
