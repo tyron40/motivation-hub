@@ -9,20 +9,22 @@ import {
   Animated,
   Share,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2 } from 'lucide-react-native';
+import { ChevronDown, Heart, Share2, Play, Pause, SkipForward, SkipBack, RotateCcw, RotateCw } from 'lucide-react-native';
+import Slider from '@react-native-community/slider';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
-import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
-import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
-import { useAdMob } from '@/hooks/admob-context';
 import * as Haptics from 'expo-haptics';
+import { Dimensions } from 'react-native';
 
+const { width } = Dimensions.get('window');
+const coverSize = Math.min(width - 80, 280);
 
 export default function PlayerScreen() {
-  const { colors } = useTheme();
+  const { colors: _colors } = useTheme();
   const { 
     currentSpeech, 
     toggleFavorite, 
@@ -31,151 +33,25 @@ export default function PlayerScreen() {
     setIsMinimized,
     currentPlaylist,
     audioPlayerRef,
+    isPlaying,
     setIsPlaying,
+    currentTime,
+    duration,
     setCurrentTime,
     setDuration,
   } = useSpeechContext();
-  const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition, isShowingAd } = useAdMob();
-  const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const midpointAdShownRef = useRef(false);
-  const quarterAdShownRef = useRef(false);
-  const openAdShownRef = useRef(false);
-  const onEndLockedRef = useRef(false);
-  const wasPlayingBeforeAdRef = useRef(false);
-  const adJustFinishedRef = useRef(false);
-  const styles = getStyles(colors);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const styles = getStyles();
 
   useEffect(() => {
     setIsMinimized(false);
-    if (!openAdShownRef.current && canShowAds) {
-      openAdShownRef.current = true;
-      console.log('[Ad] Player opened — attempting interstitial');
-      void tryShowInterstitialOnTransition();
-    }
     return () => {
-      audioPlayerRef.current = null;
+      // Do NOT clear audioPlayerRef here — GlobalYouTubePlayer owns it now
     };
-  }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
-
-  useEffect(() => {
-    if (isShowingAd) {
-      console.log('[Ad] Ad started showing, saving play state');
-      wasPlayingBeforeAdRef.current = localPlayerRef.current?.getIsPlaying() ?? false;
-    } else if (wasPlayingBeforeAdRef.current) {
-      console.log('[Ad] Ad finished, resuming playback');
-      adJustFinishedRef.current = true;
-      wasPlayingBeforeAdRef.current = false;
-      setTimeout(() => {
-        if (localPlayerRef.current) {
-          localPlayerRef.current.resumeAfterAd();
-        }
-        adJustFinishedRef.current = false;
-      }, 600);
-    }
-  }, [isShowingAd]);
-
-  useEffect(() => {
-    if (localPlayerRef.current) {
-      audioPlayerRef.current = localPlayerRef.current;
-    }
-    midpointAdShownRef.current = false;
-    quarterAdShownRef.current = false;
-  }, [audioPlayerRef, currentSpeech]);
-
-  const handleMinimize = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsMinimized(true);
-    router.back();
-  };
-
-  const handleNext = useCallback(() => {
-    skipToNext();
-  }, [skipToNext]);
-
-  const handlePrevious = useCallback(() => {
-    skipToPrevious();
-  }, [skipToPrevious]);
-
-  const handlePlayingChange = useCallback((playing: boolean) => {
-    console.log('Player playing state changed:', playing);
-    setIsPlaying(playing);
-  }, [setIsPlaying]);
-
-  const handleProgressChange = useCallback((time: number, dur: number) => {
-    setCurrentTime(time);
-    if (dur > 0) {
-      setDuration(dur);
-    }
-  }, [setCurrentTime, setDuration]);
-
-  const handleEnd = useCallback(async () => {
-    try {
-      if (onEndLockedRef.current) {
-        console.log('onEnd already processing, skipping');
-        return;
-      }
-      onEndLockedRef.current = true;
-      console.log('Audio playback ended');
-      midpointAdShownRef.current = false;
-      if (canShowAds) {
-        try {
-          const shown = await tryShowInterstitialOnTransition();
-          if (shown) {
-            console.log('[Ad] Speech ended — showed interstitial');
-          }
-        } catch (adErr) {
-          console.log('Ad error on end, continuing:', adErr);
-        }
-      }
-      handleNext();
-    } catch (err) {
-      console.error('Error in handleEnd:', err);
-    } finally {
-      setTimeout(() => { onEndLockedRef.current = false; }, 2000);
-    }
-  }, [canShowAds, tryShowInterstitialOnTransition, handleNext]);
-
-  const handleProgressWithAds = useCallback((time: number, dur: number) => {
-    handleProgressChange(time, dur);
-    if (adJustFinishedRef.current) return;
-    if (canShowAds && dur > 0) {
-      const progress = time / dur;
-      if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
-        quarterAdShownRef.current = true;
-        console.log('[Ad] 25% reached — showing interstitial');
-        wasPlayingBeforeAdRef.current = true;
-        void showInterstitialAd();
-      }
-      if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
-        midpointAdShownRef.current = true;
-        console.log('[Ad] Midpoint reached — showing interstitial');
-        wasPlayingBeforeAdRef.current = true;
-        void showInterstitialAd();
-      }
-    }
-  }, [handleProgressChange, canShowAds, showInterstitialAd]);
-
-  const handleShare = async () => {
-    if (!currentSpeech) return;
-    try {
-      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Fuel!`;
-      const url = currentSpeech.youtubeId 
-        ? `https://youtube.com/watch?v=${currentSpeech.youtubeId}` 
-        : undefined;
-      
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({ title: currentSpeech.title, text: message, url });
-        }
-      } else {
-        await Share.share({ message, url });
-      }
-    } catch (error) {
-      console.error('Error sharing:', error);
-    }
-  };
+  }, [setIsMinimized]);
 
   useEffect(() => {
     Animated.parallel([
@@ -201,9 +77,100 @@ export default function PlayerScreen() {
     ]).start();
   }, [scaleAnim, fadeAnim]);
 
+  // Pulse animation for playing state
+  useEffect(() => {
+    if (isPlaying) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.04, duration: 2000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.stopAnimation();
+      Animated.timing(pulseAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    }
+  }, [isPlaying, pulseAnim]);
+
+  const handleMinimize = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsMinimized(true);
+    router.back();
+  };
+
+  const handleNext = useCallback(() => {
+    skipToNext();
+  }, [skipToNext]);
+
+  const handlePrevious = useCallback(() => {
+    skipToPrevious();
+  }, [skipToPrevious]);
+
+  const handlePlayPause = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (audioPlayerRef.current?.togglePlay) {
+      audioPlayerRef.current.togglePlay();
+    } else {
+      setIsPlaying(!isPlaying);
+    }
+  }, [audioPlayerRef, isPlaying, setIsPlaying]);
+
+  const handleSkipForward = useCallback(async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    audioPlayerRef.current?.seekForward(15);
+  }, [audioPlayerRef]);
+
+  const handleSkipBackward = useCallback(async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    audioPlayerRef.current?.seekBackward(15);
+  }, [audioPlayerRef]);
+
+  const handleSliderChange = useCallback((value: number) => {
+    setCurrentTime(value);
+  }, [setCurrentTime]);
+
+  const handleSliderComplete = useCallback(async (value: number) => {
+    await audioPlayerRef.current?.seekTo(value);
+    setCurrentTime(value);
+  }, [audioPlayerRef, setCurrentTime]);
+
+  const handleShare = async () => {
+    if (!currentSpeech) return;
+    try {
+      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Fuel!`;
+      const url = currentSpeech.youtubeId 
+        ? `https://youtube.com/watch?v=${currentSpeech.youtubeId}` 
+        : undefined;
+      
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ title: currentSpeech.title, text: message, url });
+        }
+      } else {
+        await Share.share({ message, url });
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   if (!currentSpeech) {
     return null;
   }
+
+  const thumbnailUrl = currentSpeech.youtubeId
+    ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/hqdefault.jpg`
+    : currentSpeech.imageUrl;
 
   return (
     <View style={styles.container}>
@@ -221,48 +188,99 @@ export default function PlayerScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          {currentSpeech.youtubeId ? (
-            <View style={styles.playerWrapper}>
-              <AudioOnlyVideoPlayer
-                ref={localPlayerRef}
-                videoId={currentSpeech.youtubeId}
-                title={currentSpeech.title}
-                thumbnail={currentSpeech.youtubeId 
-                  ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/hqdefault.jpg`
-                  : currentSpeech.imageUrl
-                }
-                channelTitle={currentSpeech.speaker}
-                autoplay={true}
-                onError={(error: string) => {
-                  console.error('Audio playback error:', error);
-                }}
-                onEnd={handleEnd}
-                onNext={currentPlaylist.length > 1 ? handleNext : undefined}
-                onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
-                onPlayingChange={handlePlayingChange}
-                onProgressChange={handleProgressWithAds}
-              />
-            </View>
-          ) : (
-            <>
-              <Animated.View style={[styles.imageContainer, { transform: [{ scale: scaleAnim }] }]}>
-                <Image source={{ uri: currentSpeech.imageUrl }} style={styles.image} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.4)']}
-                  style={styles.imageGradient}
-                />
-              </Animated.View>
-              
-              <View style={styles.info}>
-                <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
-                <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{(currentSpeech.category || '').toUpperCase()}</Text>
+          {/* Cover image with pulse animation */}
+          <Animated.View style={[styles.coverImageContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <Image source={{ uri: thumbnailUrl }} style={styles.coverImage} />
+            <View style={styles.coverGradient}>
+              {isPlaying && (
+                <View style={styles.nowPlayingIndicator}>
+                  <View style={[styles.soundBar, styles.soundBar1]} />
+                  <View style={[styles.soundBar, styles.soundBar2]} />
+                  <View style={[styles.soundBar, styles.soundBar3]} />
+                  <View style={[styles.soundBar, styles.soundBar4]} />
                 </View>
-              </View>
-            </>
-          )}
+              )}
+            </View>
+          </Animated.View>
 
+          {/* Title and speaker */}
+          <View style={styles.infoSection}>
+            <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
+            <Text style={styles.subtitle}>{currentSpeech.speaker}</Text>
+          </View>
+
+          {/* Progress bar */}
+          <View style={styles.progressSection}>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={duration > 0 ? duration : 1}
+              value={currentTime}
+              onValueChange={handleSliderChange}
+              onSlidingStart={() => {}}
+              onSlidingComplete={handleSliderComplete}
+              minimumTrackTintColor="#667eea"
+              maximumTrackTintColor="rgba(255,255,255,0.2)"
+              thumbTintColor="#FFFFFF"
+            />
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>{formatDuration(currentTime)}</Text>
+              <Text style={styles.timeText}>{formatDuration(duration)}</Text>
+            </View>
+          </View>
+
+          {/* Playback controls */}
+          <View style={styles.controls}>
+            <TouchableOpacity
+              onPress={handlePrevious}
+              style={[styles.navButton, currentPlaylist.length <= 1 && styles.buttonDisabled]}
+              disabled={currentPlaylist.length <= 1}
+              activeOpacity={0.7}
+            >
+              <SkipBack size={22} color="#FFFFFF" fill="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => void handleSkipBackward()}
+              style={styles.seekButton}
+              activeOpacity={0.7}
+            >
+              <RotateCcw size={20} color="#FFFFFF" />
+              <Text style={styles.seekLabel}>15</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handlePlayPause}
+              style={styles.playButton}
+              activeOpacity={0.8}
+            >
+              {isPlaying ? (
+                <Pause size={32} color="#000000" fill="#000000" />
+              ) : (
+                <Play size={32} color="#000000" fill="#000000" style={{ marginLeft: 3 }} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => void handleSkipForward()}
+              style={styles.seekButton}
+              activeOpacity={0.7}
+            >
+              <RotateCw size={20} color="#FFFFFF" />
+              <Text style={styles.seekLabel}>15</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleNext}
+              style={[styles.navButton, currentPlaylist.length <= 1 && styles.buttonDisabled]}
+              disabled={currentPlaylist.length <= 1}
+              activeOpacity={0.7}
+            >
+              <SkipForward size={22} color="#FFFFFF" fill="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom actions */}
           <View style={styles.bottomActions}>
             <TouchableOpacity 
               onPress={() => toggleFavorite(currentSpeech.id)} 
@@ -296,13 +314,13 @@ export default function PlayerScreen() {
   );
 }
 
-const getStyles = (_colors: any) => StyleSheet.create({
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
   },
   gradientBackground: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     top: 0,
@@ -312,9 +330,9 @@ const getStyles = (_colors: any) => StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingHorizontal: 16,
     paddingVertical: 20,
   },
@@ -323,98 +341,161 @@ const getStyles = (_colors: any) => StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     letterSpacing: 1.5,
     opacity: 0.9,
   },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  playerWrapper: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  imageContainer: {
-    width: '85%',
-    aspectRatio: 1,
-    maxWidth: 340,
-    maxHeight: 340,
+  coverImageContainer: {
+    width: coverSize,
+    height: coverSize,
     borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 48,
+    overflow: 'hidden' as const,
+    marginBottom: 32,
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,
     shadowRadius: 20,
-    position: 'relative',
     backgroundColor: '#1C1C1E',
   },
-  image: {
+  coverImage: {
     width: '100%',
     height: '100%',
   },
-  imageGradient: {
-    position: 'absolute',
+  coverGradient: {
+    position: 'absolute' as const,
+    bottom: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    height: '30%',
+    height: 60,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  info: {
-    alignItems: 'center',
-    marginBottom: 48,
-    paddingHorizontal: 20,
+  nowPlayingIndicator: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: 3,
+    height: 20,
+  },
+  soundBar: {
+    width: 3,
+    backgroundColor: '#667eea',
+    borderRadius: 2,
+  },
+  soundBar1: { height: 8 },
+  soundBar2: { height: 16 },
+  soundBar3: { height: 12 },
+  soundBar4: { height: 18 },
+  infoSection: {
+    width: '100%',
+    alignItems: 'center' as const,
+    marginBottom: 24,
+    paddingHorizontal: 10,
   },
   title: {
+    fontSize: 20,
+    fontWeight: '700' as const,
     color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 12,
-    lineHeight: 32,
+    marginBottom: 8,
+    lineHeight: 26,
   },
-  speaker: {
+  subtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500' as const,
+    textAlign: 'center',
+  },
+  progressSection: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  timeRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 4,
+    marginTop: -8,
+  },
+  timeText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500' as const,
+  },
+  controls: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 16,
+    marginBottom: 24,
+  },
+  navButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  seekButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    marginHorizontal: 4,
+    elevation: 10,
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.35,
+  },
+  seekLabel: {
+    position: 'absolute' as const,
+    fontSize: 9,
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '500',
-    opacity: 0.8,
-    marginBottom: 16,
-  },
-  categoryBadge: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  categoryText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    opacity: 0.9,
+    fontWeight: '800' as const,
+    bottom: 6,
+    letterSpacing: -0.3,
   },
   bottomActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 40,
     marginTop: 24,
   },
   actionButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 16,

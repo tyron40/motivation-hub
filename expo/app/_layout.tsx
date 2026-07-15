@@ -18,6 +18,7 @@ import { ThemeProvider } from "@/hooks/theme-context";
 import { AdMobProvider } from "@/hooks/admob-context";
 import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
+import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -249,6 +250,7 @@ function RootLayoutNav() {
         />
       </Stack>
       {isAuthenticated && <AudioPlayerWrapper />}
+      {isAuthenticated && <GlobalYouTubePlayer />}
     </>
   );
 }

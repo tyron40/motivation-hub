@@ -36,6 +36,7 @@ interface AudioOnlyVideoPlayerProps {
   thumbnail?: string;
   channelTitle?: string;
   autoplay?: boolean;
+  hideUI?: boolean;
   onEnd?: () => void;
   onError?: (error: string) => void;
   onNext?: () => void;
@@ -72,6 +73,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   thumbnail,
   channelTitle: _channelTitle,
   autoplay = true,
+  hideUI = false,
   onEnd,
   onError,
   onNext,
@@ -623,6 +625,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   ) : null;
 
   const hiddenPlayerElement = Platform.OS === 'web' ? webPlayerElement : nativePlayerElement;
+
+  if (hideUI) {
+    return (
+      <View style={styles.container}>
+        {hiddenPlayerElement}
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (

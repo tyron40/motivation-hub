@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useTheme } from '@/hooks/theme-context';
@@ -1210,7 +1211,72 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
     }
   };
 
+  // Stop all TTS playback and recording immediately when navigating away from voice coach
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        console.log('🧹 Voice coach lost focus — stopping TTS, recording, and resetting state');
+        // Stop TTS playback
+        if (sound) {
+          sound.stopAsync().catch(() => {});
+          sound.unloadAsync().catch(() => {});
+          setSound(null);
+        }
+        setIsPlaying(false);
+        setIsProcessing(false);
+        setCurrentStatus('Ready to listen');
 
+        // Stop any active recording
+        if (recordingRef.current) {
+          try {
+            const rec = recordingRef.current;
+            rec.getStatusAsync().then((status: any) => {
+              if (status.canRecord || status.isRecording) {
+                rec.stopAndUnloadAsync().catch(() => {});
+              }
+            }).catch(() => {});
+          } catch {}
+          recordingRef.current = null;
+        }
+        setIsRecording(false);
+        isStartingRef.current = false;
+        isStoppingRef.current = false;
+
+        // Stop web recording
+        if (Platform.OS === 'web') {
+          if (webRecorderRef.current) {
+            try { webRecorderRef.current.stop(); } catch {}
+            webRecorderRef.current = null;
+          }
+          if (webStreamRef.current) {
+            try {
+              webStreamRef.current.getTracks().forEach((t: any) => t.stop());
+            } catch {}
+            webStreamRef.current = null;
+          }
+        }
+
+        // Stop expo-speech if running
+        if (Platform.OS !== 'web') {
+          import('expo-speech').then((Speech: any) => {
+            Speech.stop().catch(() => {});
+          }).catch(() => {});
+        } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+
+        // Reset audio mode
+        if (Platform.OS !== 'web') {
+          Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+          }).catch(() => {});
+        }
+      };
+    }, [sound])
+  );
 
   const avatarScale = avatarAnim.interpolate({
     inputRange: [0, 1],

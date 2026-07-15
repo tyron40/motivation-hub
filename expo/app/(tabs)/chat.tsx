@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
@@ -606,6 +607,30 @@ function ChatScreenContent() {
       setIsTranscribing(false);
     }
   };
+
+  // Stop all audio and recording immediately when navigating away from chat
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        // Cleanup runs when screen loses focus (tab switch, navigation, etc.)
+        console.log('🧹 Chat screen lost focus — stopping audio and recording');
+        if (recording) {
+          recording.stopAndUnloadAsync().catch(() => {});
+          setRecording(null);
+          setIsRecording(false);
+        }
+        if (sound) {
+          sound.stopAsync().catch(() => {});
+          sound.unloadAsync().catch(() => {});
+          setSound(null);
+        }
+        setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
+        setIsTyping(false);
+        setIsLoading(false);
+        isSendingRef.current = false;
+      };
+    }, [recording, sound])
+  );
 
   useEffect(() => {
     return () => {
