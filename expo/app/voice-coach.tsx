@@ -54,8 +54,9 @@ function VoiceCoachContent() {
   const webChunksRef = useRef<Blob[]>([]);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('Initializing voice coach...');
+  const [greetingText, setGreetingText] = useState<string>('');
   const [showVoiceModal, setShowVoiceModal] = useState(false);
-  const hasGreetedRef = useRef(false);
+  const [hasGreeted, setHasGreeted] = useState(false);
   const isInitializedRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
   const isStartingRef = useRef<boolean>(false);
@@ -184,12 +185,12 @@ function VoiceCoachContent() {
   }, [profile.preferredVoice, sound, usageStats.credits, iapContext]);
 
   const handleInitialGreeting = useCallback(async () => {
-    if (hasGreetedRef.current) {
+    if (hasGreeted) {
       console.log('⚠️ Already greeted, skipping');
       return;
     }
     
-    hasGreetedRef.current = true;
+    setHasGreeted(true);
     
     const userName = profile.name || 'friend';
     const coachName = profile.coachCharacter?.name || 'Coach Alex';
@@ -201,12 +202,13 @@ function VoiceCoachContent() {
     
     const greetingMessage: Message = {
       role: 'assistant',
-      content: `${greeting}, ${userName}! I'm ${coachName}, your personal motivation coach. I'm here to help you overcome challenges, build confidence, and achieve your goals. What's on your mind today?`,
+      content: `${greeting}, ${userName}! I'm ${coachName}, your personal motivation coach. I'm fired up and ready to help you push past limits, build unstoppable confidence, and turn today's goals into wins. What's on your mind right now?`,
       timestamp: Date.now(),
     };
     
     console.log('👋 Setting initial greeting message for:', userName);
     setMessages([greetingMessage]);
+    setGreetingText(greetingMessage.content);
     setCurrentStatus('Coach is greeting you...');
     
     console.log('🔊 Speaking initial greeting...');
@@ -223,7 +225,7 @@ function VoiceCoachContent() {
       console.error('❌ Failed to speak greeting:', error);
       setCurrentStatus('Ready to listen');
     }
-  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, profile.coachCharacter, speakMessage]);
+  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, profile.coachCharacter, speakMessage, hasGreeted]);
 
   useEffect(() => {
     let isMounted = true;
@@ -261,13 +263,7 @@ function VoiceCoachContent() {
         console.log('✅ Audio mode initialized');
         
         await new Promise(resolve => setTimeout(resolve, 300));
-        
-        if (isMounted && !hasGreetedRef.current) {
-          console.log('🎯 Triggering initial greeting, profile name:', profile.name);
-          await handleInitialGreeting();
-        } else {
-          setCurrentStatus('Ready to listen');
-        }
+        setCurrentStatus('Ready to listen');
       } catch (error) {
         console.error('Error initializing voice coach:', error);
         setCurrentStatus('Ready to listen');
@@ -320,7 +316,28 @@ function VoiceCoachContent() {
       
       cleanup();
     };
-  }, [handleInitialGreeting, profile.name, sound]);
+  }, [sound]);
+
+  // Greeting effect: trigger once the user's profile name is loaded (or fallback after timeout)
+  useEffect(() => {
+    if (hasGreeted) return;
+
+    if (profile.name) {
+      const timer = setTimeout(() => {
+        handleInitialGreeting();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+
+    // Wait briefly for profile name to load; otherwise greet with fallback
+    const timer = setTimeout(() => {
+      if (!hasGreeted) {
+        handleInitialGreeting();
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [profile.name, hasGreeted, handleInitialGreeting]);
 
   // Pulse animation for recording
   useEffect(() => {
@@ -1283,9 +1300,15 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         </View>
 
         <View style={styles.messageSection}>
-          <Text style={[styles.statusMainText, { color: colors.primary }]}>
-            {currentStatus}
-          </Text>
+          {greetingText ? (
+            <Text style={[styles.greetingText, { color: colors.text }]}>
+              {greetingText}
+            </Text>
+          ) : (
+            <Text style={[styles.statusMainText, { color: colors.primary }]}>
+              {currentStatus}
+            </Text>
+          )}
           {isPlaying && (
             <TouchableOpacity 
               style={styles.stopButton}
@@ -1492,6 +1515,14 @@ const createStyles = (colors: any) => StyleSheet.create({
     lineHeight: 28,
     fontWeight: '600' as const,
     marginBottom: 16,
+  },
+  greetingText: {
+    fontSize: 18,
+    textAlign: 'center' as const,
+    lineHeight: 26,
+    fontWeight: '500' as const,
+    marginBottom: 16,
+    paddingHorizontal: 12,
   },
   stopButton: {
     backgroundColor: 'rgba(231, 76, 60, 0.2)',

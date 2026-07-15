@@ -289,3 +289,35 @@ export async function sendChatMessage(params: {
 
   throw new Error('Unable to get AI response. Please try again.');
 }
+
+export async function generateImageViaBackend(prompt: string, size: string = '1024x1024'): Promise<{ imageUrl: string }> {
+  console.log('🎨 Image generation | prompt length:', prompt.length);
+
+  const response = await fetchWithTimeout(
+    API_ENDPOINTS.imageGenerate,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ prompt, size }),
+    },
+    60000
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error('❌ Image generation error:', response.status, errorText.substring(0, 200));
+    throw new Error(`Image generation failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  console.log('✅ Image generated successfully');
+
+  if (!data?.imageUrl) {
+    throw new Error('Invalid image generation response');
+  }
+
+  return { imageUrl: data.imageUrl };
+}

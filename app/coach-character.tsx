@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -160,11 +162,18 @@ export default function CoachCharacterScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView
+          <KeyboardAvoidingView
             style={styles.content}
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
           >
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="none"
+            >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Preset Characters</Text>
             <View style={styles.charactersGrid}>
               {PRESET_CHARACTERS.map((character) => (
@@ -265,7 +274,8 @@ export default function CoachCharacterScreen() {
                 </View>
               )}
             </View>
-          </ScrollView>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </LinearGradient>
     </>
@@ -315,9 +325,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   sectionTitle: {
     fontSize: 20,

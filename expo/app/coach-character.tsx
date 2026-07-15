@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +20,7 @@ import { Stack, router } from 'expo-router';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
+import { generateImageViaBackend } from '@/lib/api-client';
 
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
@@ -96,23 +99,11 @@ export default function CoachCharacterScreen() {
     try {
       console.log('🎨 Generating custom coach character...');
       
-      const response = await fetch('https://toolkit.rork.com/images/generate/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: `A professional, friendly coach avatar with these characteristics: ${customDescription}. Style: modern, clean, professional headshot, warm and approachable expression, suitable for a motivation coach app`,
-          size: '1024x1024',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const imageUrl = `data:${data.image.mimeType};base64,${data.image.base64Data}`;
+      const result = await generateImageViaBackend(
+        `A professional, friendly coach avatar with these characteristics: ${customDescription}. Style: modern, clean, professional headshot, warm and approachable expression, suitable for a motivation coach app`,
+        '1024x1024'
+      );
+      const imageUrl = result.imageUrl;
 
       const customCharacter: CoachCharacter = {
         id: `custom-${Date.now()}`,
@@ -171,11 +162,18 @@ export default function CoachCharacterScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView
+          <KeyboardAvoidingView
             style={styles.content}
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
           >
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="none"
+            >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Preset Characters</Text>
             <View style={styles.charactersGrid}>
               {PRESET_CHARACTERS.map((character) => (
@@ -276,7 +274,8 @@ export default function CoachCharacterScreen() {
                 </View>
               )}
             </View>
-          </ScrollView>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </LinearGradient>
     </>
@@ -326,9 +325,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   sectionTitle: {
     fontSize: 20,
