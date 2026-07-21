@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import { 
   StyleSheet, 
   Text, 
@@ -25,6 +26,17 @@ import { fallbackShortClips } from '@/mocks/shortClips';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 
+
+const LOCAL_FLYER_IMAGES: Record<string, ImageSourcePropType> = {
+  'assets/images/haskle.jpeg': require('@/assets/images/haskle.jpeg'),
+  'assets/images/run club.jpeg': require('@/assets/images/run club.jpeg'),
+};
+
+const getFlyerImageSource = (imageUrl: string): ImageSourcePropType => {
+  const local = LOCAL_FLYER_IMAGES[imageUrl];
+  if (local) return local;
+  return { uri: imageUrl };
+};
 
 export default function HomeScreen() {
   const speechContext = useSpeechContext();
@@ -298,7 +310,7 @@ export default function HomeScreen() {
                   testID={`flyer-card-${item.id}`}
                 >
                   <Image
-                    source={{ uri: item.imageUrl }}
+                    source={getFlyerImageSource(item.imageUrl)}
                     style={styles.flyerPosterImage}
                   />
                   {item.quote ? (
@@ -498,18 +510,18 @@ const getStyles = (colors: any) => StyleSheet.create({
   flyerPosterGradient: {
     flex: 1,
     justifyContent: 'flex-end' as const,
-    padding: 16,
+    padding: 12,
   },
   flyerQuoteRow: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   flyerPosterQuote: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600' as const,
-    lineHeight: 18,
+    lineHeight: 14,
     fontStyle: 'italic' as const,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   flyerPosterAccentLine: {
     width: 32,

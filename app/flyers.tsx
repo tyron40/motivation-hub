@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import {
   View,
   Text,
@@ -31,6 +32,17 @@ const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 40) / 2);
 const CARD_HEIGHT = Math.floor(CARD_WIDTH * 1.52);
 
 const LIKED_FLYERS_KEY_PREFIX = 'liked_flyers:';
+
+const LOCAL_FLYER_IMAGES: Record<string, ImageSourcePropType> = {
+  'assets/images/haskle.jpeg': require('@/assets/images/haskle.jpeg'),
+  'assets/images/run club.jpeg': require('@/assets/images/run club.jpeg'),
+};
+
+const getFlyerImageSource = (imageUrl: string): ImageSourcePropType => {
+  const local = LOCAL_FLYER_IMAGES[imageUrl];
+  if (local) return local;
+  return { uri: imageUrl };
+};
 
 export default function FlyersScreen() {
   const { colors } = useTheme();
@@ -302,7 +314,7 @@ export default function FlyersScreen() {
                 </View>
               ) : (
                 <Image
-                  source={{ uri: flyer.imageUrl }}
+                  source={getFlyerImageSource(flyer.imageUrl)}
                   style={styles.cardImage}
                   resizeMode="cover"
                   onLoadStart={() => handleImageLoadStart(flyer.id)}
@@ -317,7 +329,8 @@ export default function FlyersScreen() {
               )}
               {flyer.quote ? (
                 <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
+                  colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)', 'rgba(0,0,0,0.96)']}
+                  locations={[0, 0.45, 0.72, 1]}
                   style={styles.cardGradient}
                 >
                   <View style={[styles.accentDot, { backgroundColor: flyer.accent }]} />
@@ -358,7 +371,7 @@ export default function FlyersScreen() {
             <Animated.View style={[styles.modalContent, { transform: [{ scale: scaleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
               {selectedFlyer && (
                 <View style={styles.modalCard}>
-                  <Image source={{ uri: selectedFlyer.imageUrl }} style={styles.modalImage} resizeMode="cover" />
+                  <Image source={getFlyerImageSource(selectedFlyer.imageUrl)} style={styles.modalImage} resizeMode="cover" />
                   <LinearGradient
                     colors={selectedFlyer.quote ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)'] : ['transparent', 'rgba(0,0,0,0.35)']}
                     style={styles.modalGradient}
@@ -559,7 +572,9 @@ const getStyles = (colors: any) => StyleSheet.create({
   cardGradient: {
     flex: 1,
     justifyContent: 'flex-end' as const,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: CARD_HEIGHT * 0.4,
   },
   accentDot: {
     width: 8,

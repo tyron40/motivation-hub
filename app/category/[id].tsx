@@ -109,23 +109,45 @@ export default function CategoryScreen() {
         console.log(`Loading content for ${category.name}...`);
         
         const [categoryVideos, channelVideos] = await Promise.all([
-          getVideosByCategory(category.name, 30),
-          getTrendingVideos(50),
+          getVideosByCategory(category.name, 40),
+          getTrendingVideos(80),
         ]);
-        
+
+        const categoryNameLower = category.name.toLowerCase();
+        const categoryWords = categoryNameLower
+          .split(/[^a-z0-9]+/i)
+          .map(w => w.trim())
+          .filter(Boolean);
+
+        const scoreSpeechRelevance = (speech: Speech) => {
+          const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+          let score = 0;
+          if (haystack.includes(categoryNameLower)) score += 4;
+          for (const word of categoryWords) {
+            if (word.length > 2 && haystack.includes(word)) score += 1;
+          }
+          const assigned = classifyVideoToCategory(speech.title, speech.description);
+          if (assigned === category.name) score += 3;
+          return score;
+        };
+
         const channelSpeeches = channelVideos
-          .map(video => {
-            const speech = convertVideoToSpeech(video);
-            const assigned = classifyVideoToCategory(speech.title, speech.description);
-            return { ...speech, category: assigned };
-          })
-          .filter(s => s.category === category.name);
-        
-        const catSpeeches: Speech[] = categoryVideos.map(video => convertVideoToSpeech(video));
-        
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
+          .filter(item => item.score >= 3)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+        const catSpeeches: Speech[] = categoryVideos
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
+          .filter(item => item.score >= 2)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
-        for (const s of [...channelSpeeches, ...catSpeeches]) {
+        for (const s of [...catSpeeches, ...channelSpeeches]) {
           if (!seenIds.has(s.id) && s.duration > 60) {
             seenIds.add(s.id);
             merged.push(s);

@@ -12,9 +12,9 @@ export const defaultCategoryBanners: CategoryBanner[] = [
     id: 'banner-1',
     categoryId: '1',
     categoryName: 'Motivation',
-    imageUrl: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1200&q=80',
-    quote: 'The only way to do great work is to love what you do.',
-    author: 'Steve Jobs',
+    imageUrl: 'assets/images/run club.jpeg',
+    quote: 'Run with purpose, not pressure. Every step forward is proof you did not quit.',
+    author: 'Motivation Hub',
   },
   {
     id: 'banner-2',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -78,6 +78,12 @@ export default function CoachCharacterScreen() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCharacter, setGeneratedCharacter] = useState<CoachCharacter | null>(null);
 
+  const NAME_MAX = 40;
+  const DESCRIPTION_MAX = 320;
+
+  const nameLength = useMemo(() => customName.length, [customName]);
+  const descriptionLength = useMemo(() => customDescription.length, [customDescription]);
+
   const handleSelectCharacter = async (character: CoachCharacter) => {
     setSelectedCharacter(character);
     await updateProfile({ coachCharacter: character });
@@ -85,46 +91,45 @@ export default function CoachCharacterScreen() {
   };
 
   const handleGenerateCustomCharacter = async () => {
-    if (!customDescription.trim()) {
+    const trimmedName = customName.trim();
+    const trimmedDescription = customDescription.trim();
+
+    if (!trimmedDescription) {
       Alert.alert('Error', 'Please describe your ideal coach');
       return;
     }
 
-    if (!customName.trim()) {
+    if (!trimmedName) {
       Alert.alert('Error', 'Please enter a name for your coach');
+      return;
+    }
+
+    if (trimmedName.length < 2) {
+      Alert.alert('Error', 'Coach name must be at least 2 characters');
       return;
     }
 
     setIsGenerating(true);
     try {
       console.log('🎨 Generating custom coach character...');
-      
+
       const result = await generateImageViaBackend(
-        `A professional, friendly coach avatar with these characteristics: ${customDescription}. Style: modern, clean, professional headshot, warm and approachable expression, suitable for a motivation coach app`,
+        `A professional, friendly coach avatar with these characteristics: ${trimmedDescription}. Style: modern, clean, professional headshot, warm and approachable expression, suitable for a motivation coach app`,
         '1024x1024'
       );
       const imageUrl = result.imageUrl;
 
       const customCharacter: CoachCharacter = {
         id: `custom-${Date.now()}`,
-        name: customName.trim(),
+        name: trimmedName,
         imageUrl,
-        description: customDescription,
+        description: trimmedDescription,
         isCustom: true,
       };
 
       setGeneratedCharacter(customCharacter);
-      Alert.alert(
-        'Character Generated!',
-        'Your custom coach has been created. Tap to select it.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Select',
-            onPress: () => handleSelectCharacter(customCharacter),
-          },
-        ]
-      );
+      await handleSelectCharacter(customCharacter);
+      Alert.alert('Character Generated!', `${trimmedName} was generated and selected successfully.`);
     } catch (error) {
       console.error('❌ Error generating character:', error);
       Alert.alert(
@@ -155,8 +160,9 @@ export default function CoachCharacterScreen() {
               <Text style={[styles.title, { color: colors.text }]}>Choose Your Coach</Text>
             </View>
             <TouchableOpacity
-              style={[styles.doneButton, { backgroundColor: colors.primary }]}
+              style={[styles.doneButton, { backgroundColor: colors.primary }, isGenerating && styles.doneButtonDisabled]}
               onPress={() => router.back()}
+              disabled={isGenerating}
             >
               <Text style={styles.doneButtonText}>Done</Text>
             </TouchableOpacity>
@@ -212,24 +218,37 @@ export default function CoachCharacterScreen() {
 
             <View style={styles.customSection}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>Coach Name</Text>
-              <TextInput
-                style={[styles.customNameInput, { color: colors.text }]}
-                placeholder="E.g., Coach Sarah, Mentor John, etc."
-                placeholderTextColor={colors.textSecondary}
-                value={customName}
-                onChangeText={setCustomName}
-              />
+                <TextInput
+                  style={[styles.customNameInput, { color: colors.text }]}
+                  placeholder="E.g., Coach Sarah, Mentor John, etc."
+                  placeholderTextColor={colors.textSecondary}
+                  value={customName}
+                  onChangeText={setCustomName}
+                  maxLength={NAME_MAX}
+                  editable={!isGenerating}
+                  returnKeyType="done"
+                />
+                <Text style={[styles.counterText, { color: colors.textSecondary }]}>
+                  {nameLength}/{NAME_MAX}
+                </Text>
 
               <Text style={[styles.inputLabel, { color: colors.text }]}>Character Description</Text>
-              <TextInput
-                style={[styles.customInput, { color: colors.text }]}
-                placeholder="E.g., A wise elderly mentor with gray hair and glasses, wearing professional attire..."
-                placeholderTextColor={colors.textSecondary}
-                value={customDescription}
-                onChangeText={setCustomDescription}
-                multiline
-                numberOfLines={4}
-              />
+                <TextInput
+                  style={[styles.customInput, { color: colors.text }]}
+                  placeholder="E.g., A wise elderly mentor with gray hair and glasses, wearing professional attire..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={customDescription}
+                  onChangeText={setCustomDescription}
+                  multiline
+                  numberOfLines={6}
+                  maxLength={DESCRIPTION_MAX}
+                  editable={!isGenerating}
+                  blurOnSubmit={false}
+                  returnKeyType="default"
+                />
+                <Text style={[styles.counterText, { color: colors.textSecondary }]}>
+                  {descriptionLength}/{DESCRIPTION_MAX}
+                </Text>
 
               <TouchableOpacity
                 style={[styles.generateButton, { backgroundColor: colors.primary }, isGenerating && styles.generateButtonDisabled]}
@@ -237,7 +256,10 @@ export default function CoachCharacterScreen() {
                 disabled={isGenerating}
               >
                 {isGenerating ? (
-                  <ActivityIndicator color="white" />
+                  <>
+                    <ActivityIndicator color="white" />
+                    <Text style={styles.generateButtonText}>Generating coach avatar...</Text>
+                  </>
                 ) : (
                   <>
                     <Wand2 color="white" size={20} />
@@ -255,8 +277,9 @@ export default function CoachCharacterScreen() {
                       { backgroundColor: colors.cardBackground },
                       selectedCharacter?.id === generatedCharacter.id && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
                     ]}
-                    onPress={() => handleSelectCharacter(generatedCharacter)}
-                  >
+                  onPress={() => handleSelectCharacter(generatedCharacter)}
+                  disabled={isGenerating}
+                >
                     <Image
                       source={{ uri: generatedCharacter.imageUrl }}
                       style={styles.characterImage}
@@ -316,6 +339,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+  },
+  doneButtonDisabled: {
+    opacity: 0.5,
   },
   doneButtonText: {
     color: 'white',
@@ -424,6 +450,12 @@ const styles = StyleSheet.create({
   },
   generateButtonDisabled: {
     opacity: 0.6,
+  },
+  counterText: {
+    fontSize: 12,
+    textAlign: 'right' as const,
+    marginTop: -10,
+    marginBottom: 12,
   },
   generateButtonText: {
     color: 'white',

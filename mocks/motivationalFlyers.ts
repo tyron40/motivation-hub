@@ -8,6 +8,13 @@ export interface MotivationalFlyer {
 
 export const motivationalFlyers: MotivationalFlyer[] = [
   {
+    id: 'flyer-featured-9',
+    title: 'Answer The Call',
+    quote: 'Answer your own calling. Discipline is picking up when purpose rings — every single day.',
+    imageUrl: 'assets/images/haskle.jpeg',
+    accent: '#F39C12',
+  },
+  {
     id: 'flyer-featured-1',
     title: 'Lead By Example',
     quote: 'Champions aren\'t made in the gym. They are made from something deep inside \u2014 a desire, a dream, a vision.',

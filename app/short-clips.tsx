@@ -715,7 +715,7 @@ const ClipPage = React.memo(function ClipPage({
         <View style={styles.ytPlayerContainer}>
           <iframe
             ref={(el: any) => { webIframeRef.current = el; }}
-            src={`https://www.youtube.com/embed/${clip.youtubeId}?enablejsapi=1&autoplay=1&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${clip.youtubeId}&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+            src={`https://www.youtube-nocookie.com/embed/${clip.youtubeId}?enablejsapi=1&autoplay=1&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${clip.youtubeId}&iv_load_policy=3&fs=0&cc_load_policy=0&disablekb=1&showinfo=0&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
             style={{
               width: SCREEN_WIDTH,
               height: playerHeight,
@@ -755,6 +755,10 @@ const ClipPage = React.memo(function ClipPage({
               playsinline: true,
               preventFullScreen: true,
               loop: true,
+              iv_load_policy: 3,
+              fs: false,
+              cc_load_policy: 0,
+              disablekb: true,
             }}
             webViewStyle={styles.ytWebView}
           />
