@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -10,6 +10,8 @@ import {
   Share,
   Platform,
   Alert,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Heart, Share2, Plus } from 'lucide-react-native';
@@ -49,7 +51,12 @@ export default function PlayerScreen() {
   const wasPlayingBeforeAdRef = useRef(false);
   const pendingOpenAdResumeRef = useRef(false);
   const adJustFinishedRef = useRef(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const styles = getStyles(colors);
+  const sortedPlaylists = useMemo(
+    () => [...playlists].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+    [playlists]
+  );
 
   useEffect(() => {
     setIsMinimized(false);
@@ -173,31 +180,50 @@ export default function PlayerScreen() {
   const handleAddToPlaylist = useCallback(async () => {
     if (!currentSpeech) return;
     if (!playlists.length) {
-      Alert.alert('No Playlists', 'Create a playlist first from the Playlists screen.');
+      Alert.alert(
+        'No Playlists',
+        'Create a playlist first from the Playlists screen.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Go to Playlists',
+            onPress: () => router.push('/playlists'),
+          },
+        ]
+      );
       return;
     }
 
-    const options = playlists.map((playlist) => ({
-      text: playlist.name,
-      onPress: async () => {
-        try {
-          await addToPlaylist(playlist.id, currentSpeech.id);
-          Alert.alert('Saved', `"${currentSpeech.title}" was added to "${playlist.name}".`);
-        } catch (error) {
-          console.error('Error adding to playlist:', error);
-          Alert.alert('Error', 'Failed to add speech to playlist.');
-        }
-      },
-    }));
+    setShowPlaylistModal(true);
+  }, [currentSpeech, playlists.length]);
 
-    Alert.alert(
-      'Save to Playlist',
-      'Choose a playlist:',
-      [
-        ...options,
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+  const handleSaveToPlaylist = useCallback(async (playlistId: string) => {
+    if (!currentSpeech) return;
+    const playlist = playlists.find((p) => p.id === playlistId);
+    if (!playlist) return;
+
+    try {
+      await addToPlaylist(playlist.id, currentSpeech.id);
+      setShowPlaylistModal(false);
+      Alert.alert(
+        'Saved',
+        `"${currentSpeech.title}" was added to "${playlist.name}".`,
+        [
+          { text: 'OK' },
+          {
+            text: 'Open Playlist',
+            onPress: () => router.push(`/playlist/${playlist.id}`),
+          },
+          {
+            text: 'Playlists',
+            onPress: () => router.push('/playlists'),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error adding to playlist:', error);
+      Alert.alert('Error', 'Failed to add speech to playlist.');
+    }
   }, [currentSpeech, playlists, addToPlaylist]);
 
   const handleShare = async () => {
@@ -338,6 +364,55 @@ export default function PlayerScreen() {
             </TouchableOpacity>
           </View>
         </Animated.View>
+        <Modal
+          visible={showPlaylistModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPlaylistModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Save to Playlist</Text>
+              <Text style={styles.modalSubtitle}>Choose where to save this speech</Text>
+
+              <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+                {sortedPlaylists.map((playlist) => (
+                  <TouchableOpacity
+                    key={playlist.id}
+                    style={styles.modalListItem}
+                    onPress={() => handleSaveToPlaylist(playlist.id)}
+                  >
+                    <View style={[styles.colorDot, { backgroundColor: playlist.color || '#8B4513' }]} />
+                    <View style={styles.modalListTextWrap}>
+                      <Text style={styles.modalListItemTitle}>{playlist.name}</Text>
+                      <Text style={styles.modalListItemSubtitle}>
+                        {playlist.speechIds.length} {playlist.speechIds.length === 1 ? 'speech' : 'speeches'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalSecondaryButton]}
+                  onPress={() => {
+                    setShowPlaylistModal(false);
+                    router.push('/playlists');
+                  }}
+                >
+                  <Text style={styles.modalSecondaryButtonText}>Manage Playlists</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalPrimaryButton]}
+                  onPress={() => setShowPlaylistModal(false)}
+                >
+                  <Text style={styles.modalPrimaryButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </View>
   );
@@ -480,5 +555,84 @@ const getStyles = (_colors: any) => StyleSheet.create({
   },
   actionLabelActive: {
     color: '#FF3B30',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#111214',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    color: 'rgba(255,255,255,0.65)',
+    marginTop: 4,
+    marginBottom: 14,
+    fontSize: 13,
+  },
+  modalList: {
+    maxHeight: 280,
+  },
+  modalListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
+  },
+  colorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  modalListTextWrap: {
+    flex: 1,
+  },
+  modalListItemTitle: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalListItemSubtitle: {
+    color: 'rgba(255,255,255,0.58)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalSecondaryButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  modalPrimaryButton: {
+    backgroundColor: '#8B4513',
+  },
+  modalSecondaryButtonText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  modalPrimaryButtonText: {
+    color: '#FFF',
+    fontWeight: '700',
   },
 });

@@ -11,10 +11,17 @@ export interface YouTubeKeyState {
   lastUsed: number;
 }
 
-export const YOUTUBE_API_KEYS = (process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || '')
+const primaryKeys = (process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY || '')
   .split(',')
   .map((k) => k.trim())
   .filter((k) => k.length > 0);
+
+const secondaryKeys = (process.env.YOUTUBE_API_KEY_SECONDARY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY_SECONDARY || '')
+  .split(',')
+  .map((k) => k.trim())
+  .filter((k) => k.length > 0);
+
+export const YOUTUBE_API_KEYS = [...primaryKeys, ...secondaryKeys].filter((k, i, arr) => arr.indexOf(k) === i);
 
 const keyState = new Map<string, YouTubeKeyState>();
 let currentIndex = 0;

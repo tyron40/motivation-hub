@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -26,6 +26,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
+const motivationHeroImage = require('@/assets/images/run club.jpeg');
 
 export default function CategoryScreen() {
   const { colors } = useTheme();
@@ -42,6 +43,8 @@ export default function CategoryScreen() {
   const [editAuthor, setEditAuthor] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const [bannerImageUri, setBannerImageUri] = useState<string>('');
+  const [useLocalMotivationHero, setUseLocalMotivationHero] = useState(false);
 
   const pickBannerImage = useCallback(async () => {
     try {
@@ -96,10 +99,39 @@ export default function CategoryScreen() {
   
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === id);
-  const contextSpeeches = category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : [];
-  const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
+  const contextSpeeches = useMemo(
+    () => (category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : []),
+    [category, getSpeechesByCategory]
+  );
+  const TARGET_CATEGORY_COUNT = 40;
+  const categorySpeeches = useMemo(() => {
+    const base = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
+    const unique: Speech[] = [];
+    const seen = new Set<string>();
+    for (const s of [...base, ...contextSpeeches]) {
+      if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
+      seen.add(s.id);
+      unique.push(s);
+      if (unique.length >= TARGET_CATEGORY_COUNT) break;
+    }
+    return unique;
+  }, [youtubeSpeeches, contextSpeeches]);
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
+
+  const isMotivationCategory = (category?.name || '').toLowerCase() === 'motivation';
+
+  useEffect(() => {
+    if (isMotivationCategory) {
+      setUseLocalMotivationHero(true);
+      setBannerImageUri('');
+      return;
+    }
+    const fallback = 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80';
+    const next = banner?.imageUrl?.trim() ? banner.imageUrl.trim() : fallback;
+    setUseLocalMotivationHero(false);
+    setBannerImageUri(next);
+  }, [banner?.imageUrl, isMotivationCategory]);
 
   useEffect(() => {
     const handleLoadOnlineSpeeches = async () => {
@@ -109,8 +141,8 @@ export default function CategoryScreen() {
         console.log(`Loading content for ${category.name}...`);
         
         const [categoryVideos, channelVideos] = await Promise.all([
-          getVideosByCategory(category.name, 40),
-          getTrendingVideos(80),
+          getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
+          getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
         ]);
 
         const categoryNameLower = category.name.toLowerCase();
@@ -147,14 +179,15 @@ export default function CategoryScreen() {
 
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
-        for (const s of [...catSpeeches, ...channelSpeeches]) {
+        for (const s of [...catSpeeches, ...channelSpeeches, ...contextSpeeches]) {
           if (!seenIds.has(s.id) && s.duration > 60) {
             seenIds.add(s.id);
             merged.push(s);
+            if (merged.length >= TARGET_CATEGORY_COUNT) break;
           }
         }
-        
-        console.log(`Loaded ${merged.length} videos for ${category.name}`);
+
+        console.log(`Loaded ${merged.length}/${TARGET_CATEGORY_COUNT} videos for ${category.name}`);
         setYoutubeSpeeches(merged);
         setHasLoadedOnline(true);
       } catch (error) {
@@ -164,7 +197,7 @@ export default function CategoryScreen() {
 
     console.log(`Category page loaded: ${category?.name}`);
     void handleLoadOnlineSpeeches();
-  }, [category, hasLoadedOnline]);
+  }, [category, hasLoadedOnline, contextSpeeches]);
 
   const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);
@@ -241,23 +274,21 @@ export default function CategoryScreen() {
           {banner && (
             <View style={styles.bannerContainer}>
               <Image
-                source={{ uri: banner.imageUrl }}
+                source={useLocalMotivationHero ? motivationHeroImage : { uri: bannerImageUri }}
                 style={styles.bannerImage}
+                onError={() => {
+                  if (useLocalMotivationHero) {
+                    setUseLocalMotivationHero(false);
+                    setBannerImageUri('https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80');
+                    return;
+                  }
+                  setBannerImageUri('https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80');
+                }}
               />
               <LinearGradient
-                colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
+                colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.45)']}
                 style={styles.bannerGradient}
               >
-                <View style={styles.bannerContent}>
-                  <View style={styles.bannerQuoteIcon}>
-                    <Quote size={18} color={category.color} fill={category.color} />
-                  </View>
-                  <Text style={styles.bannerQuote} numberOfLines={3}>
-                    "{banner.quote}"
-                  </Text>
-                  <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
-                  <Text style={styles.bannerAuthor}>— {banner.author}</Text>
-                </View>
                 {isAdmin && (
                   <TouchableOpacity
                     style={styles.editBannerBtn}
@@ -269,6 +300,21 @@ export default function CategoryScreen() {
                   </TouchableOpacity>
                 )}
               </LinearGradient>
+            </View>
+          )}
+          
+          {banner && (
+            <View style={styles.bannerQuoteCard}>
+              <View style={styles.bannerContent}>
+                <View style={styles.bannerQuoteIcon}>
+                  <Quote size={18} color={category.color} fill={category.color} />
+                </View>
+                <Text style={styles.bannerQuote} numberOfLines={3}>
+                  {'"'}{banner.quote}{'"'}
+                </Text>
+                <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
+                <Text style={styles.bannerAuthor}>— {banner.author}</Text>
+              </View>
             </View>
           )}
 
@@ -408,6 +454,15 @@ const getStyles = (colors: any) => StyleSheet.create({
     padding: 20,
     position: 'relative',
   },
+  bannerQuoteCard: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    marginHorizontal: 16,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   bannerContent: {
     gap: 6,
   },
@@ -415,7 +470,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     marginBottom: 4,
   },
   bannerQuote: {
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.95)',
     fontSize: 18,
     fontWeight: '600',
     lineHeight: 26,

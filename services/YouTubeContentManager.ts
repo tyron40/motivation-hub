@@ -208,8 +208,26 @@ async function fetchFromBackend(
   return [];
 }
 
+async function mergeDedupVideos(...groups: CachedVideo[][]): Promise<CachedVideo[]> {
+  const seen = new Set<string>();
+  const merged: CachedVideo[] = [];
+  for (const group of groups) {
+    for (const v of group) {
+      if (!v?.id || seen.has(v.id)) continue;
+      seen.add(v.id);
+      merged.push(v);
+    }
+  }
+  return merged;
+}
+
 async function fetchCategoryFromBackend(category: string, limit: number): Promise<CachedVideo[]> {
-  return fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit });
+  const [categoryPrimary, categorySearchFallback] = await Promise.all([
+    fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit }),
+    fetchFromBackend(API_ENDPOINTS.youtubeSearch, { query: category, limit }),
+  ]);
+  const merged = await mergeDedupVideos(categoryPrimary, categorySearchFallback);
+  return merged.slice(0, limit);
 }
 
 async function fetchSearchFromBackend(query: string, limit: number): Promise<CachedVideo[]> {
@@ -217,7 +235,12 @@ async function fetchSearchFromBackend(query: string, limit: number): Promise<Cac
 }
 
 async function fetchTrendingFromBackend(limit: number): Promise<CachedVideo[]> {
-  return fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit });
+  const [trendingPrimary, motivationFallback] = await Promise.all([
+    fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit }),
+    fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category: 'motivation', limit }),
+  ]);
+  const merged = await mergeDedupVideos(trendingPrimary, motivationFallback);
+  return merged.slice(0, limit);
 }
 
 export const YouTubeContentManager = {

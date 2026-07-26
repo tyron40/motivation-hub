@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Modal,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
@@ -21,7 +23,7 @@ import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/service
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
-import { motivationalFlyers } from '@/mocks/motivationalFlyers';
+import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { fallbackShortClips } from '@/mocks/shortClips';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
@@ -47,6 +49,8 @@ export default function HomeScreen() {
   const { customFlyers } = useAdmin();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [shortClips, setShortClips] = React.useState<any[]>(fallbackShortClips);
+  const [selectedFlyer, setSelectedFlyer] = React.useState<MotivationalFlyer | null>(null);
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
   const dailyQuote = React.useMemo(() => {
     const quotes = [
       { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -104,7 +108,7 @@ export default function HomeScreen() {
     const loadYouTubeSpeeches = async () => {
       try {
         console.log('🔄 Loading YouTube speeches from Motivation Fuel channel...');
-        const videos = await getTrendingVideos(50);
+        const videos = await getTrendingVideos(35);
         console.log(`✅ Loaded ${videos.length} YouTube videos`);
         
         const speeches = videos.map(video => {
@@ -123,8 +127,8 @@ export default function HomeScreen() {
       try {
         console.log('🎬 Loading short clips for home page...');
         const [searchResults, trending] = await Promise.all([
-          searchVideos('motivational short clips inspiration', 30),
-          getTrendingVideos(30),
+          searchVideos('motivational short clips inspiration', 24),
+          getTrendingVideos(24),
         ]);
         const seenIds = new Set<string>();
         const clips: any[] = [];
@@ -158,19 +162,7 @@ export default function HomeScreen() {
     void loadShortClips();
   }, []);
   
-  if (!speechContext) {
-    console.error('Speech context not available');
-    return (
-      <LinearGradient colors={[colors.background, colors.card]} style={styles.container}>
-        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading Motivation Fuel...</Text>
-        </View>
-      </LinearGradient>
-    );
-  }
-  
-  const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext;
+  const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext ?? {};
 
   const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches.filter(s => s.duration > 60) : popularSpeeches.filter(s => s.duration > 60);
   const displayFeatured = React.useMemo(() => {
@@ -227,6 +219,54 @@ export default function HomeScreen() {
     speech && typeof speech === 'object' && speech.id && speech.title
   ).slice(0, 6);
 
+  const homeFeaturedFlyers = React.useMemo(() => {
+    const combined = [...motivationalFlyers, ...customFlyers];
+    const seen = new Set<string>();
+    const unique = combined.filter((f) => {
+      if (!f?.id || seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+
+    const hasNoEasyDays = unique.some((f) => f.id === 'flyer-featured-8');
+    if (!hasNoEasyDays) {
+      const noEasyDays = motivationalFlyers.find((f) => f.id === 'flyer-featured-8');
+      if (noEasyDays) unique.unshift(noEasyDays);
+    }
+
+    return unique.slice(0, 10);
+  }, [customFlyers]);
+
+  const openFlyerPreview = React.useCallback((flyer: MotivationalFlyer) => {
+    setSelectedFlyer(flyer);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7,
+    }).start();
+  }, [scaleAnim]);
+
+  const closeFlyerPreview = React.useCallback(() => {
+    Animated.timing(scaleAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setSelectedFlyer(null));
+  }, [scaleAnim]);
+
+  if (!speechContext || !toggleFavorite || !setCurrentSpeech || !setCurrentPlaylist) {
+    console.error('Speech context not available');
+    return (
+      <LinearGradient colors={[colors.background, colors.card]} style={styles.container}>
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading Motivation Fuel...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -271,7 +311,7 @@ export default function HomeScreen() {
                 <Text style={styles.dailyQuoteBadgeText}>DAILY MOTIVATION</Text>
               </View>
               <Text style={styles.dailyQuoteText} numberOfLines={3}>
-                "{dailyQuote.text}"
+                {'"'}{dailyQuote.text}{'"'}
               </Text>
               <Text style={styles.dailyQuoteAuthor}>— {dailyQuote.author}</Text>
             </LinearGradient>
@@ -301,13 +341,15 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={[...motivationalFlyers, ...customFlyers].slice(0, 7)}
+              data={homeFeaturedFlyers}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
-                <View
+                <TouchableOpacity
+                  activeOpacity={0.88}
                   style={styles.flyerPoster}
                   testID={`flyer-card-${item.id}`}
+                  onPress={() => openFlyerPreview(item)}
                 >
                   <Image
                     source={getFlyerImageSource(item.imageUrl)}
@@ -334,7 +376,7 @@ export default function HomeScreen() {
                       <Text style={styles.flyerPosterTitle}>{item.title}</Text>
                     </LinearGradient>
                   )}
-                </View>
+                </TouchableOpacity>
               )}
             />
           </View>
@@ -420,6 +462,49 @@ export default function HomeScreen() {
 
 
         </ScrollView>
+
+        <Modal visible={!!selectedFlyer} transparent animationType="fade" onRequestClose={closeFlyerPreview}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeFlyerPreview}>
+            <Animated.View
+              style={[
+                styles.modalContent,
+                {
+                  transform: [
+                    {
+                      scale: scaleAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.85, 1],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              {selectedFlyer && (
+                <View style={styles.modalCard}>
+                  <Image source={getFlyerImageSource(selectedFlyer.imageUrl)} style={styles.modalImage} resizeMode="cover" />
+                  <LinearGradient
+                    colors={
+                      selectedFlyer.quote
+                        ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)']
+                        : ['transparent', 'rgba(0,0,0,0.35)']
+                    }
+                    style={styles.modalGradient}
+                  >
+                    {selectedFlyer.quote ? (
+                      <>
+                        <Quote size={24} color={selectedFlyer.accent} fill={selectedFlyer.accent} />
+                        <Text style={styles.modalQuote}>{selectedFlyer.quote}</Text>
+                      </>
+                    ) : null}
+                    <View style={[styles.modalAccentLine, { backgroundColor: selectedFlyer.accent }]} />
+                    <Text style={styles.modalTitle}>{selectedFlyer.title}</Text>
+                  </LinearGradient>
+                </View>
+              )}
+            </Animated.View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </LinearGradient>
     </>
@@ -491,8 +576,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     gap: 10,
   },
   flyerPoster: {
-    width: 170,
-    height: 250,
+    width: 196,
+    height: 290,
     borderRadius: 18,
     overflow: 'hidden' as const,
     elevation: 6,
@@ -510,28 +595,28 @@ const getStyles = (colors: any) => StyleSheet.create({
   flyerPosterGradient: {
     flex: 1,
     justifyContent: 'flex-end' as const,
-    padding: 12,
+    padding: 14,
   },
   flyerQuoteRow: {
-    marginBottom: 4,
+    marginBottom: 6,
   },
   flyerPosterQuote: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600' as const,
-    lineHeight: 14,
+    lineHeight: 16,
     fontStyle: 'italic' as const,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   flyerPosterAccentLine: {
-    width: 32,
+    width: 36,
     height: 3,
     borderRadius: 2,
     marginBottom: 8,
   },
   flyerPosterTitle: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700' as const,
     textTransform: 'uppercase' as const,
     letterSpacing: 1.2,
@@ -658,10 +743,59 @@ const getStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center' as const,
     gap: 16,
   },
+
   loadingText: {
     color: colors.text,
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  modalContent: {
+    width: '88%' as const,
+    maxWidth: 420,
+  },
+  modalCard: {
+    width: '100%' as const,
+    aspectRatio: 0.65,
+    borderRadius: 24,
+    overflow: 'hidden' as const,
+  },
+  modalImage: {
+    width: '100%' as const,
+    height: '100%' as const,
+    position: 'absolute' as const,
+  },
+  modalGradient: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
+    padding: 24,
+  },
+  modalQuote: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700' as const,
+    lineHeight: 28,
+    fontStyle: 'italic' as const,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  modalAccentLine: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 10,
+  },
+  modalTitle: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.5,
   },
 
 });

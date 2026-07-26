@@ -2,12 +2,11 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
-import Purchases, { LOG_LEVEL, PurchasesPackage } from 'react-native-purchases';
+import Purchases, { LOG_LEVEL, PurchasesPackage, CustomerInfo } from 'react-native-purchases';
 import Constants from 'expo-constants';
 import { IAPProductId, ALL_VOICES, IAP_PRODUCT_IDS } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
-const isWeb = Platform.OS === 'web';
 const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 
 const REVENUECAT_API_KEY =
@@ -170,6 +169,31 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     await saveEntitlements(newEntitlements);
   }, [entitlements, saveEntitlements]);
 
+  const syncFromCustomerInfo = useCallback(async (customerInfo: CustomerInfo) => {
+    const premiumActive = !!(
+      customerInfo.entitlements.active['premium'] ||
+      customerInfo.entitlements.active['Premium']
+    );
+
+    let expiresAt: number | null = null;
+    const premiumEntitlement = customerInfo.entitlements.active['premium'] || customerInfo.entitlements.active['Premium'];
+    const expirationRaw = premiumEntitlement?.expirationDate;
+    if (expirationRaw) {
+      const parsed = Date.parse(expirationRaw);
+      if (!Number.isNaN(parsed)) {
+        expiresAt = parsed;
+      }
+    }
+
+    const merged: Entitlements = {
+      ...entitlements,
+      isPremium: premiumActive,
+      premiumExpiresAt: premiumActive ? expiresAt : null,
+    };
+
+    await saveEntitlements(merged);
+  }, [entitlements, saveEntitlements]);
+
   const purchase = useCallback(async (productId: IAPProductId) => {
     if (!isConfigured) {
       Alert.alert('Not Available', 'In-app purchases are not configured for this environment.');
@@ -204,8 +228,12 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       );
 
       if (premiumActive) {
+        const premiumEntitlement = customerInfo.entitlements.active['premium'] || customerInfo.entitlements.active['Premium'];
+        const expirationRaw = premiumEntitlement?.expirationDate;
+        const parsedExpiration = expirationRaw ? Date.parse(expirationRaw) : NaN;
+
         updated.isPremium = true;
-        updated.premiumExpiresAt = null;
+        updated.premiumExpiresAt = Number.isNaN(parsedExpiration) ? null : parsedExpiration;
       }
 
       await saveEntitlements(updated);
@@ -237,10 +265,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       const restored: Entitlements = {
         ...entitlements,
         isPremium: premiumActive,
-        premiumExpiresAt: premiumActive ? null : entitlements.premiumExpiresAt,
+        premiumExpiresAt: premiumActive ? null : null,
       };
 
       await saveEntitlements(restored);
+      await syncFromCustomerInfo(customerInfo);
       Alert.alert('Restored', 'Purchases restored successfully.');
     } catch (error: any) {
       console.error('❌ Restore failed:', error);
@@ -248,19 +277,36 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     } finally {
       setIsRestoring(false);
     }
-  }, [isConfigured, entitlements, saveEntitlements]);
+  }, [isConfigured, entitlements, saveEntitlements, syncFromCustomerInfo]);
+
+  const isPremiumActive = useMemo(() => {
+    return entitlements.isPremium &&
+      (entitlements.premiumExpiresAt === null || entitlements.premiumExpiresAt > Date.now());
+  }, [entitlements.isPremium, entitlements.premiumExpiresAt]);
+
+  useEffect(() => {
+    if (!isConfigured || !isNative) return;
+
+    const refreshRevenueCatEntitlements = async () => {
+      try {
+        const customerInfo = await Purchases.getCustomerInfo();
+        await syncFromCustomerInfo(customerInfo);
+      } catch (error) {
+        console.warn('⚠️ Could not refresh RevenueCat entitlements:', error);
+      }
+    };
+
+    void refreshRevenueCatEntitlements();
+  }, [isConfigured, syncFromCustomerInfo]);
 
   const usageStats: UsageStats = useMemo(() => {
-    const isPremiumActive = entitlements.isPremium && 
-      (entitlements.premiumExpiresAt === null || entitlements.premiumExpiresAt > Date.now());
-    
     return {
       credits: entitlements.credits,
       isAdFree: isPremiumActive,
       availableVoices: ALL_VOICES,
       canUseAI: entitlements.credits > 0,
     };
-  }, [entitlements]);
+  }, [entitlements, isPremiumActive]);
 
   const canUseVoice = useCallback((voice: string): boolean => {
     return usageStats.availableVoices.includes(voice);

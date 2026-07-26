@@ -237,10 +237,26 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, [historyQuery.data]);
 
-  const favorites = useMemo(() => 
-    speeches.filter(speech => speech.isFavorite),
-    [speeches]
-  );
+  const favoriteIdsSet = useMemo(() => {
+    const data = favoritesQuery.data;
+    if (!Array.isArray(data)) return new Set<string>();
+    return new Set<string>(data.filter((id): id is string => typeof id === 'string'));
+  }, [favoritesQuery.data]);
+
+  const favorites = useMemo(() => {
+    const speechMap = new Map<string, Speech>();
+    speeches.forEach((speech) => {
+      if (speech?.id && favoriteIdsSet.has(speech.id)) {
+        speechMap.set(speech.id, { ...speech, isFavorite: true });
+      }
+    });
+
+    if (currentSpeech?.id && favoriteIdsSet.has(currentSpeech.id) && !speechMap.has(currentSpeech.id)) {
+      speechMap.set(currentSpeech.id, { ...currentSpeech, isFavorite: true });
+    }
+
+    return Array.from(speechMap.values());
+  }, [speeches, currentSpeech, favoriteIdsSet]);
 
   const toggleFavorite = useCallback((speechId: string) => {
     try {
@@ -270,18 +286,22 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
         return prev;
       });
       
-      const newFavoriteIds = updatedSpeeches
-        .filter(s => s && s.isFavorite)
-        .map(s => s.id)
-        .filter(id => id && typeof id === 'string');
+      const currentStoredFavorites = Array.isArray(favoritesQuery.data)
+        ? favoritesQuery.data.filter((id): id is string => typeof id === 'string')
+        : [];
 
-      if (currentSpeech && currentSpeech.id === speechId) {
-        const isNowFavorite = !currentSpeech.isFavorite;
-        if (isNowFavorite && !newFavoriteIds.includes(speechId)) {
-          newFavoriteIds.push(speechId);
-        }
+      const favoriteSet = new Set<string>(currentStoredFavorites);
+
+      const targetSpeech = updatedSpeeches.find((s) => s?.id === speechId);
+      const isNowFavorite = !!targetSpeech?.isFavorite;
+
+      if (isNowFavorite) {
+        favoriteSet.add(speechId);
+      } else {
+        favoriteSet.delete(speechId);
       }
-      
+
+      const newFavoriteIds = Array.from(favoriteSet);
       mutateFavorites(newFavoriteIds);
       
       setUserProfile(prev => {
@@ -300,7 +320,7 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     } catch (error) {
       console.error('Error in toggleFavorite:', error);
     }
-  }, [speeches, currentSpeech, mutateFavorites, mutateProfile]);
+  }, [speeches, currentSpeech, mutateFavorites, mutateProfile, favoritesQuery.data]);
 
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);

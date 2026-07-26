@@ -14,7 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Plus, ListMusic, Trash2, Edit3, Music, ArrowLeft } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
 import { usePlaylists } from '@/hooks/playlist-context';
-import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 
 
@@ -26,7 +25,6 @@ const PRESET_COLORS = [
 function PlaylistsContent() {
   const { colors } = useTheme();
   const { playlists, createPlaylist, deletePlaylist, updatePlaylist } = usePlaylists();
-  const { speeches } = useSpeechContext();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -56,7 +54,7 @@ function PlaylistsContent() {
       setNewPlaylistDescription('');
       setSelectedColor(PRESET_COLORS[0]);
       setEditingPlaylist(null);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save playlist');
     }
   };
@@ -159,9 +157,7 @@ function PlaylistsContent() {
                 <TouchableOpacity
                   key={playlist.id}
                   style={styles.playlistCard}
-                  onPress={() => {
-                    console.log('Open playlist:', playlist.id);
-                  }}
+                  onPress={() => router.push(`/playlist/${playlist.id}`)}
                 >
                   <LinearGradient
                     colors={[playlist.color || colors.primary, colors.cardBackground]}
@@ -184,13 +180,19 @@ function PlaylistsContent() {
                       <View style={styles.playlistActions}>
                         <TouchableOpacity
                           style={styles.actionButton}
-                          onPress={() => handleEditPlaylist(playlist.id)}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleEditPlaylist(playlist.id);
+                          }}
                         >
                           <Edit3 color={colors.text} size={18} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.actionButton}
-                          onPress={() => handleDeletePlaylist(playlist.id)}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDeletePlaylist(playlist.id);
+                          }}
                         >
                           <Trash2 color="#EF4444" size={18} />
                         </TouchableOpacity>
