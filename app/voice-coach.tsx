@@ -114,7 +114,6 @@ function VoiceCoachContent() {
 
         const preferredVoice = profile.preferredVoice || 'alloy';
         const tts = await generateTTS({ text, voice: preferredVoice as any });
-        await iapContext.useCredit().catch(() => {});
 
         const uri = `data:${tts.audio.mimeType};base64,${tts.audio.base64Data}`;
         const { sound } = await Audio.Sound.createAsync(

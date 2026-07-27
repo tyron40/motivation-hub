@@ -1,10 +1,19 @@
 const FALLBACK_VERCEL_BACKEND_URL = 'https://motivation-hub-iota.vercel.app';
 
-const envVercelBackendUrl =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_VERCEL_API_BASE_URL) ||
-  '';
+const env = (typeof process !== 'undefined' && process.env) || {};
 
-const sanitizedEnvBackendUrl = envVercelBackendUrl.trim().replace(/\/+$/, '');
+const backendCandidates: Array<{ source: string; value: string }> = [
+  { source: 'EXPO_PUBLIC_VERCEL_API_BASE_URL', value: env.EXPO_PUBLIC_VERCEL_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_RORK_API_BASE_URL', value: env.EXPO_PUBLIC_RORK_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_API_BASE_URL', value: env.EXPO_PUBLIC_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_TOOLKIT_URL', value: env.EXPO_PUBLIC_TOOLKIT_URL || '' },
+];
+
+const pickedCandidate = backendCandidates.find((c) => c.value.trim().length > 0);
+const selectedBackendSource = pickedCandidate?.source || 'fallback';
+const selectedBackendValue = pickedCandidate?.value || '';
+
+const sanitizedEnvBackendUrl = selectedBackendValue.trim().replace(/\/+$/, '');
 const VERCEL_BACKEND_URL = sanitizedEnvBackendUrl || FALLBACK_VERCEL_BACKEND_URL;
 
 export function getBackendUrl(): string {
@@ -24,4 +33,9 @@ export const API_ENDPOINTS = {
   flyers: `${VERCEL_BACKEND_URL}/api/flyers`,
 } as const;
 
-console.log('🔧 Config | Active Vercel API Base URL:', VERCEL_BACKEND_URL);
+console.log(
+  '🔧 Config | Active Vercel API Base URL:',
+  VERCEL_BACKEND_URL,
+  '| source:',
+  selectedBackendSource
+);
