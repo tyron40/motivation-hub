@@ -62,17 +62,17 @@ const PRESET_CHARACTERS: CoachCharacter[] = [
   {
     id: 'dre',
     name: 'Coach Dre',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreBossHustle&backgroundColor=1a1a2e&skinColor=7b4f3a&facialHairVariation=beard&facialHairColor=3b2417&top=shortHair&topColor=1a1a1a&eyebrows=serious&eyes=squint&mouth=serious',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreBossHustle27&backgroundColor=2563eb&skinColor=7b4f3a&facialHairVariation=beard&facialHairColor=3b2417&top=shortHair&topColor=1a1a1a&eyebrows=serious&eyes=squint&mouth=serious&accessories=round&clothingColor=1e3a8a',
     description: 'Relentless and real, pushes you to dominate every goal',
     isCustom: false,
   },
   {
     id: 'malik',
     name: 'Coach Malik',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikHustleGrind&backgroundColor=0f3460&skinColor=6b4533&facialHairVariation=beard&facialHairColor=2a1a10&top=shortHair&topColor=111111&eyebrows=serious&eyes=squint&mouth=serious',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikHustleGrind42&backgroundColor=1d4ed8&skinColor=6b4533&facialHairVariation=beard&facialHairColor=2a1a10&top=shortHair&topColor=111111&eyebrows=serious&eyes=squint&mouth=serious&accessories=round&clothingColor=1e40af',
     description: 'No-nonsense accountability coach who turns talk into action',
     isCustom: false,
-  },
+  }
 ];
 
 export default function CoachCharacterScreen() {

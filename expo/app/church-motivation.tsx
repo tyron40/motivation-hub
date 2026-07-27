@@ -32,10 +32,11 @@ export default function ChurchMotivationScreen() {
     const loadChurchContent = async () => {
       try {
         setIsLoading(true);
-        console.log('⛪ Loading all church motivation videos...');
+        console.log('⛪ Loading all Christian motivation videos...');
 
         // Fetch from multiple search queries in parallel to get comprehensive coverage
         const searchQueries = [
+          'christian motivation speech',
           'church motivation encouragement sermon',
           'christian motivational speech inspiration',
           'faith motivation preaching powerful',
@@ -62,11 +63,38 @@ export default function ChurchMotivationScreen() {
           }
         }
 
-        const converted = allVideos.map((video) => convertVideoToSpeech(video));
+        // Filter to keep ONLY Christian motivation content.
+        // Check title + channel + description for Christian keywords.
+        const christianKeywords = [
+          'christian', 'church', 'christ', 'jesus', 'bible', 'biblical',
+          'faith', 'faithful', 'gospel', 'god', 'lord', 'holy', 'spirit',
+          'holy spirit', 'scripture', 'sermon', 'preach', 'preaching',
+          'pastor', 'prayer', 'pray', 'salvation', 'testimony', 'testimonies',
+          'blessed', 'blessing', 'grace', 'worship', 'psalm', 'proverb',
+          'proverbs', 'spiritual', 'righteous', 'kingdom', 'heaven', 'godly',
+          'god\'s', 'christianity', 'disciple', 'covenant', 'minister',
+          'chaplain', 'revival', 'sanctified', 'redeemed', 'deliverance',
+          'prophetic', 'prophecy', 'altar', 'pulpit', 'congregation',
+        ];
+
+        const isChristian = (text: string): boolean => {
+          const lower = text.toLowerCase();
+          return christianKeywords.some((kw) => lower.includes(kw));
+        };
+
+        const christianVideos = allVideos.filter((video) => {
+          const haystack = `${video.title} ${video.channelTitle} ${video.description}`;
+          return isChristian(haystack);
+        });
+
+        const converted = christianVideos.map((video) => convertVideoToSpeech(video));
         setChurchSpeeches(converted);
-        console.log(`✅ Loaded ${converted.length} church motivation speeches from ${searchQueries.length} searches`);
+        console.log(
+          `✅ Loaded ${converted.length} Christian motivation speeches ` +
+          `(${allVideos.length} total, ${allVideos.length - christianVideos.length} filtered out as non-Christian)`
+        );
       } catch (error) {
-        console.error('❌ Failed to load church motivation videos:', error);
+        console.error('❌ Failed to load Christian motivation videos:', error);
       } finally {
         setIsLoading(false);
       }
