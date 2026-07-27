@@ -86,7 +86,7 @@
           "photosPermission": "Motivation Fuel lets you personalize your profile by selecting a photo from your library.",
           "cameraPermission": "Motivation Fuel allows you to take a new photo for your profile picture."
         }
-      ],
+      ]
     ],
     "extra": {
       "eas": {
