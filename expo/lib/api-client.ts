@@ -1,20 +1,21 @@
 import { Platform } from 'react-native';
-import { API_ENDPOINTS } from './config';
-import { generateText } from '@rork-ai/toolkit-sdk';
+import { API_ENDPOINTS, getBackendUrl } from './config';
 
-const TOOLKIT_BASE_URL = process.env.EXPO_PUBLIC_TOOLKIT_URL || 'https://toolkit.rork.com';
-
-console.log('🔧 API Client initialized | Platform:', Platform.OS, '| Toolkit:', TOOLKIT_BASE_URL);
+console.log('🔧 API Client initialized | Platform:', Platform.OS, '| Using OpenAI via backend');
 
 const CHAT_TIMEOUT = 60000;
 const TTS_TIMEOUT = 30000;
+const STT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 2;
 
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeout: number
+  timeout: number = DEFAULT_TIMEOUT
 ): Promise<Response> {
+  console.log(`📡 Fetching ${url} (timeout: ${timeout}ms, platform: ${Platform.OS})`);
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     console.log(`⏱️ Request to ${url} timed out after ${timeout}ms`);
@@ -22,16 +23,28 @@ async function fetchWithTimeout(
   }, timeout);
 
   try {
-    const response = await fetch(url, {
+    const fetchOptions: RequestInit = {
       ...options,
       signal: controller.signal,
-    });
+    };
+
+    if (Platform.OS !== 'web') {
+      fetchOptions.headers = {
+        ...fetchOptions.headers as Record<string, string>,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
+    }
+
+    const response = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
+    console.log(`📡 Response received from ${url}: status=${response.status}`);
     return response;
   } catch (error: any) {
     clearTimeout(timeoutId);
+    console.error(`📡 Fetch error for ${url}:`, error?.message || error?.name || 'Unknown error');
     if (error?.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout}ms`);
+      throw new Error(`Request timed out after ${timeout}ms. Please check your connection.`);
     }
     throw error;
   }
@@ -41,7 +54,7 @@ async function fetchWithRetry(
   url: string,
   options: RequestInit,
   retries: number = MAX_RETRIES,
-  timeout: number = TTS_TIMEOUT
+  timeout: number = DEFAULT_TIMEOUT
 ): Promise<Response> {
   let lastError: Error | null = null;
 
@@ -49,17 +62,20 @@ async function fetchWithRetry(
     try {
       if (attempt > 0) {
         const delay = Math.min(2000 * attempt, 5000);
-        console.log(`[Retry] Attempt ${attempt + 1}/${retries} after ${delay}ms`);
+        console.log(`[Retry] Attempt ${attempt + 1}/${retries} for ${url} after ${delay}ms`);
         await new Promise<void>(r => setTimeout(r, delay));
       }
-      return await fetchWithTimeout(url, options, timeout);
+
+      const response = await fetchWithTimeout(url, options, timeout);
+      console.log(`✅ Fetch success for ${url} (attempt ${attempt + 1}), status: ${response.status}`);
+      return response;
     } catch (error: any) {
       lastError = error;
-      console.error(`❌ Fetch attempt ${attempt + 1} failed:`, error?.message || error);
+      console.error(`❌ Fetch error for ${url} (attempt ${attempt + 1}):`, error?.message || error);
     }
   }
 
-  throw lastError || new Error(`Failed after ${retries} attempts`);
+  throw lastError || new Error(`Failed to fetch ${url} after ${retries} attempts`);
 }
 
 export async function generateTextToSpeech(params: {
@@ -113,122 +129,145 @@ export async function generateTextToSpeech(params: {
   return result;
 }
 
-async function chatViaSDK(
-  messages: { role: 'user' | 'assistant'; content: string }[]
-): Promise<string> {
-  console.log('🤖 [Strategy 1] generateText SDK | messages:', messages.length);
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    const id = setTimeout(() => {
-      clearTimeout(id);
-      reject(new Error('SDK timeout after 55s'));
-    }, 55000);
-  });
-
-  const sdkPromise = generateText({ messages });
-
-  const result = await Promise.race([sdkPromise, timeoutPromise]);
-
-  if (!result || typeof result !== 'string' || result.trim().length === 0) {
-    throw new Error('SDK returned empty result');
-  }
-
-  console.log('✅ [Strategy 1] SDK success | length:', result.length);
-  return result;
-}
-
-async function chatViaDirectLLM(
-  messages: { role: 'user' | 'assistant'; content: string }[]
-): Promise<string> {
-  const llmTextUrl = `${TOOLKIT_BASE_URL.replace(/\/$/, '')}/llm/text`;
-  console.log('🤖 [Strategy 2] Direct /llm/text fetch:', llmTextUrl);
-
-  const response = await fetchWithTimeout(
-    llmTextUrl,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ messages }),
-    },
-    CHAT_TIMEOUT
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error('❌ [Strategy 2] Error:', response.status, errorText.substring(0, 300));
-    throw new Error(`LLM API error: ${response.status} - ${errorText.substring(0, 100)}`);
-  }
-
-  const responseText = await response.text();
-  console.log('📡 [Strategy 2] Raw response length:', responseText.length);
-
-  if (!responseText || responseText.trim().length === 0) {
-    throw new Error('Empty response from /llm/text');
-  }
-
-  let data: any;
+export async function transcribeAudio(params: {
+  audio: FormData;
+}): Promise<{ text: string }> {
   try {
-    data = JSON.parse(responseText);
-  } catch {
-    console.error('❌ [Strategy 2] Failed to parse JSON response');
-    throw new Error('Failed to parse /llm/text response');
-  }
+    const backendUrl = getBackendUrl();
+    const sttUrl = API_ENDPOINTS.stt;
+    console.log('🎯 Transcribing audio via Vercel API...');
+    console.log('🎯 API Base URL:', backendUrl);
+    console.log('🎯 Full URL:', sttUrl);
 
-  const completion = data?.completion;
-  if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
-    const dataStr = JSON.stringify(data).substring(0, 300);
-    console.error('❌ [Strategy 2] Unexpected format:', dataStr);
+    const response = await fetchWithTimeout(
+      sttUrl,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        body: params.audio,
+      },
+      STT_TIMEOUT
+    );
 
-    const fallbackText = data?.text ?? data?.message ?? data?.result ?? '';
-    if (fallbackText && typeof fallbackText === 'string' && fallbackText.trim().length > 0) {
-      console.log('✅ [Strategy 2] Used fallback field | length:', fallbackText.length);
-      return fallbackText.trim();
+    const contentType = response.headers.get('content-type') || '';
+    console.log('📡 STT response content-type:', contentType);
+    console.log('📡 STT response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error('❌ STT API error response:', errorText.substring(0, 200));
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Unauthorized/Forbidden from backend. Verify deployment protection/auth headers.');
+      }
+
+      throw new Error(`STT API error: ${response.status} ${errorText.substring(0, 120)}`);
     }
 
-    throw new Error('Unexpected response format from /llm/text');
-  }
+    const responseText = await response.text();
+    if (!contentType.includes('application/json')) {
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+    }
 
-  console.log('✅ [Strategy 2] /llm/text success | length:', completion.length);
-  return completion;
+    let result: any;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Invalid JSON response from STT API: ${responseText.substring(0, 100)}`);
+    }
+
+    if (!result?.text || typeof result.text !== 'string') {
+      throw new Error('Invalid STT response format');
+    }
+
+    return { text: result.text };
+  } catch (error: any) {
+    console.error('❌ STT request failed:', error);
+    if (error?.name === 'AbortError') {
+      throw new Error('Request timeout - please check your internet connection');
+    }
+    if (error?.message?.includes('Network request failed') || error?.message?.includes('Failed to fetch')) {
+      const backendUrl = getBackendUrl();
+      throw new Error(
+        `Cannot connect to server at ${backendUrl}. Check internet, deployment status, and /api/health availability.`
+      );
+    }
+    throw error;
+  }
 }
 
-async function chatViaBackend(
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
-): Promise<string> {
-  console.log('🤖 [Strategy 3] Backend Hono /api/chat');
+const extractTextDeep = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
 
-  const response = await fetchWithTimeout(
-    API_ENDPOINTS.chat,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({ messages }),
-    },
-    CHAT_TIMEOUT
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error('❌ [Strategy 3] Error:', response.status, errorText.substring(0, 200));
-    throw new Error(`Backend chat error: ${response.status}`);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractTextDeep(item);
+      if (nested) return nested;
+    }
+    return '';
   }
 
-  const data = await response.json();
-  const message = data?.message;
+  if (typeof value === 'object') {
+    const directKeys = ['text', 'content', 'message', 'output_text', 'response'];
+    for (const key of directKeys) {
+      const nested = extractTextDeep((value as any)[key]);
+      if (nested) return nested;
+    }
 
-  if (!message || typeof message !== 'string' || message.trim().length === 0) {
-    throw new Error('Backend returned empty message');
+    const commonNestedPaths = [
+      (value as any)?.choices?.[0]?.message?.content,
+      (value as any)?.choices?.[0]?.delta?.content,
+      (value as any)?.data?.message,
+      (value as any)?.data?.content,
+      (value as any)?.data?.result,
+      (value as any)?.result?.message,
+      (value as any)?.result?.content,
+      (value as any)?.output?.[0]?.content?.[0]?.text,
+    ];
+
+    for (const candidate of commonNestedPaths) {
+      const nested = extractTextDeep(candidate);
+      if (nested) return nested;
+    }
   }
 
-  console.log('✅ [Strategy 3] Backend success | length:', message.length);
-  return message;
-}
+  try {
+    const asString = String(value).trim();
+    return asString === '[object Object]' ? '' : asString;
+  } catch {
+    return '';
+  }
+};
+
+const normalizeVisibleText = (value: string): string =>
+  (value || '').replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
+
+const extractAssistantText = (rawResult: any): { text: string; source: string } => {
+  const candidates: Array<{ source: string; value: any }> = [
+    { source: 'message', value: rawResult?.message },
+    { source: 'text', value: rawResult?.text },
+    { source: 'response', value: rawResult?.response },
+    { source: 'data.message', value: rawResult?.data?.message },
+    { source: 'data.result', value: rawResult?.data?.result },
+    { source: 'choices[0].message.content', value: rawResult?.choices?.[0]?.message?.content },
+    { source: 'choices[0].delta.content', value: rawResult?.choices?.[0]?.delta?.content },
+    { source: 'output_text', value: rawResult?.output_text },
+    { source: 'output[0].content[0].text', value: rawResult?.output?.[0]?.content?.[0]?.text },
+    { source: 'content', value: rawResult?.content },
+    { source: 'root', value: rawResult },
+  ];
+
+  for (const candidate of candidates) {
+    const text = extractTextDeep(candidate.value);
+    if (text) return { text, source: candidate.source };
+  }
+
+  return { text: '', source: 'none' };
+};
 
 export async function sendChatMessage(params: {
   messages: {
@@ -236,58 +275,129 @@ export async function sendChatMessage(params: {
     content: string;
   }[];
 }): Promise<{ message: string }> {
-  const toolkitMessages = params.messages.map(m => ({
-    role: (m.role === 'system' ? 'user' : m.role) as 'user' | 'assistant',
-    content: m.content,
-  }));
-
   console.log('🤖 sendChatMessage | Platform:', Platform.OS, '| messages:', params.messages.length);
-  console.log('🤖 Toolkit URL:', TOOLKIT_BASE_URL);
   console.log('🤖 Backend URL:', API_ENDPOINTS.chat);
 
-  const errors: string[] = [];
+  const response = await fetchWithRetry(
+    API_ENDPOINTS.chat,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ messages: params.messages }),
+    },
+    3,
+    CHAT_TIMEOUT
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    const contentType = response.headers.get('content-type') || '';
+    console.error('❌ Chat error:', {
+      status: response.status,
+      contentType,
+      bodyPreview: errorText.substring(0, 300),
+      endpoint: API_ENDPOINTS.chat,
+      platform: Platform.OS,
+    });
+    throw new Error(`Chat request failed: ${response.status} ${errorText.substring(0, 120)}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  const responseText = await response.text();
+
+  if (!responseText || responseText.trim().length === 0) {
+    throw new Error('Empty chat response body');
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseErr) {
+    console.error('❌ Chat response parse error:', responseText.substring(0, 200));
+    throw new Error('Invalid JSON in chat response');
+  }
+
+  const extracted = extractAssistantText(data);
+  const message = normalizeVisibleText(extracted.text);
+
+  if (!message) {
+    console.error('❌ Chat empty message, full response:', JSON.stringify(data).substring(0, 300));
+    throw new Error('Backend returned empty message');
+  }
+
+  console.log('✅ Chat completed via backend OpenAI | length:', message.length, '| source:', extracted.source);
+  return { message };
+}
+
+export async function transcribeAudioViaBackend(audioUri: string): Promise<string> {
+  console.log('🎯 STT | Transcribing audio via backend OpenAI Whisper');
+  console.log('📁 Audio URI:', audioUri);
+
+  const formData = new FormData();
+  const uriParts = audioUri.split('.');
+  const fileType = uriParts[uriParts.length - 1];
+
+  const mimeType = fileType === 'wav' ? 'audio/wav' :
+                   fileType === 'm4a' ? 'audio/mp4' :
+                   fileType === 'webm' ? 'audio/webm' :
+                   `audio/${fileType}`;
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(audioUri);
+    const blob = await response.blob();
+    formData.append('audio', blob, `recording.${fileType}`);
+  } else {
+    const audioFile = {
+      uri: audioUri,
+      name: `recording.${fileType}`,
+      type: mimeType,
+    } as any;
+    formData.append('audio', audioFile);
+  }
+
+  console.log('📤 Sending audio to backend STT endpoint...');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.log('⏱️ STT request timeout after 30 seconds');
+    controller.abort();
+  }, STT_TIMEOUT);
 
   try {
-    const result = await chatViaSDK(toolkitMessages);
-    console.log('✅ Chat completed via SDK');
-    return { message: result };
-  } catch (e: any) {
-    const msg = e?.message || String(e);
-    errors.push(`SDK: ${msg}`);
-    console.warn('⚠️ Strategy 1 (SDK) failed:', msg);
-  }
+    const response = await fetch(API_ENDPOINTS.stt, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    });
 
-  try {
-    const result = await chatViaDirectLLM(toolkitMessages);
-    console.log('✅ Chat completed via direct /llm/text');
-    return { message: result };
-  } catch (e: any) {
-    const msg = e?.message || String(e);
-    errors.push(`DirectLLM: ${msg}`);
-    console.warn('⚠️ Strategy 2 (Direct /llm/text) failed:', msg);
-  }
+    clearTimeout(timeoutId);
 
-  try {
-    const result = await chatViaBackend(params.messages);
-    console.log('✅ Chat completed via backend');
-    return { message: result };
-  } catch (e: any) {
-    const msg = e?.message || String(e);
-    errors.push(`Backend: ${msg}`);
-    console.warn('⚠️ Strategy 3 (Backend) failed:', msg);
-  }
+    console.log('📡 STT response status:', response.status);
 
-  console.error('❌ All 3 chat strategies failed:', errors.join(' | '));
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error('❌ STT error:', response.status, errorText.substring(0, 200));
+      throw new Error(`STT failed (${response.status}): ${errorText.substring(0, 100)}`);
+    }
 
-  const combinedMsg = errors.join('; ');
-  if (combinedMsg.includes('timed out') || combinedMsg.includes('AbortError')) {
-    throw new Error('Request timed out. Please check your connection and try again.');
-  }
-  if (combinedMsg.includes('Network request failed') || combinedMsg.includes('Failed to fetch')) {
-    throw new Error('Network error. Please check your internet connection.');
-  }
+    const data = await response.json();
+    console.log('✅ STT transcription received');
 
-  throw new Error('Unable to get AI response. Please try again.');
+    if (data.text && data.text.trim()) {
+      return data.text.trim();
+    }
+
+    throw new Error('Empty transcription result');
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error?.name === 'AbortError') {
+      throw new Error('Transcription timed out. Please try again.');
+    }
+    throw error;
+  }
 }
 
 export async function generateImageViaBackend(prompt: string, size: string = '1024x1024'): Promise<{ imageUrl: string }> {

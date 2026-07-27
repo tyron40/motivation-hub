@@ -25,7 +25,7 @@ import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
 import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech, sendChatMessage } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -558,40 +558,13 @@ function ChatScreenContent() {
       console.log('🎯 Starting transcription for URI:', uri);
       setIsTranscribing(true);
 
-      const uriParts = uri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
+      console.log('📤 Sending audio to backend transcription service...');
+      const transcribedText = await transcribeAudioViaBackend(uri);
+      console.log('✅ Transcription result:', transcribedText);
 
-      const formData = new FormData();
-      
-      if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        formData.append('audio', blob, `recording.${fileType}`);
-      } else {
-        const audioFile = {
-          uri,
-          name: `recording.${fileType}`,
-          type: `audio/${fileType}`,
-        } as any;
-        formData.append('audio', audioFile);
-      }
-
-      console.log('📤 Sending audio to transcription service...');
-      const response = await fetch('https://toolkit.rork.com/stt/transcribe/', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ Transcription response:', data);
-
-      if (data.text && data.text.trim()) {
-        setInputText(data.text.trim());
-        console.log('✅ Transcription successful:', data.text);
+      if (transcribedText && transcribedText.trim()) {
+        setInputText(transcribedText.trim());
+        console.log('✅ Transcription successful:', transcribedText);
       } else {
         console.warn('⚠️ Empty transcription result');
         if (Platform.OS !== 'web') {
