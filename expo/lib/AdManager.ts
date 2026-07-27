@@ -1,11 +1,15 @@
-import { AD_CONFIG, AD_UNIT_IDS } from '@/constants/admob';
-import mobileAds, {
-  InterstitialAd,
-  RewardedAd,
-  AdEventType,
-  RewardedAdEventType,
-  TestIds,
-} from 'react-native-google-mobile-ads';
+/**
+ * AdManager — no-op stub.
+ *
+ * react-native-google-mobile-ads is a native module that cannot be installed
+ * in the current Expo Go / Rork build environment. To keep the app buildable
+ * and all imports resolving, AdManager is stubbed out: every method is a
+ * harmless no-op that reports ads as never ready.
+ *
+ * To re-enable real AdMob ads, install the package manually in expo/:
+ *   bun add react-native-google-mobile-ads@14.8.0
+ * then restore the real implementation and re-add the plugin to app.json.
+ */
 
 type AdEventCallback = (event: string, data?: any) => void;
 
@@ -36,9 +40,6 @@ class AdManager {
   private onEvent: AdEventCallback | null = null;
   private onRewardEarned: ((reward: any) => void) | null = null;
 
-  private interstitial: InterstitialAd | null = null;
-  private rewarded: RewardedAd | null = null;
-
   private constructor() {}
 
   static getInstance(): AdManager {
@@ -68,116 +69,17 @@ class AdManager {
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
-
-    await mobileAds().initialize();
-    this.log('AdMob initialized');
-
-    const interstitialUnitId = __DEV__
-      ? TestIds.INTERSTITIAL
-      : (AD_UNIT_IDS.interstitial ?? TestIds.INTERSTITIAL);
-
-    const rewardedUnitId = __DEV__
-      ? TestIds.REWARDED
-      : (AD_UNIT_IDS.rewarded ?? TestIds.REWARDED);
-
-    this.interstitial = InterstitialAd.createForAdRequest(interstitialUnitId, AD_CONFIG.requestOptions);
-    this.rewarded = RewardedAd.createForAdRequest(rewardedUnitId, AD_CONFIG.requestOptions);
-
-    this.attachInterstitialListeners();
-    this.attachRewardedListeners();
-
-    this.loadInterstitial();
-    this.loadRewarded();
-
+    this.log('AdMob unavailable in this build — ads disabled');
     this.isInitialized = true;
   }
 
-  private attachInterstitialListeners() {
-    if (!this.interstitial) return;
-
-    this.interstitial.addAdEventListener(AdEventType.LOADED, () => {
-      this.state.isInterstitialLoading = false;
-      this.state.isInterstitialReady = true;
-      this.state.retryAttempts = 0;
-      this.log('Interstitial loaded');
-    });
-
-    this.interstitial.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
-      this.state.isInterstitialLoading = false;
-      this.state.isInterstitialReady = false;
-      this.log('Interstitial error', error);
-    });
-
-    this.interstitial.addAdEventListener(AdEventType.OPENED, () => {
-      this.log('Interstitial opened');
-    });
-
-    this.interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      this.log('Interstitial closed');
-      this.state.isInterstitialReady = false;
-      this.state.lastInterstitialShownAt = Date.now();
-      this.resetInteractionCount();
-      this.loadInterstitial();
-    });
-  }
-
-  private attachRewardedListeners() {
-    if (!this.rewarded) return;
-
-    this.rewarded.addAdEventListener(AdEventType.LOADED, () => {
-      this.state.isRewardedLoading = false;
-      this.state.isRewardedReady = true;
-      this.log('Rewarded loaded');
-    });
-
-    this.rewarded.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
-      this.state.isRewardedLoading = false;
-      this.state.isRewardedReady = false;
-      this.log('Rewarded error', error);
-    });
-
-    this.rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward: unknown) => {
-      this.log('Reward earned', reward);
-      this.onRewardEarned?.(reward);
-    });
-
-    this.rewarded.addAdEventListener(AdEventType.CLOSED, () => {
-      this.log('Rewarded closed');
-      this.state.isRewardedReady = false;
-      this.loadRewarded();
-    });
-  }
-
-  private loadInterstitial() {
-    if (!this.interstitial || this.state.isInterstitialLoading) return;
-    this.state.isInterstitialLoading = true;
-    this.state.isInterstitialReady = false;
-    this.log('Loading interstitial');
-    this.interstitial.load();
-  }
-
-  private loadRewarded() {
-    if (!this.rewarded || this.state.isRewardedLoading) return;
-    this.state.isRewardedLoading = true;
-    this.state.isRewardedReady = false;
-    this.log('Loading rewarded');
-    this.rewarded.load();
-  }
-
   canShowInterstitial(): boolean {
-    const cooldownMs = AD_CONFIG.INTERSTITIAL_COOLDOWN;
-    const enoughTimePassed =
-      Date.now() - this.state.lastInterstitialShownAt > cooldownMs;
-
-    return this.state.isInterstitialReady &&
-      enoughTimePassed &&
-      this.state.interactionCount >= 3;
+    return false;
   }
 
   recordInteraction(): boolean {
     this.state.interactionCount += 1;
-    this.log('Interaction recorded', { count: this.state.interactionCount });
-    return this.canShowInterstitial();
+    return false;
   }
 
   resetInteractionCount() {
@@ -185,37 +87,13 @@ class AdManager {
   }
 
   async showInterstitial(): Promise<boolean> {
-    if (!this.interstitial || !this.state.isInterstitialReady) {
-      this.log('Interstitial not ready');
-      return false;
-    }
-
-    try {
-      await this.interstitial.show();
-      return true;
-    } catch (error) {
-      this.log('Failed to show interstitial', error);
-      this.state.isInterstitialReady = false;
-      this.loadInterstitial();
-      return false;
-    }
+    this.log('Interstitial not available (ads disabled)');
+    return false;
   }
 
   async showRewarded(): Promise<boolean> {
-    if (!this.rewarded || !this.state.isRewardedReady) {
-      this.log('Rewarded not ready');
-      return false;
-    }
-
-    try {
-      await this.rewarded.show();
-      return true;
-    } catch (error) {
-      this.log('Failed to show rewarded', error);
-      this.state.isRewardedReady = false;
-      this.loadRewarded();
-      return false;
-    }
+    this.log('Rewarded ad not available (ads disabled)');
+    return false;
   }
 
   getState(): Readonly<AdManagerState> {
@@ -223,11 +101,11 @@ class AdManager {
   }
 
   get interstitialReady() {
-    return this.state.isInterstitialReady;
+    return false;
   }
 
   get rewardedReady() {
-    return this.state.isRewardedReady;
+    return false;
   }
 
   get initialized() {
@@ -236,8 +114,6 @@ class AdManager {
 
   destroy() {
     this.isInitialized = false;
-    this.interstitial = null;
-    this.rewarded = null;
     AdManager.instance = null;
   }
 }

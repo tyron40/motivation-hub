@@ -87,13 +87,6 @@
           "cameraPermission": "Motivation Fuel allows you to take a new photo for your profile picture."
         }
       ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-7788769813708919~4966903177",
-          "iosAppId": "ca-app-pub-7788769813708919~4966903177"
-        }
-      ]
     ],
     "extra": {
       "eas": {
