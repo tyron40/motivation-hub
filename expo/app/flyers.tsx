@@ -23,6 +23,29 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
+import { ImageSourcePropType } from 'react-native';
+
+/**
+ * Resolves an imageUrl (which may be a require() number or a remote URI string)
+ * into an Image source prop.
+ */
+function resolveImageSource(source: ImageSourcePropType): ImageSourcePropType {
+  return source;
+}
+
+/**
+ * Resolves an imageUrl into a string URL for download/share operations.
+ * Local require() assets (numbers) cannot be downloaded/shared via URL —
+ * returns null in that case.
+ */
+function resolveImageUrlString(source: ImageSourcePropType): string | null {
+  if (typeof source === 'number') return null;
+  if (typeof source === 'string') return source;
+  if (typeof source === 'object' && source !== null && 'uri' in source) {
+    return (source as { uri: string }).uri;
+  }
+  return null;
+}
 import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
 
@@ -238,7 +261,7 @@ export default function FlyersScreen() {
       id: `custom-flyer-${Date.now()}`,
       title: newTitle.trim(),
       quote: newQuote.trim() || '',
-      imageUrl: newImageUrl.trim(),
+      imageUrl: { uri: newImageUrl.trim() },
       accent,
     });
 
@@ -250,12 +273,17 @@ export default function FlyersScreen() {
 
   const handleDownloadFlyer = useCallback(async (flyer: MotivationalFlyer) => {
     if (isDownloading) return;
+    const urlString = resolveImageUrlString(flyer.imageUrl);
+    if (!urlString) {
+      Alert.alert('Unable to Download', 'This flyer image is bundled locally and cannot be downloaded.');
+      return;
+    }
     setIsDownloading(true);
 
     try {
       if (Platform.OS === 'web') {
         const link = document.createElement('a');
-        link.href = flyer.imageUrl;
+        link.href = urlString;
         link.target = '_blank';
         link.download = `${flyer.title.replace(/\s+/g, '_')}.jpg`;
         document.body.appendChild(link);
@@ -272,7 +300,7 @@ export default function FlyersScreen() {
       const fileName = `flyer_${flyer.id}_${Date.now()}.jpg`;
       const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
 
-      const downloadResult = await FileSystem.downloadAsync(flyer.imageUrl, fileUri);
+      const downloadResult = await FileSystem.downloadAsync(urlString, fileUri);
       console.log('Download complete:', downloadResult.uri);
 
       if (!downloadResult.uri) {
@@ -300,12 +328,13 @@ export default function FlyersScreen() {
     try {
       const message = `Check out this motivational flyer: "${flyer.title}"${flyer.quote ? `\n\n"${flyer.quote}"` : ''}`;
       
+      const urlString = resolveImageUrlString(flyer.imageUrl);
       if (Platform.OS === 'web') {
         if (navigator.share) {
           await navigator.share({
             title: flyer.title,
             text: message,
-            url: flyer.imageUrl,
+            url: urlString ?? undefined,
           });
         } else {
           await navigator.clipboard.writeText(message);
@@ -314,7 +343,7 @@ export default function FlyersScreen() {
       } else {
         await Share.share({
           message,
-          url: flyer.imageUrl,
+          url: urlString ?? undefined,
         });
       }
     } catch (error) {
@@ -367,7 +396,7 @@ export default function FlyersScreen() {
                 </View>
               ) : (
                 <Image
-                  source={{ uri: flyer.imageUrl }}
+                  source={resolveImageSource(flyer.imageUrl)}
                   style={styles.cardImage}
                   resizeMode="cover"
                   onLoadStart={() => handleImageLoadStart(flyer.id)}
@@ -423,7 +452,7 @@ export default function FlyersScreen() {
             <Animated.View style={[styles.modalContent, { transform: [{ scale: scaleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}>
               {selectedFlyer && (
                 <View style={styles.modalCard}>
-                  <Image source={{ uri: selectedFlyer.imageUrl }} style={styles.modalImage} resizeMode="cover" />
+                  <Image source={resolveImageSource(selectedFlyer.imageUrl)} style={styles.modalImage} resizeMode="cover" />
                   <LinearGradient
                     colors={selectedFlyer.quote ? ['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)'] : ['transparent', 'rgba(0,0,0,0.35)']}
                     style={styles.modalGradient}

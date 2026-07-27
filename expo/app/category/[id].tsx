@@ -159,7 +159,13 @@ export default function CategoryScreen() {
     if (!banner) return;
     setEditQuote(banner.quote);
     setEditAuthor(banner.author);
-    setEditImageUrl(banner.imageUrl);
+    // Extract URL string from ImageSourcePropType for editing.
+    // Local require() assets (numbers) can't be edited as text — leave blank.
+    const src = banner.imageUrl;
+    const urlStr = typeof src === 'string'
+      ? src
+      : (typeof src === 'object' && src !== null && 'uri' in src ? (src as { uri: string }).uri : '');
+    setEditImageUrl(urlStr);
     setShowEditBanner(true);
   }, [banner]);
 
@@ -173,7 +179,7 @@ export default function CategoryScreen() {
       ...banner,
       quote: editQuote.trim(),
       author: editAuthor.trim(),
-      imageUrl: editImageUrl.trim() || banner.imageUrl,
+      imageUrl: editImageUrl.trim() ? { uri: editImageUrl.trim() } : banner.imageUrl,
     });
     setShowEditBanner(false);
     if (Platform.OS !== 'web') {
@@ -219,7 +225,7 @@ export default function CategoryScreen() {
           {banner && (
             <View style={styles.bannerContainer}>
               <Image
-                source={{ uri: banner.imageUrl }}
+                source={banner.imageUrl}
                 style={styles.bannerImage}
               />
               <LinearGradient

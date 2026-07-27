@@ -298,7 +298,7 @@ export default function HomeScreen() {
                   testID={`flyer-card-${item.id}`}
                 >
                   <Image
-                    source={{ uri: item.imageUrl }}
+                    source={item.imageUrl}
                     style={styles.flyerPosterImage}
                   />
                   {item.quote ? (
