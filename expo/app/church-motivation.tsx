@@ -32,11 +32,39 @@ export default function ChurchMotivationScreen() {
     const loadChurchContent = async () => {
       try {
         setIsLoading(true);
-        console.log('⛪ Loading church motivation videos...');
-        const videos = await searchVideos('church motivation encouragement sermon', 30);
-        const converted = videos.map((video) => convertVideoToSpeech(video));
+        console.log('⛪ Loading all church motivation videos...');
+
+        // Fetch from multiple search queries in parallel to get comprehensive coverage
+        const searchQueries = [
+          'church motivation encouragement sermon',
+          'christian motivational speech inspiration',
+          'faith motivation preaching powerful',
+          'bible motivation encouragement word',
+          'gospel motivation uplift spiritual',
+          'christian testimony motivation overcome',
+          'sermon inspiration faith hope',
+          'church speech purpose destiny calling',
+        ];
+
+        const results = await Promise.all(
+          searchQueries.map((query) => searchVideos(query, 50))
+        );
+
+        // Deduplicate by video ID
+        const seenIds = new Set<string>();
+        const allVideos: typeof results[0] = [];
+        for (const videos of results) {
+          for (const video of videos) {
+            if (!seenIds.has(video.id)) {
+              seenIds.add(video.id);
+              allVideos.push(video);
+            }
+          }
+        }
+
+        const converted = allVideos.map((video) => convertVideoToSpeech(video));
         setChurchSpeeches(converted);
-        console.log(`✅ Loaded ${converted.length} church motivation speeches`);
+        console.log(`✅ Loaded ${converted.length} church motivation speeches from ${searchQueries.length} searches`);
       } catch (error) {
         console.error('❌ Failed to load church motivation videos:', error);
       } finally {

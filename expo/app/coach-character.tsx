@@ -5,22 +5,16 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Image,
-  ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
-
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, Check, Wand2 } from 'lucide-react-native';
+import { Sparkles, Check } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
-import { generateImageViaBackend } from '@/lib/api-client';
 
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
@@ -65,6 +59,20 @@ const PRESET_CHARACTERS: CoachCharacter[] = [
     description: 'Creative and inspiring, ideal for artistic pursuits',
     isCustom: false,
   },
+  {
+    id: 'dre',
+    name: 'Coach Dre',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreMarcus&backgroundColor=1a1a2e&skinColor=7b4f3a',
+    description: 'Relentless and real, pushes you to dominate every goal',
+    isCustom: false,
+  },
+  {
+    id: 'malik',
+    name: 'Coach Malik',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikStrong&backgroundColor=0f3460&skinColor=6b4533',
+    description: 'No-nonsense accountability coach who turns talk into action',
+    isCustom: false,
+  },
 ];
 
 export default function CoachCharacterScreen() {
@@ -73,67 +81,11 @@ export default function CoachCharacterScreen() {
   const [selectedCharacter, setSelectedCharacter] = useState<CoachCharacter | null>(
     profile.coachCharacter || PRESET_CHARACTERS[0]
   );
-  const [customDescription, setCustomDescription] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedCharacter, setGeneratedCharacter] = useState<CoachCharacter | null>(null);
 
   const handleSelectCharacter = async (character: CoachCharacter) => {
     setSelectedCharacter(character);
     await updateProfile({ coachCharacter: character });
     Alert.alert('Success', `${character.name} is now your coach!`);
-  };
-
-  const handleGenerateCustomCharacter = async () => {
-    if (!customDescription.trim()) {
-      Alert.alert('Error', 'Please describe your ideal coach');
-      return;
-    }
-
-    if (!customName.trim()) {
-      Alert.alert('Error', 'Please enter a name for your coach');
-      return;
-    }
-
-    setIsGenerating(true);
-    try {
-      console.log('🎨 Generating custom coach character...');
-      
-      const result = await generateImageViaBackend(
-        `A professional, friendly coach avatar with these characteristics: ${customDescription}. Style: modern, clean, professional headshot, warm and approachable expression, suitable for a motivation coach app`,
-        '1024x1024'
-      );
-      const imageUrl = result.imageUrl;
-
-      const customCharacter: CoachCharacter = {
-        id: `custom-${Date.now()}`,
-        name: customName.trim(),
-        imageUrl,
-        description: customDescription,
-        isCustom: true,
-      };
-
-      setGeneratedCharacter(customCharacter);
-      Alert.alert(
-        'Character Generated!',
-        'Your custom coach has been created. Tap to select it.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Select',
-            onPress: () => handleSelectCharacter(customCharacter),
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('❌ Error generating character:', error);
-      Alert.alert(
-        'Generation Failed',
-        'Failed to generate custom character. Please try again or choose a preset character.'
-      );
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   return (
@@ -162,18 +114,11 @@ export default function CoachCharacterScreen() {
             </TouchableOpacity>
           </View>
 
-          <KeyboardAvoidingView
-            style={styles.content}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
           >
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="none"
-            >
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Preset Characters</Text>
             <View style={styles.charactersGrid}>
               {PRESET_CHARACTERS.map((character) => (
@@ -202,80 +147,7 @@ export default function CoachCharacterScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
-            <View style={styles.divider} />
-
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Create Custom Character</Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Describe your ideal coach and we will generate a unique character using AI
-            </Text>
-
-            <View style={styles.customSection}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Coach Name</Text>
-              <TextInput
-                style={[styles.customNameInput, { color: colors.text }]}
-                placeholder="E.g., Coach Sarah, Mentor John, etc."
-                placeholderTextColor={colors.textSecondary}
-                value={customName}
-                onChangeText={setCustomName}
-              />
-
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Character Description</Text>
-              <TextInput
-                style={[styles.customInput, { color: colors.text }]}
-                placeholder="E.g., A wise elderly mentor with gray hair and glasses, wearing professional attire..."
-                placeholderTextColor={colors.textSecondary}
-                value={customDescription}
-                onChangeText={setCustomDescription}
-                multiline
-                numberOfLines={4}
-              />
-
-              <TouchableOpacity
-                style={[styles.generateButton, { backgroundColor: colors.primary }, isGenerating && styles.generateButtonDisabled]}
-                onPress={handleGenerateCustomCharacter}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Wand2 color="white" size={20} />
-                    <Text style={styles.generateButtonText}>Generate Character</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {generatedCharacter && (
-                <View style={styles.generatedPreview}>
-                  <Text style={[styles.previewTitle, { color: colors.text }]}>Generated Character</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.characterCard,
-                      { backgroundColor: colors.cardBackground },
-                      selectedCharacter?.id === generatedCharacter.id && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
-                    ]}
-                    onPress={() => handleSelectCharacter(generatedCharacter)}
-                  >
-                    <Image
-                      source={{ uri: generatedCharacter.imageUrl }}
-                      style={styles.characterImage}
-                    />
-                    {selectedCharacter?.id === generatedCharacter.id && (
-                      <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
-                        <Check color="white" size={16} />
-                      </View>
-                    )}
-                    <Text style={[styles.characterName, { color: colors.text }]}>{generatedCharacter.name}</Text>
-                    <Text style={[styles.characterDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-                      {generatedCharacter.description}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
+          </ScrollView>
         </SafeAreaView>
       </LinearGradient>
     </>
@@ -322,9 +194,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  content: {
-    flex: 1,
-  },
   scrollView: {
     flex: 1,
   },
@@ -337,11 +206,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' as const,
     marginTop: 24,
     marginBottom: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 16,
-    lineHeight: 20,
   },
   charactersGrid: {
     flexDirection: 'row',
@@ -383,59 +247,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center' as const,
     lineHeight: 16,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginVertical: 32,
-  },
-  customSection: {
-    marginTop: 16,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  customNameInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  customInput: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: 'top' as const,
-    marginBottom: 16,
-  },
-  generateButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    flexDirection: 'row' as const,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-  },
-  generateButtonDisabled: {
-    opacity: 0.6,
-  },
-  generateButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  generatedPreview: {
-    marginTop: 24,
-  },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    marginBottom: 16,
   },
 });
