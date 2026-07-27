@@ -14,7 +14,7 @@ export const defaultCategoryBanners: CategoryBanner[] = [
     id: 'banner-1',
     categoryId: '1',
     categoryName: 'Motivation',
-    imageUrl: require('@/assets/images/run club.jpeg'),
+    imageUrl: require('@/assets/images/run-club.jpeg'),
     quote: 'The only way to do great work is to love what you do.',
     author: 'Steve Jobs',
   },
