@@ -239,14 +239,7 @@ function ChatScreenContent() {
       };
       
       setMessages([greetingMessage]);
-      
-      if (profile.voiceEnabled) {
-        const timeoutId = setTimeout(() => {
-          void generateVoice(greetingMessage.id, greeting);
-        }, 1000);
-        
-        return () => clearTimeout(timeoutId);
-      }
+      // Do NOT auto-speak the greeting — user must press the speak button manually
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionId]);
@@ -386,18 +379,7 @@ function ChatScreenContent() {
         }
       }
 
-      if (profile.voiceEnabled && completion) {
-        try {
-          if (usageStats.credits > 0) {
-            const voiceCreditUsed = await deductCredit();
-            if (voiceCreditUsed) {
-              void generateVoice(aiMessage.id, completion);
-            }
-          }
-        } catch (voiceErr) {
-          console.warn('⚠️ Voice generation failed:', voiceErr);
-        }
-      }
+      // Do NOT auto-speak AI responses — user must press the speak button manually
     } catch (error: any) {
       console.error('❌ Chat error:', error?.message || error);
 
@@ -581,46 +563,33 @@ function ChatScreenContent() {
     }
   };
 
-  // Stop all audio and recording immediately when navigating away from chat
+  // NOTE: TTS playback intentionally continues when navigating away from chat.
+  // Only stop recording (not playback) on navigation away.
   useFocusEffect(
     React.useCallback(() => {
       return () => {
-        // Cleanup runs when screen loses focus (tab switch, navigation, etc.)
-        console.log('🧹 Chat screen lost focus — stopping audio and recording');
+        // Only stop recording on navigation away — let TTS continue playing
         if (recording) {
           recording.stopAndUnloadAsync().catch(() => {});
           setRecording(null);
           setIsRecording(false);
         }
-        if (sound) {
-          sound.stopAsync().catch(() => {});
-          sound.unloadAsync().catch(() => {});
-          setSound(null);
-        }
-        setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
         setIsTyping(false);
-        setIsLoading(false);
         isSendingRef.current = false;
       };
-    }, [recording, sound])
+    }, [recording])
   );
 
+  // Only clean up recording on unmount — TTS sound is allowed to continue
   useEffect(() => {
     return () => {
       if (recording) {
-        console.log('🧹 Cleaning up recording on unmount');
         recording.stopAndUnloadAsync().catch((err: unknown) => 
           console.error('Error cleaning up recording:', err)
         );
       }
-      if (sound) {
-        console.log('🧹 Cleaning up sound on unmount');
-        sound.unloadAsync().catch((err: unknown) => 
-          console.error('Error cleaning up sound:', err)
-        );
-      }
     };
-  }, [recording, sound]);
+  }, [recording]);
 
   const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
     const bubbleAnim = useRef(new Animated.Value(0)).current;
@@ -690,21 +659,24 @@ function ChatScreenContent() {
             ]}>
               {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
             </Text>
-            {!message.isUser && message.audioUrl && (
+            {!message.isUser && (
               <TouchableOpacity
                 style={styles.voiceButton}
                 onPress={() => {
                   if (message.isPlaying) {
                     void stopAudio();
-                  } else {
+                  } else if (message.audioUrl) {
                     void playAudio(message.id, message.audioUrl!);
+                  } else {
+                    // Generate voice on-demand when user presses speak
+                    void generateVoice(message.id, message.text);
                   }
                 }}
               >
                 {message.isPlaying ? (
                   <Pause color={Colors.text} size={14} />
                 ) : (
-                  <Play color={Colors.text} size={14} />
+                  <Volume2 color={Colors.text} size={14} />
                 )}
               </TouchableOpacity>
             )}

@@ -112,7 +112,7 @@ function ProfileContent() {
     );
   }, [signOut]);
 
-  const displayName = userProfile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const displayName = userProfileData?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const displayEmail = user?.email || '';
   
   const styles = getStyles(colors);

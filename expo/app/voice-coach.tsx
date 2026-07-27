@@ -56,7 +56,7 @@ function VoiceCoachContent() {
   const webChunksRef = useRef<Blob[]>([]);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('Initializing voice coach...');
-  const [greetingText, setGreetingText] = useState<string>('');
+
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [hasGreeted, setHasGreeted] = useState(false);
   const isInitializedRef = useRef(false);
@@ -210,7 +210,6 @@ function VoiceCoachContent() {
     
     console.log('👋 Setting initial greeting message for:', userName);
     setMessages([greetingMessage]);
-    setGreetingText(greetingMessage.content);
     setCurrentStatus('Coach is greeting you...');
     
     console.log('🔊 Speaking initial greeting...');
@@ -1281,15 +1280,9 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         </View>
 
         <View style={styles.messageSection}>
-          {greetingText ? (
-            <Text style={[styles.greetingText, { color: colors.text }]}>
-              {greetingText}
-            </Text>
-          ) : (
-            <Text style={[styles.statusMainText, { color: colors.primary }]}>
-              {currentStatus}
-            </Text>
-          )}
+          <Text style={[styles.statusMainText, { color: colors.primary }]}>
+            {currentStatus}
+          </Text>
           {isPlaying && (
             <TouchableOpacity 
               style={styles.stopButton}
@@ -1496,14 +1489,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     lineHeight: 28,
     fontWeight: '600' as const,
     marginBottom: 16,
-  },
-  greetingText: {
-    fontSize: 18,
-    textAlign: 'center' as const,
-    lineHeight: 26,
-    fontWeight: '500' as const,
-    marginBottom: 16,
-    paddingHorizontal: 12,
   },
   stopButton: {
     backgroundColor: 'rgba(231, 76, 60, 0.2)',
