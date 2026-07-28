@@ -81,7 +81,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const loadEntitlements = useCallback(async () => {
     try {
       console.log('📦 Loading entitlements... isAuthenticated:', isAuthenticated, 'isDemoAccount:', isDemoAccount);
-
+      
       if (isDemoAccount) {
         console.log('🎭 Demo account: Granting unlimited premium access');
         const premiumEntitlements: Entitlements = {
@@ -92,17 +92,17 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         setEntitlements(premiumEntitlements);
         return;
       }
-
+      
       const timeoutPromise = new Promise<null>((resolve) => {
         setTimeout(() => {
           console.warn('⚠️ Entitlements loading timeout');
           resolve(null);
         }, 1000);
       });
-
+      
       const loadPromise = AsyncStorage.getItem(storageKey);
       const stored = await Promise.race([loadPromise, timeoutPromise]);
-
+      
       if (stored && typeof stored === 'string') {
         try {
           const parsed = JSON.parse(stored) as Entitlements;
