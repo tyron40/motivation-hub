@@ -135,9 +135,16 @@ export default function CategoryScreen() {
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
 
+  const isChurchCategory = (category?.name || '').toLowerCase().includes('church');
+
   const isMotivationCategory = (category?.name || '').toLowerCase() === 'motivation';
 
   useEffect(() => {
+    if (isChristianOnlyMode && category && !isChurchCategory) {
+      router.replace('/category/church');
+      return;
+    }
+
     if (isMotivationCategory) {
       setUseLocalMotivationHero(true);
       setBannerImageUri('');
@@ -147,7 +154,7 @@ export default function CategoryScreen() {
     const next = banner?.imageUrl?.trim() ? banner.imageUrl.trim() : fallback;
     setUseLocalMotivationHero(false);
     setBannerImageUri(next);
-  }, [banner?.imageUrl, isMotivationCategory]);
+  }, [banner?.imageUrl, isMotivationCategory, isChristianOnlyMode, isChurchCategory, category]);
 
   useEffect(() => {
     const handleLoadOnlineSpeeches = async () => {

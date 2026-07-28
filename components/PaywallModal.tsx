@@ -154,15 +154,6 @@ export default function PaywallModal({ visible, onClose }: PaywallModalProps) {
             </View>
           )}
 
-          {isAuthenticated && !isWeb && (Platform.OS === 'ios' || Platform.OS === 'android') && (
-            <View style={styles.setupNoticeCard}>
-              <Shield color={Colors.accent} size={24} />
-              <Text style={styles.setupNoticeTitle}>In-App Purchases Setup Required</Text>
-              <Text style={styles.setupNoticeText}>
-                To enable purchases, complete these steps:{`\n\n`}1. Create products in App Store Connect / Play Console{`\n`}2. Add products to RevenueCat dashboard{`\n`}3. Set a {`"`}Current{`"`} offering in RevenueCat{`\n`}4. Test on a real device (not simulator){`\n\n`}Your RevenueCat API key is already configured.
-              </Text>
-            </View>
-          )}
 
           <View style={styles.currentStatusCard}>
             <View style={styles.statusRow}>
@@ -440,27 +431,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
-  },
-  setupNoticeCard: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.accent,
-  },
-  setupNoticeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  setupNoticeText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 22,
   },
   signInButton: {
     backgroundColor: Colors.primary,

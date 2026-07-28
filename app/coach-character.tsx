@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -81,6 +81,12 @@ export default function CoachCharacterScreen() {
   const [selectedCharacter, setSelectedCharacter] = useState<CoachCharacter | null>(
     profile.coachCharacter || PRESET_CHARACTERS[0]
   );
+  const [imageFallbacks, setImageFallbacks] = useState<Record<string, boolean>>({});
+
+  const fallbackAvatarUri = useMemo(
+    () => 'https://api.dicebear.com/7.x/avataaars/png?seed=CoachFallback&backgroundColor=1f2937',
+    []
+  );
 
   const handleSelectCharacter = async (character: CoachCharacter) => {
     setSelectedCharacter(character);
@@ -135,7 +141,14 @@ export default function CoachCharacterScreen() {
                   onPress={() => handleSelectCharacter(character)}
                 >
                   <Image
-                    source={{ uri: character.imageUrl }}
+                    source={{
+                      uri: imageFallbacks[character.id] ? fallbackAvatarUri : character.imageUrl,
+                    }}
+                    onError={() =>
+                      setImageFallbacks((prev) =>
+                        prev[character.id] ? prev : { ...prev, [character.id]: true }
+                      )
+                    }
                     style={styles.characterImage}
                   />
                   {selectedCharacter?.id === character.id && (

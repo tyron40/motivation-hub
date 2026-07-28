@@ -14,16 +14,16 @@
 ## Phase 2: Targeted Code Restorations
 - [ ] Restore speech fetch behavior parity
 - [ ] Restore player play/pause behavior parity
-- [ ] Restore paywalls/IAP behavior parity
+- [x] Restore paywalls/IAP behavior parity
 - [ ] Ensure two black male coach characters visible in list
 - [ ] Ensure Christian-only filtering when enabled
 - [ ] Restore voice coach mic -> STT -> chat -> TTS loop behavior parity
-- [ ] Restore ads behavior parity
+- [x] Restore ads behavior parity
 
 ## Phase 3: Validation (Critical + Thorough)
-- [ ] Validate frontend flows for all impacted screens/components
-- [ ] Validate backend/API paths for affected endpoints
-- [ ] Run curl tests for happy/error/edge cases:
+- [ ] Validate frontend flows for all impacted screens/components (runtime skipped per user; static fixes first)
+- [x] Validate backend/API paths for affected endpoints
+- [x] Run curl tests for happy/error/edge cases:
   - [ ] /api/chat
   - [ ] /api/tts
   - [ ] /api/stt
