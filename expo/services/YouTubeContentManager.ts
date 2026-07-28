@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_ENDPOINTS } from '@/lib/config';
 
-const REFRESH_INTERVAL_MS = 1000 * 60 * 60; // 1 hour — refresh content more frequently
-const MAX_FETCHES_PER_DAY = 100; // YouTube allows ~100 searches/day within 10,000 quota units
+const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
+const MAX_FETCHES_PER_DAY = 30;
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',
@@ -344,7 +344,6 @@ export const YouTubeContentManager = {
     if (results.length > 0) {
       await setCachedVideos(cacheKey, results);
       await markRefreshed(cacheKey);
-      await recordFetch();
     }
 
     return results.slice(0, limit);

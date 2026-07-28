@@ -336,9 +336,9 @@ function ChatScreenContent() {
 
     chatHistory.push({ role: 'user', content: text.trim() });
 
-    // Send system prompt as a proper system role message (not a user message hack)
-    const allMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-      { role: 'system', content: systemPrompt },
+    const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
+      { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
+      { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
       ...chatHistory,
     ];
 
@@ -347,7 +347,7 @@ function ChatScreenContent() {
 
       const chatResult = await sendChatMessage({
         messages: allMessages.map(m => ({
-          role: m.role as 'system' | 'user' | 'assistant',
+          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
           content: m.content,
         })),
       });
