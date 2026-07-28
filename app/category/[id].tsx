@@ -25,6 +25,7 @@ import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
+import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
 const motivationHeroImage = require('@/assets/images/run club.jpeg');
 
@@ -36,6 +37,7 @@ export default function CategoryScreen() {
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
+  const { profile } = useUserProfile();
   const styles = getStyles(colors);
 
   const [showEditBanner, setShowEditBanner] = useState(false);
@@ -104,18 +106,32 @@ export default function CategoryScreen() {
     [category, getSpeechesByCategory]
   );
   const TARGET_CATEGORY_COUNT = 40;
+  const isChristianOnlyMode = !!profile.includeChurchMotivation;
+
   const categorySpeeches = useMemo(() => {
     const base = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
     const unique: Speech[] = [];
     const seen = new Set<string>();
+
+    const isChristianContent = (speech: Speech) => {
+      const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+      const christianKeywords = [
+        'church', 'christ', 'jesus', 'god', 'bible', 'scripture',
+        'gospel', 'faith', 'prayer', 'worship', 'pastor', 'sermon',
+      ];
+      return christianKeywords.some(k => haystack.includes(k));
+    };
+
     for (const s of [...base, ...contextSpeeches]) {
       if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
+      if (isChristianOnlyMode && !isChristianContent(s)) continue;
+
       seen.add(s.id);
       unique.push(s);
       if (unique.length >= TARGET_CATEGORY_COUNT) break;
     }
     return unique;
-  }, [youtubeSpeeches, contextSpeeches]);
+  }, [youtubeSpeeches, contextSpeeches, isChristianOnlyMode]);
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
 

@@ -321,11 +321,20 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         formData.append('audio', blob as any, 'recording.webm');
 
         const response = await fetch(API_ENDPOINTS.stt, { method: 'POST', body: formData });
-        if (!response.ok) throw new Error(`STT request failed (${response.status})`);
+        if (!response.ok) {
+          let serverMessage = '';
+          try {
+            const errJson = await response.json();
+            serverMessage = errJson?.error || errJson?.message || '';
+          } catch {}
+          throw new Error(serverMessage || `STT request failed (${response.status})`);
+        }
 
         const data = await response.json();
         const userText = (data?.text || '').trim();
-        if (!userText) throw new Error('No speech detected');
+        if (!userText || userText === '.' || userText === '...') {
+          throw new Error('Could not detect clear speech');
+        }
 
         await getCoachReply(userText);
         return;
