@@ -76,13 +76,9 @@ function VoiceCoachContent() {
     try {
       console.log('🔊 Speaking message:', text.substring(0, 50) + '...');
       
-      // Check credits before TTS
-      if (usageStats.credits <= 0) {
-        Alert.alert(
-          'No Credits',
-          'You need credits to use voice features. The coach response is shown as text only.',
-          [{ text: 'OK' }]
-        );
+      // Check credits before TTS — use canUseAI which accounts for loading state
+      if (usageStats.credits <= 0 && !usageStats.canUseAI) {
+        console.log('⚠️ No credits available for TTS, skipping voice');
         setCurrentStatus('Ready to listen (text mode)');
         return;
       }
@@ -823,33 +819,9 @@ function VoiceCoachContent() {
         throw new Error('Invalid audio URI - recording may have failed');
       }
       
-      const formData = new FormData();
-      const uriParts = audioUri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
-      
-      console.log('📄 File type detected:', fileType);
-      console.log('📄 Full URI:', audioUri);
-      
-      const mimeType = fileType === 'wav' ? 'audio/wav' : 
-                       fileType === 'm4a' ? 'audio/mp4' : 
-                       fileType === 'webm' ? 'audio/webm' : 
-                       `audio/${fileType}`;
-      
-      const audioFile = {
-        uri: audioUri,
-        name: `recording.${fileType}`,
-        type: mimeType,
-      } as any;
-      
-      console.log('📦 Audio file object:', JSON.stringify(audioFile));
-      console.log('📦 Appending to FormData...');
-      formData.append('audio', audioFile);
-      console.log('✅ Audio appended to FormData');
-      
       console.log('🚀 Sending transcription request to backend STT...');
 
-      const transcribedText = await transcribeAudioViaBackend(audioUri);
-      const text = transcribedText;
+      const text = await transcribeAudioViaBackend(audioUri);
       console.log('🎯 Transcribed text:', JSON.stringify(text), '| length:', text.length);
       
       if (text && typeof text === 'string' && text.trim().length > 0) {
@@ -993,13 +965,9 @@ function VoiceCoachContent() {
       console.log('🤖 Getting AI response...');
       console.log('📝 Conversation messages:', conversationMessages.length);
       
-      // Check credits before making AI request
-      if (usageStats.credits <= 0) {
-        Alert.alert(
-          'No Credits',
-          'You need credits to chat with the AI coach. You can purchase more credits in Settings.',
-          [{ text: 'OK' }]
-        );
+      // Check credits before making AI request — only block if truly no credits
+      // (not during initial loading when credits default to 0 briefly)
+      if (usageStats.credits <= 0 && !usageStats.canUseAI) {
         const noCreditsMessage: Message = {
           role: 'assistant',
           content: 'I\'m sorry, but you\'ve run out of credits. Please purchase more credits to continue our conversation.',
