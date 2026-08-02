@@ -108,10 +108,16 @@ export default function CategoryScreen() {
       try {
         console.log(`Loading content for ${category.name}...`);
         
-        const [categoryVideos, channelVideos] = await Promise.all([
+        // Fetch category and trending in parallel, but tolerate trending failures
+      // (YouTube quota limits can make trending return errors/empty without
+      // blocking category-specific content from displaying).
+      const [categoryVideosResult, channelVideosResult] = await Promise.allSettled([
           getVideosByCategory(category.name, 30),
           getTrendingVideos(50),
         ]);
+
+        const categoryVideos = categoryVideosResult.status === 'fulfilled' ? categoryVideosResult.value : [];
+        const channelVideos = channelVideosResult.status === 'fulfilled' ? channelVideosResult.value : [];
         
         const channelSpeeches = channelVideos
           .map(video => {

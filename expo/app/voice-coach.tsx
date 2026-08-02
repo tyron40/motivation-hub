@@ -47,6 +47,14 @@ function VoiceCoachContent() {
   const iapContext = useIAP();
   const { usageStats } = iapContext;
   const [, setMessages] = useState<Message[]>([]);
+  const messagesRef = useRef<Message[]>([]);
+  const updateMessages = useCallback((next: Message[] | ((prev: Message[]) => Message[])) => {
+    setMessages(prev => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      messagesRef.current = resolved;
+      return resolved;
+    });
+  }, []);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -209,7 +217,7 @@ function VoiceCoachContent() {
     };
     
     console.log('👋 Setting initial greeting message for:', userName);
-    setMessages([greetingMessage]);
+    updateMessages([greetingMessage]);
     setCurrentStatus('Coach is greeting you...');
     
     console.log('🔊 Speaking initial greeting...');
@@ -823,29 +831,6 @@ function VoiceCoachContent() {
         throw new Error('Invalid audio URI - recording may have failed');
       }
       
-      const formData = new FormData();
-      const uriParts = audioUri.split('.');
-      const fileType = uriParts[uriParts.length - 1];
-      
-      console.log('📄 File type detected:', fileType);
-      console.log('📄 Full URI:', audioUri);
-      
-      const mimeType = fileType === 'wav' ? 'audio/wav' : 
-                       fileType === 'm4a' ? 'audio/mp4' : 
-                       fileType === 'webm' ? 'audio/webm' : 
-                       `audio/${fileType}`;
-      
-      const audioFile = {
-        uri: audioUri,
-        name: `recording.${fileType}`,
-        type: mimeType,
-      } as any;
-      
-      console.log('📦 Audio file object:', JSON.stringify(audioFile));
-      console.log('📦 Appending to FormData...');
-      formData.append('audio', audioFile);
-      console.log('✅ Audio appended to FormData');
-      
       console.log('🚀 Sending transcription request to backend STT...');
 
       const transcribedText = await transcribeAudioViaBackend(audioUri);
@@ -874,12 +859,10 @@ function VoiceCoachContent() {
         
         console.log('💬 Adding user message:', userMessage);
         
-        setMessages(prev => {
-          const updatedMessages = [...prev, userMessage];
-          console.log('📝 Updated messages count:', updatedMessages.length);
-          getAIResponse(updatedMessages);
-          return updatedMessages;
-        });
+        const updatedMessages = [...messagesRef.current, userMessage];
+        updateMessages(updatedMessages);
+        console.log('📝 Updated messages count:', updatedMessages.length);
+        void getAIResponse(updatedMessages);
       } else {
         console.log('⚠️ Empty or invalid transcription received:', {
           text,
@@ -974,11 +957,9 @@ function VoiceCoachContent() {
       }
 
       const userMessage: Message = { role: 'user', content: text.trim(), timestamp: Date.now() };
-      setMessages((prev) => {
-        const updated = [...prev, userMessage];
-        getAIResponse(updated);
-        return updated;
-      });
+      const updated = [...messagesRef.current, userMessage];
+      updateMessages(updated);
+      void getAIResponse(updated);
     } catch (error) {
       console.error('❌ Web transcription error:', error);
       Alert.alert('Processing Error', (error as Error).message);
@@ -1005,7 +986,7 @@ function VoiceCoachContent() {
           content: 'I\'m sorry, but you\'ve run out of credits. Please purchase more credits to continue our conversation.',
           timestamp: Date.now(),
         };
-        setMessages(prev => [...prev, noCreditsMessage]);
+        updateMessages(prev => [...prev, noCreditsMessage]);
         setCurrentStatus('Ready to listen');
         return;
       }
@@ -1060,7 +1041,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       };
       
       console.log('✅ AI response received, starting TTS immediately...');
-      setMessages(prev => [...prev, assistantMessage]);
+      updateMessages(prev => [...prev, assistantMessage]);
       
       if (profile.voiceEnabled !== false) {
         console.log('🔊 Starting TTS generation immediately (parallel)...');
@@ -1085,7 +1066,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         timestamp: Date.now(),
       };
       
-      setMessages(prev => [...prev, fallbackMessage]);
+      updateMessages(prev => [...prev, fallbackMessage]);
       setCurrentStatus('Ready to listen');
       
       if (profile.voiceEnabled !== false) {

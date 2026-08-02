@@ -402,7 +402,7 @@ function ChatScreenContent() {
       isSendingRef.current = false;
       recordMessageComplete();
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, generateVoice, recordMessageSent, recordMessageComplete]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, recordMessageSent, recordMessageComplete]);
 
 
 
