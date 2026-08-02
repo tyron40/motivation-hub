@@ -62,9 +62,22 @@ export function markYouTubeKeyIssue(key: string, isQuota = false): void {
 }
 
 export function isQuotaError(status: number, errorText: string): boolean {
-  if (status !== 403) return false;
-  const text = errorText.toLowerCase();
-  return text.includes('quota') || text.includes('exceeded');
+  // YouTube may report quota/rate exhaustion as either 403 or 429
+  if (status !== 403 && status !== 429) return false;
+
+  const text = (errorText || '').toLowerCase();
+
+  // Cover both quota and rate-limit style responses
+  return (
+    text.includes('quota') ||
+    text.includes('exceeded') ||
+    text.includes('rate limit') ||
+    text.includes('too many requests') ||
+    text.includes('userrate') ||
+    text.includes('dailylimitexceeded') ||
+    text.includes('ratelimitexceeded') ||
+    text.includes('quotaexceeded')
+  );
 }
 
 export function getYouTubeKeyCount(): number {
