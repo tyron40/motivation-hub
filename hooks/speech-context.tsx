@@ -381,7 +381,40 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   }, [speeches]);
 
   const getSpeechesByCategory = useCallback((category: string): Speech[] => {
-    return speeches.filter(speech => speech.category === category);
+    const normalizedCategory = (category || '').toLowerCase().trim();
+    if (!normalizedCategory) return [];
+
+    const words = normalizedCategory.split(/\s+/).filter(Boolean);
+
+    const scoreSpeech = (speech: Speech): number => {
+      const speechCategory = (speech.category || '').toLowerCase();
+      const title = (speech.title || '').toLowerCase();
+      const description = (speech.description || '').toLowerCase();
+      const tags = (speech.tags || []).join(' ').toLowerCase();
+
+      let score = 0;
+
+      if (speechCategory === normalizedCategory) score += 10;
+      if (speechCategory.includes(normalizedCategory) || normalizedCategory.includes(speechCategory)) score += 6;
+
+      for (const w of words) {
+        if (!w) continue;
+        if (speechCategory.includes(w)) score += 4;
+        if (title.includes(w)) score += 3;
+        if (description.includes(w)) score += 2;
+        if (tags.includes(w)) score += 2;
+      }
+
+      return score;
+    };
+
+    const scored = speeches
+      .map((speech) => ({ speech, score: scoreSpeech(speech) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.speech);
+
+    return scored;
   }, [speeches]);
 
   const updateListeningTime = useCallback((seconds: number) => {

@@ -139,7 +139,7 @@ export async function transcribeAudio(params: {
     console.log('🎯 API Base URL:', backendUrl);
     console.log('🎯 Full URL:', sttUrl);
 
-    const response = await fetchWithTimeout(
+    const response = await fetchWithRetry(
       sttUrl,
       {
         method: 'POST',
@@ -149,6 +149,7 @@ export async function transcribeAudio(params: {
         },
         body: params.audio,
       },
+      MAX_RETRIES,
       STT_TIMEOUT
     );
 
@@ -161,7 +162,7 @@ export async function transcribeAudio(params: {
       console.error('❌ STT API error response:', errorText.substring(0, 200));
 
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Unauthorized/Forbidden from backend. Verify deployment protection/auth headers.');
+        throw new Error('Unauthorized/Forbidden from backend. Verify deployment protection/auth headers and Vercel protection.');
       }
 
       throw new Error(`STT API error: ${response.status} ${errorText.substring(0, 120)}`);
@@ -338,7 +339,7 @@ export async function transcribeAudioViaBackend(audioUri: string): Promise<strin
 
   const formData = new FormData();
   const uriParts = audioUri.split('.');
-  const fileType = uriParts[uriParts.length - 1];
+  const fileType = uriParts[uriParts.length - 1] || 'wav';
 
   const mimeType = fileType === 'wav' ? 'audio/wav' :
                    fileType === 'm4a' ? 'audio/mp4' :
@@ -360,44 +361,14 @@ export async function transcribeAudioViaBackend(audioUri: string): Promise<strin
 
   console.log('📤 Sending audio to backend STT endpoint...');
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    console.log('⏱️ STT request timeout after 30 seconds');
-    controller.abort();
-  }, STT_TIMEOUT);
+  const { text } = await transcribeAudio({ audio: formData });
 
-  try {
-    const response = await fetch(API_ENDPOINTS.stt, {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    console.log('📡 STT response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('❌ STT error:', response.status, errorText.substring(0, 200));
-      throw new Error(`STT failed (${response.status}): ${errorText.substring(0, 100)}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ STT transcription received');
-
-    if (data.text && data.text.trim()) {
-      return data.text.trim();
-    }
-
+  if (!text || !text.trim()) {
     throw new Error('Empty transcription result');
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error?.name === 'AbortError') {
-      throw new Error('Transcription timed out. Please try again.');
-    }
-    throw error;
   }
+
+  console.log('✅ STT transcription received');
+  return text.trim();
 }
 
 export async function generateImageViaBackend(prompt: string, size: string = '1024x1024'): Promise<{ imageUrl: string }> {

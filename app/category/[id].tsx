@@ -163,9 +163,10 @@ export default function CategoryScreen() {
       try {
         console.log(`Loading content for ${category.name}...`);
         
-        const [categoryVideos, channelVideos] = await Promise.all([
+        const [categoryVideos, channelVideos, fallbackSearchVideos] = await Promise.all([
           getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
           getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
+          getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
         ]);
 
         const categoryNameLower = category.name.toLowerCase();
@@ -200,9 +201,16 @@ export default function CategoryScreen() {
           .sort((a, b) => b.score - a.score)
           .map(item => item.speech);
 
+        const fallbackSpeeches: Speech[] = fallbackSearchVideos
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
+          .filter(item => item.score >= 1)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
-        for (const s of [...catSpeeches, ...channelSpeeches, ...contextSpeeches]) {
+        for (const s of [...catSpeeches, ...channelSpeeches, ...fallbackSpeeches, ...contextSpeeches]) {
           if (!seenIds.has(s.id) && s.duration > 60) {
             seenIds.add(s.id);
             merged.push(s);

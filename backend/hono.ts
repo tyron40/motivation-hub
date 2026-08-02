@@ -195,32 +195,54 @@ app.post("/tts", handleTTS);
 const handleSTT = async (c: Context) => {
   try {
     console.log("[Hono] STT request received");
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
       return c.json({ error: "OpenAI API key not configured" }, 500);
     }
 
-    const formData = await c.req.formData();
-    const audioFile = formData.get('audio');
-
-    if (!audioFile || !(audioFile instanceof File)) {
-      return c.json({ error: "Audio file is required" }, 400);
+    const contentType = c.req.header('content-type') || '';
+    if (!contentType.toLowerCase().includes('multipart/form-data')) {
+      return c.json({ error: "Content-Type must be multipart/form-data" }, 400);
     }
 
-    console.log("[Hono] STT audio file received:", audioFile.name, "size:", audioFile.size);
+    const formData = await c.req.formData();
+    const audioPart = formData.get('audio');
+
+    if (!audioPart) {
+      return c.json({ error: "Audio file is required in 'audio' field" }, 400);
+    }
+
+    let audioFile: File;
+    if (audioPart instanceof File) {
+      audioFile = audioPart;
+    } else {
+      // Accept string blobs defensively
+      audioFile = new File([String(audioPart)], 'recording.wav', { type: 'audio/wav' });
+    }
+
+    if (!audioFile.size) {
+      return c.json({ error: "Audio file is empty" }, 400);
+    }
+
+    const mimeType = audioFile.type || 'audio/wav';
+    const fileExt = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('mpeg') ? 'mp3' : mimeType.includes('webm') ? 'webm' : 'wav';
+    const safeName = audioFile.name && audioFile.name.includes('.') ? audioFile.name : `recording.${fileExt}`;
+
+    console.log("[Hono] STT audio file received:", safeName, "size:", audioFile.size, "type:", mimeType);
 
     const openaiFormData = new FormData();
-    openaiFormData.append('file', audioFile, audioFile.name || 'recording.wav');
+    openaiFormData.append('file', audioFile, safeName);
     openaiFormData.append('model', 'whisper-1');
     openaiFormData.append('language', 'en');
+    openaiFormData.append('response_format', 'json');
 
     console.log("[Hono] Sending to OpenAI Whisper API...");
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: openaiFormData,
     });
@@ -228,13 +250,14 @@ const handleSTT = async (c: Context) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("[Hono] OpenAI Whisper error:", response.status, errorText);
-      return c.json({ error: "Transcription failed", details: errorText.substring(0, 200) }, 500);
+      return c.json({ error: "Transcription failed", details: errorText.substring(0, 400) }, 500);
     }
 
     const data = await response.json();
-    console.log("[Hono] STT transcription received, text length:", data.text?.length);
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    console.log("[Hono] STT transcription received, text length:", text.length);
 
-    return c.json({ text: data.text || '' });
+    return c.json({ text });
   } catch (error) {
     console.error("[Hono] STT error:", error);
     return c.json({
