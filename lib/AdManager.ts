@@ -132,12 +132,14 @@ class AdManager {
         this.state.isInterstitialReady = true;
         this.state.isInterstitialLoading = false;
         this.state.retryAttempts = 0;
+        this.onEvent?.('interstitial_loaded');
       });
 
       const onError = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
         this.log('Interstitial ad failed to load ❌', error);
         this.state.isInterstitialReady = false;
         this.state.isInterstitialLoading = false;
+        this.onEvent?.('interstitial_error', error);
         this.resolveInterstitialClose(false);
         this.scheduleInterstitialRetry();
       });
@@ -146,6 +148,7 @@ class AdManager {
         this.log('Interstitial ad dismissed');
         this.state.isInterstitialReady = false;
         this.state.isInterstitialLoading = false;
+        this.onEvent?.('interstitial_closed');
         this.resolveInterstitialClose(true);
         this.preloadInterstitial();
       });
@@ -153,6 +156,7 @@ class AdManager {
       const onOpened = ad.addAdEventListener(AdEventType.OPENED, () => {
         this.log('Interstitial ad shown');
         this.state.lastInterstitialShownAt = Date.now();
+        this.onEvent?.('interstitial_opened');
       });
 
       this.interstitialListeners = [onLoaded, onError, onClosed, onOpened];
@@ -270,6 +274,8 @@ class AdManager {
         this.log('Rewarded ad loaded ✅');
         this.state.isRewardedReady = true;
         this.state.isRewardedLoading = false;
+        this.rewardedRetryAttempts = 0;
+        this.onEvent?.('rewarded_loaded');
       });
 
       const onEarned = ad.addAdEventListener(
@@ -284,6 +290,7 @@ class AdManager {
         this.log('Rewarded ad dismissed');
         this.state.isRewardedReady = false;
         this.state.isRewardedLoading = false;
+        this.onEvent?.('rewarded_closed');
         this.preloadRewarded();
       });
 
@@ -291,6 +298,7 @@ class AdManager {
         this.log('Rewarded ad failed to load ❌', error);
         this.state.isRewardedReady = false;
         this.state.isRewardedLoading = false;
+        this.onEvent?.('rewarded_error', error);
         this.scheduleRewardedRetry();
       });
 

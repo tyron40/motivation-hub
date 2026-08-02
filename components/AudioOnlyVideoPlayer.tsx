@@ -687,17 +687,20 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const nextState = lastManualToggleTargetRef.current === null
-      ? !isPlayingRef.current
-      : !lastManualToggleTargetRef.current;
+    const nextState = !isPlayingRef.current;
     lastManualToggleTargetRef.current = nextState;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState, '(manual target)');
+    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
     desiredPlayRef.current = nextState;
     lastRequestedStateRef.current = nextState;
     manualPauseRef.current = !nextState;
+
+    isPlayingRef.current = nextState;
+    setPlayerPlayCommand(nextState);
+    setIsPlaying(nextState);
+    onPlayingChangeRef.current?.(nextState);
 
     try {
       void requestPlayState(nextState);
