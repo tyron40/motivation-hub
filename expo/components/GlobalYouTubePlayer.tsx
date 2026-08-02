@@ -41,8 +41,9 @@ export default function GlobalYouTubePlayer() {
   const youtubeId = currentSpeech?.youtubeId ?? null;
 
   // Set/clear audioPlayerRef so MiniPlayer and player screen can control playback
-  // Sync on every render to ensure the ref never points at a stale handle
-  audioPlayerRef.current = playerRef.current;
+  useEffect(() => {
+    audioPlayerRef.current = playerRef.current;
+  }, [youtubeId, audioPlayerRef]);
 
   // Reset ad tracking when speech changes
   useEffect(() => {

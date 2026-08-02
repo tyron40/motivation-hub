@@ -99,9 +99,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const onEndCalledRef = useRef(false);
   const isPlayingRef = useRef(false);
   const durationRef = useRef(0);
-  const playerReadyRef = useRef(false);
-  const playerErrorRef = useRef(false);
-  const currentTimeRef = useRef(0);
 
   const onEndRef = useRef(onEnd);
   const onErrorRef = useRef(onError);
@@ -112,11 +109,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onPlayingChangeRef.current = onPlayingChange; }, [onPlayingChange]);
   useEffect(() => { onProgressChangeRef.current = onProgressChange; }, [onProgressChange]);
-
-  // Keep refs in sync with state so the imperative handle closures never go stale
-  useEffect(() => { playerReadyRef.current = playerReady; }, [playerReady]);
-  useEffect(() => { playerErrorRef.current = playerError; }, [playerError]);
-  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -132,37 +124,34 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) return;
+      if (!playerReady || playerError) return;
       updatePlayState(!isPlayingRef.current);
     },
     play: () => {
-      if (!playerReadyRef.current || playerErrorRef.current || isPlayingRef.current) return;
+      if (!playerReady || playerError || isPlayingRef.current) return;
       updatePlayState(true);
     },
     pause: () => {
-      if (!playerReadyRef.current || playerErrorRef.current || !isPlayingRef.current) return;
+      if (!playerReady || playerError || !isPlayingRef.current) return;
       updatePlayState(false);
     },
     seekForward: (seconds = 15) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
-      const newPos = Math.min(currentTimeRef.current + seconds, durationRef.current);
+      if (!playerReady || !playerRef.current) return;
+      const newPos = Math.min(currentTime + seconds, durationRef.current);
       void playerRef.current.seekTo(newPos, true);
       setCurrentTime(newPos);
-      currentTimeRef.current = newPos;
     },
     seekBackward: (seconds = 15) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
-      const newPos = Math.max(currentTimeRef.current - seconds, 0);
+      if (!playerReady || !playerRef.current) return;
+      const newPos = Math.max(currentTime - seconds, 0);
       void playerRef.current.seekTo(newPos, true);
       setCurrentTime(newPos);
-      currentTimeRef.current = newPos;
     },
     seekTo: async (position: number) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
+      if (!playerReady || !playerRef.current) return;
       try {
         await playerRef.current.seekTo(position, true);
         setCurrentTime(position);
-        currentTimeRef.current = position;
       } catch (err) {
         console.error('Error seeking:', err);
       }
@@ -170,11 +159,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     getIsPlaying: () => isPlayingRef.current,
     resumeAfterAd: () => {
       console.log('[ResumeAfterAd] Resuming playback');
-      if (playerReadyRef.current && !playerErrorRef.current) {
+      if (playerReady && !playerError) {
         updatePlayState(true);
       }
     },
-  }), [updatePlayState]);
+  }), [playerReady, playerError, currentTime, updatePlayState]);
 
   useEffect(() => {
     if (isPlaying) {
