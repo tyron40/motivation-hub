@@ -18,10 +18,10 @@ import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
@@ -108,30 +108,16 @@ export default function CategoryScreen() {
       try {
         console.log(`Loading content for ${category.name}...`);
         
-        // Fetch category and trending in parallel, but tolerate trending failures
-      // (YouTube quota limits can make trending return errors/empty without
-      // blocking category-specific content from displaying).
-      const [categoryVideosResult, channelVideosResult] = await Promise.allSettled([
-          getVideosByCategory(category.name, 30),
-          getTrendingVideos(50),
-        ]);
+        // Fetch only category-specific content — no trending cross-pollination.
+      // This ensures every video on the page is relevant to the category title
+      // and all categories consume the same YouTube API quota (3 queries each).
+        const categoryVideos = await getVideosByCategory(category.name, 30);
 
-        const categoryVideos = categoryVideosResult.status === 'fulfilled' ? categoryVideosResult.value : [];
-        const channelVideos = channelVideosResult.status === 'fulfilled' ? channelVideosResult.value : [];
-        
-        const channelSpeeches = channelVideos
-          .map(video => {
-            const speech = convertVideoToSpeech(video);
-            const assigned = classifyVideoToCategory(speech.title, speech.description);
-            return { ...speech, category: assigned };
-          })
-          .filter(s => s.category === category.name);
-        
         const catSpeeches: Speech[] = categoryVideos.map(video => convertVideoToSpeech(video));
-        
+
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
-        for (const s of [...channelSpeeches, ...catSpeeches]) {
+        for (const s of catSpeeches) {
           if (!seenIds.has(s.id) && s.duration > 60) {
             seenIds.add(s.id);
             merged.push(s);

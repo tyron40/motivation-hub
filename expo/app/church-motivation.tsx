@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { SpeechCard } from '@/components/SpeechCard';
-import { convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
+import { convertVideoToSpeech, getVideosByCategory } from '@/services/youtubeService';
 import type { Speech } from '@/types/speech';
 
 export default function ChurchMotivationScreen() {
@@ -32,66 +32,17 @@ export default function ChurchMotivationScreen() {
     const loadChurchContent = async () => {
       try {
         setIsLoading(true);
-        console.log('⛪ Loading all Christian motivation videos...');
+        console.log('⛪ Loading Christian motivation videos...');
 
-        // Fetch from multiple search queries in parallel to get comprehensive coverage
-        const searchQueries = [
-          'christian motivation speech',
-          'church motivation encouragement sermon',
-          'christian motivational speech inspiration',
-          'faith motivation preaching powerful',
-          'bible motivation encouragement word',
-          'gospel motivation uplift spiritual',
-          'christian testimony motivation overcome',
-          'sermon inspiration faith hope',
-          'church speech purpose destiny calling',
-        ];
+        // Use the same getVideosByCategory as every other category page.
+        // The backend maps "Christian Motivation" to 3 targeted search queries,
+        // consuming the same quota as all other categories.
+        const videos = await getVideosByCategory('Christian Motivation', 30);
 
-        const results = await Promise.all(
-          searchQueries.map((query) => searchVideos(query, 50))
-        );
-
-        // Deduplicate by video ID
-        const seenIds = new Set<string>();
-        const allVideos: typeof results[0] = [];
-        for (const videos of results) {
-          for (const video of videos) {
-            if (!seenIds.has(video.id)) {
-              seenIds.add(video.id);
-              allVideos.push(video);
-            }
-          }
-        }
-
-        // Filter to keep ONLY Christian motivation content.
-        // Check title + channel + description for Christian keywords.
-        const christianKeywords = [
-          'christian', 'church', 'christ', 'jesus', 'bible', 'biblical',
-          'faith', 'faithful', 'gospel', 'god', 'lord', 'holy', 'spirit',
-          'holy spirit', 'scripture', 'sermon', 'preach', 'preaching',
-          'pastor', 'prayer', 'pray', 'salvation', 'testimony', 'testimonies',
-          'blessed', 'blessing', 'grace', 'worship', 'psalm', 'proverb',
-          'proverbs', 'spiritual', 'righteous', 'kingdom', 'heaven', 'godly',
-          'god\'s', 'christianity', 'disciple', 'covenant', 'minister',
-          'chaplain', 'revival', 'sanctified', 'redeemed', 'deliverance',
-          'prophetic', 'prophecy', 'altar', 'pulpit', 'congregation',
-        ];
-
-        const isChristian = (text: string): boolean => {
-          const lower = text.toLowerCase();
-          return christianKeywords.some((kw) => lower.includes(kw));
-        };
-
-        const christianVideos = allVideos.filter((video) => {
-          const haystack = `${video.title} ${video.channelTitle} ${video.description}`;
-          return isChristian(haystack);
-        });
-
-        const converted = christianVideos.map((video) => convertVideoToSpeech(video));
+        const converted = videos.map((video) => convertVideoToSpeech(video));
         setChurchSpeeches(converted);
         console.log(
-          `✅ Loaded ${converted.length} Christian motivation speeches ` +
-          `(${allVideos.length} total, ${allVideos.length - christianVideos.length} filtered out as non-Christian)`
+          `✅ Loaded ${converted.length} Christian motivation speeches`
         );
       } catch (error) {
         console.error('❌ Failed to load Christian motivation videos:', error);

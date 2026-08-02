@@ -434,69 +434,47 @@ async function ensureAdminDataLoaded(): Promise<void> {
   }
 }
 
+/**
+ * Each app category maps to exactly 3 YouTube search queries.
+ * This ensures every category consumes the same amount of YouTube API quota
+ * (3 search calls + 3 video-details calls per category page visit).
+ * Queries are tailored to each category's topic so results are always relevant.
+ */
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
     'motivational speech 2024',
     'david goggins motivation',
     'best motivational speech',
-    'powerful motivation',
-    'morning motivation speech',
   ],
   success: [
     'success mindset speech',
     'entrepreneur motivation',
     'business success speech',
-    'wealth mindset',
-    'success principles',
   ],
   mindset: [
     'growth mindset speech',
     'mental toughness',
     'champion mindset',
-    'positive thinking speech',
-    'mindset transformation',
   ],
-  inspiration: [
-    'inspirational speech',
-    'life changing speech',
-    'inspiring stories',
-    'overcome adversity',
-    'never give up speech',
+  fitness: [
+    'fitness motivation speech',
+    'workout motivation',
+    'gym training motivation',
   ],
   study: [
     'study motivation',
     'focus and concentration',
-    'academic success',
-    'learning motivation',
     'student motivation',
   ],
-  'high energy': [
-    'high energy motivation',
-    'pump up speech',
-    'workout motivation',
-    'intense motivation',
-    'energy boost speech',
-  ],
-  'daily motivation': [
-    'daily motivation speech',
-    'morning routine motivation',
-    'daily inspiration',
-    'start your day right',
-    'daily mindset',
-  ],
-  'powerful speeches': [
-    'powerful motivational speech',
-    'life changing speech',
-    'greatest speeches',
-    'legendary speeches',
-    'iconic motivational speech',
+  'christian motivation': [
+    'christian motivation speech',
+    'sermon inspiration faith',
+    'bible motivation encouragement',
   ],
   'athlete pump up': [
     'athlete pump up motivation',
     'pregame motivation speech',
     'sports motivation beast mode',
-    'championship mindset speech',
-    'game day motivation football basketball',
   ],
 };
 
