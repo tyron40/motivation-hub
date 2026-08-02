@@ -86,6 +86,15 @@
           "photosPermission": "Motivation Fuel lets you personalize your profile by selecting a photo from your library.",
           "cameraPermission": "Motivation Fuel allows you to take a new photo for your profile picture."
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidDelayAppMeasurementInit": true,
+          "iosAppId": "ca-app-pub-7788769813708919~4966903177",
+          "androidAppId": "ca-app-pub-7788769813708919~4966903177",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+        }
       ]
     ],
     "extra": {

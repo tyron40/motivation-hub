@@ -2,10 +2,35 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert, Platform } from 'react-native';
-import { IAPProductId, ALL_VOICES, IAP_PRODUCTS } from '@/constants/iap';
+import Constants from 'expo-constants';
+import { IAPProductId, ALL_VOICES, IAP_PRODUCT_IDS } from '@/constants/iap';
 import { useAuth } from './auth-context';
 
 const isWeb = Platform.OS === 'web';
+const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
+
+const REVENUECAT_API_KEY =
+  Platform.OS === 'ios'
+    ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
+    : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+
+// Safe-load react-native-purchases (native module, may not be available in Expo Go)
+let Purchases: any = null;
+let PurchasesLogLevel: any = null;
+let PurchasesPackage: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const purchasesModule = require('react-native-purchases');
+    Purchases = purchasesModule.default;
+    PurchasesLogLevel = purchasesModule.LOG_LEVEL;
+    PurchasesPackage = purchasesModule.PurchasesPackage;
+    console.log('✅ [IAP] RevenueCat SDK loaded');
+  } catch {
+    console.log('📺 [IAP] RevenueCat SDK not available - simulation mode');
+  }
+}
 
 interface Entitlements {
   credits: number;
@@ -20,40 +45,69 @@ interface UsageStats {
   canUseAI: boolean;
 }
 
-interface PurchaseRecord {
-  productId: IAPProductId;
-  purchasedAt: number;
-  credits?: number;
-  isPremium?: boolean;
-  expiresAt?: number | null;
-}
-
 const DEFAULT_ENTITLEMENTS_AUTHENTICATED: Entitlements = {
   credits: 10,
   isPremium: false,
   premiumExpiresAt: null,
 };
 
-/**
- * Local IAP implementation that works without native RevenueCat SDK.
- * Purchases are simulated locally — credits and premium status are
- * granted immediately and persisted to AsyncStorage so the app fully
- * functions end-to-end.
- */
 export const [IAPProvider, useIAP] = createContextHook(() => {
   const { isAuthenticated, user } = useAuth();
   const storageKey = useMemo(() => `entitlements:${user?.id ?? 'guest'}`, [user?.id]);
-  const purchasesKey = useMemo(() => `purchases:${user?.id ?? 'guest'}`, [user?.id]);
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [isConfigured, setIsConfigured] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(false);
 
   const isDemoAccount = user?.email === 'demo@motivationhub.app';
 
+  useEffect(() => {
+    const configureRevenueCat = async () => {
+      try {
+        if (!isNative) {
+          console.log('ℹ️ RevenueCat disabled on web');
+          setIsConfigured(false);
+          return;
+        }
+
+        if (!Purchases) {
+          console.log('⚠️ RevenueCat SDK not available');
+          setIsConfigured(false);
+          return;
+        }
+
+        const appOwnership = Constants.appOwnership;
+        if (appOwnership === 'expo') {
+          console.log('⚠️ RevenueCat not available in Expo Go');
+          setIsConfigured(false);
+          return;
+        }
+
+        if (!REVENUECAT_API_KEY) {
+          console.error('❌ Missing RevenueCat API key');
+          setIsConfigured(false);
+          return;
+        }
+
+        Purchases.setLogLevel(PurchasesLogLevel.INFO);
+        await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+        console.log('✅ RevenueCat configured');
+        setIsConfigured(true);
+      } catch (error) {
+        console.error('❌ Failed to configure RevenueCat:', error);
+        setIsConfigured(false);
+      }
+    };
+
+    void configureRevenueCat();
+  }, []);
+
   const loadEntitlements = useCallback(async () => {
     try {
+      console.log('📦 Loading entitlements... isAuthenticated:', isAuthenticated, 'isDemoAccount:', isDemoAccount);
+
       if (isDemoAccount) {
+        console.log('🎭 Demo account: Granting unlimited premium access');
         const premiumEntitlements: Entitlements = {
           credits: 1000,
           isPremium: true,
@@ -63,18 +117,35 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         return;
       }
 
-      const stored = await AsyncStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Entitlements;
-        // Check premium expiry
-        if (parsed.isPremium && parsed.premiumExpiresAt && parsed.premiumExpiresAt < Date.now()) {
-          parsed.isPremium = false;
-          parsed.premiumExpiresAt = null;
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.warn('⚠️ Entitlements loading timeout');
+          resolve(null);
+        }, 1000);
+      });
+
+      const loadPromise = AsyncStorage.getItem(storageKey);
+      const stored = await Promise.race([loadPromise, timeoutPromise]);
+
+      if (stored && typeof stored === 'string') {
+        try {
+          const parsed = JSON.parse(stored) as Entitlements;
+          // Check premium expiry
+          if (parsed.isPremium && parsed.premiumExpiresAt && parsed.premiumExpiresAt < Date.now()) {
+            parsed.isPremium = false;
+            parsed.premiumExpiresAt = null;
+          }
+          console.log('✅ Loaded entitlements from storage:', parsed);
+          setEntitlements(parsed);
+        } catch (parseError) {
+          console.error('❌ Error parsing entitlements:', parseError);
+          setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
         }
-        setEntitlements(parsed);
       } else if (isAuthenticated) {
+        console.log('✅ New authenticated user: Setting default credits to 10');
         setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
       } else {
+        console.log('👤 No stored entitlements, using defaults');
         setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
       }
     } catch (error) {
@@ -92,21 +163,11 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     try {
       await AsyncStorage.setItem(storageKey, JSON.stringify(newEntitlements));
       setEntitlements(newEntitlements);
+      console.log('✅ Entitlements saved:', newEntitlements);
     } catch (error) {
       console.error('❌ Error saving entitlements:', error);
     }
   }, [storageKey]);
-
-  const recordPurchase = useCallback(async (record: PurchaseRecord) => {
-    try {
-      const stored = await AsyncStorage.getItem(purchasesKey);
-      const purchases: PurchaseRecord[] = stored ? JSON.parse(stored) : [];
-      purchases.push(record);
-      await AsyncStorage.setItem(purchasesKey, JSON.stringify(purchases));
-    } catch (error) {
-      console.error('❌ Error recording purchase:', error);
-    }
-  }, [purchasesKey]);
 
   const addCredits = useCallback(async (amount: number) => {
     const newEntitlements = {
@@ -138,110 +199,84 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, [entitlements, saveEntitlements]);
 
   const purchase = useCallback(async (productId: IAPProductId) => {
-    if (!isAuthenticated) {
-      Alert.alert('Account Required', 'Please sign in to make purchases.');
-      return;
-    }
-
-    const product = IAP_PRODUCTS.find(p => p.productId === productId);
-    if (!product) {
-      Alert.alert('Error', 'Product not found.');
+    if (!isConfigured || !Purchases) {
+      Alert.alert('Not Available', 'In-app purchases are not configured for this environment.');
       return;
     }
 
     try {
       setIsPurchasing(true);
 
-      // Simulate purchase processing
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const offerings = await Purchases.getOfferings();
+      const current = offerings.current;
+      if (!current) {
+        throw new Error('No current offering found');
+      }
+
+      const pkg = current.availablePackages.find((p: typeof PurchasesPackage) => p.product.identifier === productId);
+      if (!pkg) {
+        throw new Error(`Product not found in current offering: ${productId}`);
+      }
+
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
 
       let updated = { ...entitlements };
 
-      if (product.credits) {
-        updated.credits += product.credits;
-      }
+      if (productId === IAP_PRODUCT_IDS.CREDITS_100) updated.credits += 100;
+      if (productId === IAP_PRODUCT_IDS.CREDITS_500) updated.credits += 500;
+      if (productId === IAP_PRODUCT_IDS.CREDITS_1000) updated.credits += 1000;
 
-      if (product.isPremium) {
-        const now = Date.now();
-        if (productId === 'mh_premium_monthly') {
-          updated.isPremium = true;
-          updated.premiumExpiresAt = now + (30 * 24 * 60 * 60 * 1000);
-        } else if (productId === 'mh_premium_annual') {
-          updated.isPremium = true;
-          updated.premiumExpiresAt = now + (365 * 24 * 60 * 60 * 1000);
-        }
+      const premiumActive = !!(
+        customerInfo.entitlements.active['premium'] ||
+        customerInfo.entitlements.active['Premium']
+      );
+
+      if (premiumActive) {
+        updated.isPremium = true;
+        updated.premiumExpiresAt = null;
       }
 
       await saveEntitlements(updated);
-      await recordPurchase({
-        productId,
-        purchasedAt: Date.now(),
-        credits: product.credits,
-        isPremium: product.isPremium,
-        expiresAt: updated.premiumExpiresAt,
-      });
-
-      Alert.alert(
-        'Purchase Successful! 🎉',
-        product.isPremium
-          ? 'You now have Premium access. Enjoy an ad-free experience!'
-          : `You've purchased ${product.credits} AI credits. Happy chatting!`
-      );
+      Alert.alert('Purchase Successful', 'Your purchase has been applied.');
     } catch (error: any) {
+      if (error?.userCancelled) return;
       console.error('❌ Purchase failed:', error);
       Alert.alert('Purchase Failed', error?.message ?? 'Unable to complete purchase.');
     } finally {
       setIsPurchasing(false);
     }
-  }, [isAuthenticated, entitlements, saveEntitlements, recordPurchase]);
+  }, [isConfigured, entitlements, saveEntitlements]);
 
   const restorePurchases = useCallback(async () => {
-    if (!isAuthenticated) {
-      Alert.alert('Account Required', 'Please sign in to restore purchases.');
+    if (!isConfigured || !Purchases) {
+      Alert.alert('Not Available', 'Purchase restoration is not configured for this environment.');
       return;
     }
 
     try {
       setIsRestoring(true);
+      const customerInfo = await Purchases.restorePurchases();
 
-      const stored = await AsyncStorage.getItem(purchasesKey);
-      const purchases: PurchaseRecord[] = stored ? JSON.parse(stored) : [];
-
-      if (purchases.length === 0) {
-        Alert.alert('No Purchases Found', 'There are no purchases to restore for this account.');
-        return;
-      }
-
-      // Rebuild entitlements from purchase history
-      let totalCredits = DEFAULT_ENTITLEMENTS_AUTHENTICATED.credits;
-      let isPremium = false;
-      let premiumExpiresAt: number | null = null;
-
-      for (const record of purchases) {
-        if (record.credits) {
-          totalCredits += record.credits;
-        }
-        if (record.isPremium && record.expiresAt && record.expiresAt > Date.now()) {
-          isPremium = true;
-          premiumExpiresAt = record.expiresAt;
-        }
-      }
+      const premiumActive = !!(
+        customerInfo.entitlements.active['premium'] ||
+        customerInfo.entitlements.active['Premium']
+      );
 
       const restored: Entitlements = {
-        credits: totalCredits,
-        isPremium,
-        premiumExpiresAt,
+        ...entitlements,
+        isPremium: premiumActive,
+        premiumExpiresAt: premiumActive ? null : entitlements.premiumExpiresAt,
       };
 
       await saveEntitlements(restored);
-      Alert.alert('Purchases Restored! ✅', `Restored ${purchases.length} purchase(s).`);
+      Alert.alert('Restored', 'Purchases restored successfully.');
     } catch (error: any) {
       console.error('❌ Restore failed:', error);
       Alert.alert('Restore Failed', error?.message ?? 'Unable to restore purchases.');
     } finally {
       setIsRestoring(false);
     }
-  }, [isAuthenticated, purchasesKey, saveEntitlements]);
+  }, [isConfigured, entitlements, saveEntitlements]);
 
   const usageStats: UsageStats = useMemo(() => {
     const isPremiumActive = entitlements.isPremium &&
@@ -264,6 +299,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     usageStats,
     isPurchasing,
     isRestoring,
+    isConfigured,
     purchase,
     restorePurchases,
     addCredits,
@@ -276,6 +312,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     usageStats,
     isPurchasing,
     isRestoring,
+    isConfigured,
     purchase,
     restorePurchases,
     addCredits,
