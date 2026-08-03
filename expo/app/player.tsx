@@ -107,12 +107,13 @@ export default function PlayerScreen() {
   }, [skipToPrevious]);
 
   const handlePlayPause = useCallback(() => {
+    console.log('[Playback Trace] Player screen button pressed');
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Call the player's togglePlay — the actual player state callback
-    // (onPlayingChange) will update isPlaying in the context.
-    // Do NOT flip isPlaying here; it reconciles from the player.
+    console.log('[Playback Trace] Global player ref exists:', !!audioPlayerRef.current);
     if (audioPlayerRef.current?.togglePlay) {
       audioPlayerRef.current.togglePlay();
+    } else {
+      console.warn('[Playback Trace] audioPlayerRef.current or togglePlay missing!');
     }
   }, [audioPlayerRef]);
 
@@ -251,6 +252,7 @@ export default function PlayerScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+              onPressIn={() => console.log('[Playback Trace] physical press detected')}
               onPress={handlePlayPause}
               style={styles.playButton}
               activeOpacity={0.8}

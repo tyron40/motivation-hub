@@ -128,6 +128,7 @@ export default function MiniPlayer() {
 
           <View style={styles.controls}>
             <TouchableOpacity
+              onPressIn={() => console.log('[Playback Trace] physical press detected')}
               onPress={handlePlayPause}
               style={styles.controlButton}
               activeOpacity={0.7}
