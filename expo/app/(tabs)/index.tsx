@@ -433,22 +433,28 @@ export default function HomeScreen() {
               <Image
                 source={previewFlyer.imageUrl}
                 style={styles.flyerModalImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
               {previewFlyer.quote ? (
-                <View style={styles.flyerModalTextContainer}>
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.92)']}
+                  style={styles.flyerModalGradient}
+                >
                   <View style={styles.flyerModalQuoteRow}>
                     <Quote size={18} color={previewFlyer.accent} fill={previewFlyer.accent} />
                   </View>
                   <Text style={styles.flyerModalQuote}>{previewFlyer.quote}</Text>
                   <View style={[styles.flyerModalAccentLine, { backgroundColor: previewFlyer.accent }]} />
                   <Text style={styles.flyerModalTitle}>{previewFlyer.title}</Text>
-                </View>
+                </LinearGradient>
               ) : (
-                <View style={styles.flyerModalTextContainer}>
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.35)']}
+                  style={styles.flyerModalGradient}
+                >
                   <View style={[styles.flyerModalAccentLine, { backgroundColor: previewFlyer.accent }]} />
                   <Text style={styles.flyerModalTitle}>{previewFlyer.title}</Text>
-                </View>
+                </LinearGradient>
               )}
             </View>
           )}
@@ -716,11 +722,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     zIndex: 10,
   },
   flyerModalContent: {
-    width: '100%' as const,
-    maxWidth: 380,
+    width: 280,
+    height: 430,
     borderRadius: 20,
     overflow: 'hidden' as const,
-    backgroundColor: '#1A1A2E',
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -729,27 +734,31 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   flyerModalImage: {
     width: '100%' as const,
-    height: 420,
+    height: '100%' as const,
+    position: 'absolute' as const,
+    resizeMode: 'cover' as const,
   },
-  flyerModalTextContainer: {
-    padding: 20,
+  flyerModalGradient: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
+    padding: 24,
   },
   flyerModalQuoteRow: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   flyerModalQuote: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600' as const,
-    lineHeight: 24,
+    lineHeight: 25,
     fontStyle: 'italic' as const,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   flyerModalAccentLine: {
     width: 40,
     height: 3,
     borderRadius: 2,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   flyerModalTitle: {
     color: 'rgba(255,255,255,0.7)',
