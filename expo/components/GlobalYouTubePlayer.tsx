@@ -30,30 +30,34 @@ export default function GlobalYouTubePlayer() {
     isShowingAd,
   } = useAdMob();
 
-  const playerRef = useRef<AudioOnlyVideoPlayerRef>(null);
+  const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const midpointAdShownRef = useRef(false);
   const quarterAdShownRef = useRef(false);
   const openAdShownRef = useRef(false);
   const onEndLockedRef = useRef(false);
-  const wasPlayingBeforeAdRef = useRef(false);
-  const adJustFinishedRef = useRef(false);
+  const adSessionRef = useRef(false);
 
   const youtubeId = currentSpeech?.youtubeId ?? null;
 
-  // Set/clear audioPlayerRef so MiniPlayer and player screen can control playback
-  useEffect(() => {
-    audioPlayerRef.current = playerRef.current;
-  }, [youtubeId, audioPlayerRef]);
+  // ── Callback ref: assigns both local and shared refs immediately ───────
+  const setPlayerRef = useCallback(
+    (instance: AudioOnlyVideoPlayerRef | null) => {
+      localPlayerRef.current = instance;
+      audioPlayerRef.current = instance;
+    },
+    [audioPlayerRef],
+  );
 
-  // Reset ad tracking when speech changes
+  // ── Reset ad tracking when speech changes ──────────────────────────────
   useEffect(() => {
     midpointAdShownRef.current = false;
     quarterAdShownRef.current = false;
     openAdShownRef.current = false;
     onEndLockedRef.current = false;
+    adSessionRef.current = false;
   }, [youtubeId]);
 
-  // Ensure background audio mode when a YouTube speech is active
+  // ── Ensure background audio mode ───────────────────────────────────────
   useEffect(() => {
     if (youtubeId && Platform.OS !== 'web') {
       Audio.setAudioModeAsync({
@@ -66,7 +70,7 @@ export default function GlobalYouTubePlayer() {
     }
   }, [youtubeId]);
 
-  // Show interstitial when player first opens
+  // ── Show interstitial when player first opens ──────────────────────────
   useEffect(() => {
     if (youtubeId && !openAdShownRef.current && canShowAds) {
       openAdShownRef.current = true;
@@ -74,18 +78,12 @@ export default function GlobalYouTubePlayer() {
     }
   }, [youtubeId, canShowAds, tryShowInterstitialOnTransition]);
 
-  // Pause/resume on ad state changes
+  // ── Ad pause/resume — single authoritative path via isShowingAd ────────
   useEffect(() => {
     if (isShowingAd) {
-      wasPlayingBeforeAdRef.current = playerRef.current?.getIsPlaying() ?? false;
-      playerRef.current?.pause();
-    } else if (wasPlayingBeforeAdRef.current) {
-      adJustFinishedRef.current = true;
-      wasPlayingBeforeAdRef.current = false;
-      setTimeout(() => {
-        playerRef.current?.resumeAfterAd();
-        adJustFinishedRef.current = false;
-      }, 600);
+      localPlayerRef.current?.pauseForAd();
+    } else {
+      localPlayerRef.current?.resumeAfterAd();
     }
   }, [isShowingAd]);
 
@@ -97,17 +95,15 @@ export default function GlobalYouTubePlayer() {
     setCurrentTime(time);
     if (dur > 0) setDuration(dur);
 
-    if (adJustFinishedRef.current) return;
+    if (adSessionRef.current) return;
     if (canShowAds && dur > 0) {
       const progress = time / dur;
       if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
         quarterAdShownRef.current = true;
-        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
       if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
         midpointAdShownRef.current = true;
-        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
     }
@@ -137,7 +133,7 @@ export default function GlobalYouTubePlayer() {
 
   return (
     <AudioOnlyVideoPlayer
-      ref={playerRef}
+      ref={setPlayerRef}
       videoId={youtubeId}
       title={currentSpeech!.title}
       thumbnail={`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`}

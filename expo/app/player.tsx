@@ -108,12 +108,13 @@ export default function PlayerScreen() {
 
   const handlePlayPause = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Call the player's togglePlay — the actual player state callback
+    // (onPlayingChange) will update isPlaying in the context.
+    // Do NOT flip isPlaying here; it reconciles from the player.
     if (audioPlayerRef.current?.togglePlay) {
       audioPlayerRef.current.togglePlay();
-    } else {
-      setIsPlaying(!isPlaying);
     }
-  }, [audioPlayerRef, isPlaying, setIsPlaying]);
+  }, [audioPlayerRef]);
 
   const handleSkipForward = useCallback(async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

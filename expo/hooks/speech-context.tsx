@@ -308,20 +308,11 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const playPauseLockedRef = useRef(false);
 
   const playPause = useCallback(() => {
-    if (playPauseLockedRef.current) {
-      console.log('🎵 Play/pause locked, ignoring rapid tap');
-      return;
-    }
-    playPauseLockedRef.current = true;
-    setTimeout(() => { playPauseLockedRef.current = false; }, 1000);
-
-    const newState = !isPlayingRef.current;
-    console.log('🎵 Toggle play/pause:', isPlayingRef.current, '->', newState);
-
+    // Call the player's togglePlay directly — the actual player state callback
+    // (onPlayingChange) will update isPlaying in the context.
+    // Do NOT flip isPlaying here; it reconciles from the player.
     if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
       audioPlayerRef.current.togglePlay();
-    } else {
-      setIsPlaying(newState);
     }
   }, [audioPlayerRef]);
 
