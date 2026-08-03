@@ -16,6 +16,7 @@ import { useSpeechContext } from '@/hooks/speech-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { SpeechCard } from '@/components/SpeechCard';
 import { convertVideoToSpeech, getVideosByCategory } from '@/services/youtubeService';
+import { christianSpeeches } from '@/mocks/speeches';
 import type { Speech } from '@/types/speech';
 
 export default function ChurchMotivationScreen() {
@@ -40,7 +41,8 @@ export default function ChurchMotivationScreen() {
         const videos = await getVideosByCategory('Christian Motivation', 30);
 
         const converted = videos.map((video) => convertVideoToSpeech(video));
-        setChurchSpeeches(converted);
+        // Use API results if available, otherwise fall back to curated Christian speeches
+        setChurchSpeeches(converted.length > 0 ? converted : christianSpeeches);
         console.log(
           `✅ Loaded ${converted.length} Christian motivation speeches`
         );

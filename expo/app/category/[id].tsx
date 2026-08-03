@@ -18,7 +18,7 @@ import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory, athleteCategory } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory, christianSpeeches, athleteSpeeches } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
@@ -97,8 +97,15 @@ export default function CategoryScreen() {
   
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === id);
+
+  // Build fallback speeches: local context speeches + category-specific mock fallbacks.
+  // This ensures every category always shows a list even if the YouTube API fails.
   const contextSpeeches = category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : [];
-  const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
+  const fallbackSpeeches: Speech[] =
+    category?.name === 'Christian Motivation' ? christianSpeeches :
+    category?.name === 'Athlete Pump Up' ? athleteSpeeches :
+    [];
+  const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : [...contextSpeeches, ...fallbackSpeeches];
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
 

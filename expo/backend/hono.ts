@@ -467,9 +467,9 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
     'student motivation',
   ],
   'christian motivation': [
-    'christian motivation speech',
-    'sermon inspiration faith',
-    'bible motivation encouragement',
+    'christian motivation speech church',
+    'sermon inspiration faith encouragement',
+    'bible motivation jesus gospel testimony',
   ],
   'athlete pump up': [
     'athlete pump up motivation',
@@ -691,7 +691,8 @@ const handleYouTubeCategory = async (c: Context) => {
     const categoryKey = category.toLowerCase();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
 
-    const queriesToRun = searchQueries.slice(0, Math.max(1, YOUTUBE_API_KEYS.length || 1));
+    // Always run ALL category queries — key rotation happens inside fetchYouTubeVideos.
+    const queriesToRun = searchQueries;
     const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
 
     console.log(`[YouTube] Fetching category: ${category}, queries: ${queriesToRun.length}, per-query limit: ${perQueryLimit}, keys: ${YOUTUBE_API_KEYS.length}`);
