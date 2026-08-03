@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
+import { Play, Quote, Sun, ChevronRight, Film, ImageIcon, X } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
@@ -20,7 +21,7 @@ import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/service
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
-import { motivationalFlyers } from '@/mocks/motivationalFlyers';
+import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { fallbackShortClips } from '@/mocks/shortClips';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const { customFlyers } = useAdmin();
   const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
   const [shortClips, setShortClips] = React.useState<any[]>(fallbackShortClips);
+  const [previewFlyer, setPreviewFlyer] = React.useState<MotivationalFlyer | null>(null);
   const dailyQuote = React.useMemo(() => {
     const quotes = [
       { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
@@ -293,9 +295,11 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.flyersList}
               renderItem={({ item }) => (
-                <View
+                <TouchableOpacity
                   style={styles.flyerPoster}
                   testID={`flyer-card-${item.id}`}
+                  activeOpacity={0.9}
+                  onPress={() => setPreviewFlyer(item)}
                 >
                   <Image
                     source={item.imageUrl}
@@ -309,7 +313,7 @@ export default function HomeScreen() {
                       <View style={styles.flyerQuoteRow}>
                         <Quote size={14} color={item.accent} fill={item.accent} />
                       </View>
-                      <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
+                      <Text style={styles.flyerPosterQuote} numberOfLines={4}>{item.quote}</Text>
                       <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
                       <Text style={styles.flyerPosterTitle}>{item.title}</Text>
                     </LinearGradient>
@@ -322,7 +326,7 @@ export default function HomeScreen() {
                       <Text style={styles.flyerPosterTitle}>{item.title}</Text>
                     </LinearGradient>
                   )}
-                </View>
+                </TouchableOpacity>
               )}
             />
           </View>
@@ -409,6 +413,47 @@ export default function HomeScreen() {
 
         </ScrollView>
       </View>
+
+      <Modal
+        visible={previewFlyer !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewFlyer(null)}
+      >
+        <View style={styles.flyerModalOverlay}>
+          <TouchableOpacity
+            style={styles.flyerModalClose}
+            onPress={() => setPreviewFlyer(null)}
+            activeOpacity={0.7}
+          >
+            <X size={24} color="#fff" />
+          </TouchableOpacity>
+          {previewFlyer && (
+            <View style={styles.flyerModalContent}>
+              <Image
+                source={previewFlyer.imageUrl}
+                style={styles.flyerModalImage}
+                resizeMode="contain"
+              />
+              {previewFlyer.quote ? (
+                <View style={styles.flyerModalTextContainer}>
+                  <View style={styles.flyerModalQuoteRow}>
+                    <Quote size={18} color={previewFlyer.accent} fill={previewFlyer.accent} />
+                  </View>
+                  <Text style={styles.flyerModalQuote}>{previewFlyer.quote}</Text>
+                  <View style={[styles.flyerModalAccentLine, { backgroundColor: previewFlyer.accent }]} />
+                  <Text style={styles.flyerModalTitle}>{previewFlyer.title}</Text>
+                </View>
+              ) : (
+                <View style={styles.flyerModalTextContainer}>
+                  <View style={[styles.flyerModalAccentLine, { backgroundColor: previewFlyer.accent }]} />
+                  <Text style={styles.flyerModalTitle}>{previewFlyer.title}</Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </Modal>
     </LinearGradient>
     </>
   );
@@ -650,6 +695,68 @@ const getStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  flyerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    padding: 20,
+  },
+  flyerModalClose: {
+    position: 'absolute' as const,
+    top: 50,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    zIndex: 10,
+  },
+  flyerModalContent: {
+    width: '100%' as const,
+    maxWidth: 380,
+    borderRadius: 20,
+    overflow: 'hidden' as const,
+    backgroundColor: '#1A1A2E',
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+  },
+  flyerModalImage: {
+    width: '100%' as const,
+    height: 420,
+  },
+  flyerModalTextContainer: {
+    padding: 20,
+  },
+  flyerModalQuoteRow: {
+    marginBottom: 8,
+  },
+  flyerModalQuote: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600' as const,
+    lineHeight: 24,
+    fontStyle: 'italic' as const,
+    marginBottom: 12,
+  },
+  flyerModalAccentLine: {
+    width: 40,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  flyerModalTitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.2,
   },
 
 });

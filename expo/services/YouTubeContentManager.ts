@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_ENDPOINTS } from '@/lib/config';
 
 const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
-const MAX_FETCHES_PER_DAY = 30;
+const MAX_FETCHES_PER_DAY = 200;
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',

@@ -16,60 +16,66 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
 
+/**
+ * Preset coach characters with DiceBear avatars.
+ * Each avatar uses explicit gender-appropriate style parameters so the
+ * generated image matches the character's name and personality.
+ * Valid DiceBear 'avataaars' style params are used to avoid broken images.
+ */
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
     id: 'alex',
     name: 'Coach Alex',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Alex&backgroundColor=8b4513',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=AlexMotivatePro&backgroundColor=8b4513&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=1e3a8a&skinColor=c9a07a&eyes=default&eyebrows=default&mouth=default',
     description: 'Energetic and motivating, perfect for daily inspiration',
     isCustom: false,
   },
   {
     id: 'sophia',
     name: 'Coach Sophia',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Sophia&backgroundColor=10b981',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=SophiaCalmWisdom&backgroundColor=10b981&style=circle&top=longHair&topColor=4a3520&accessories=none&clothingColor=065f46&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
     description: 'Calm and wise, great for mindfulness and reflection',
     isCustom: false,
   },
   {
     id: 'marcus',
     name: 'Coach Marcus',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Marcus&backgroundColor=3b82f6',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MarcusIronDiscipline&backgroundColor=3b82f6&style=circle&top=shortFlat&topColor=111111&accessories=none&clothingColor=1e3a8a&skinColor=b58a5a&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardLight&facialHairColor=111111',
     description: 'Strong and disciplined, ideal for fitness and goals',
     isCustom: false,
   },
   {
     id: 'emma',
     name: 'Coach Emma',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Emma&backgroundColor=ec4899',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=EmmaWarmSupport&backgroundColor=ec4899&style=circle&top=longHair&topColor=2d1810&accessories=none&clothingColor=831843&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
     description: 'Friendly and supportive, perfect for personal growth',
     isCustom: false,
   },
   {
     id: 'david',
     name: 'Coach David',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=David&backgroundColor=8b5cf6',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DavidStrategyPro&backgroundColor=8b5cf6&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=2e1065&skinColor=d4a373&eyes=default&eyebrows=default&mouth=default&facialHair=beardMajestic&facialHairColor=1a1a1a',
     description: 'Professional and strategic, great for career coaching',
     isCustom: false,
   },
   {
     id: 'maya',
     name: 'Coach Maya',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Maya&backgroundColor=f59e0b',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MayaCreativeFire&backgroundColor=f59e0b&style=circle&top=longHairCurly&topColor=1a0d00&accessories=none&clothingColor=78350f&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
     description: 'Creative and inspiring, ideal for artistic pursuits',
     isCustom: false,
   },
   {
     id: 'dre',
     name: 'Coach Dre',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreBossHustle27&backgroundColor=2563eb&skinColor=7b4f3a&facialHairVariation=beard&facialHairColor=3b2417&top=shortHair&topColor=1a1a1a&eyebrows=serious&eyes=squint&mouth=serious&accessories=round&clothingColor=1e3a8a',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreBossHustle27&backgroundColor=2563eb&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=1e3a8a&skinColor=7b4f3a&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardLight&facialHairColor=1a1a1a',
     description: 'Relentless and real, pushes you to dominate every goal',
     isCustom: false,
   },
   {
     id: 'malik',
     name: 'Coach Malik',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikHustleGrind42&backgroundColor=1d4ed8&skinColor=6b4533&facialHairVariation=beard&facialHairColor=2a1a10&top=shortHair&topColor=111111&eyebrows=serious&eyes=squint&mouth=serious&accessories=round&clothingColor=1e40af',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikHustleGrind42&backgroundColor=1d4ed8&style=circle&top=shortFlat&topColor=111111&accessories=round&clothingColor=1e40af&skinColor=6b4533&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardMajestic&facialHairColor=111111',
     description: 'No-nonsense accountability coach who turns talk into action',
     isCustom: false,
   }

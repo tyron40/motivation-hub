@@ -33,6 +33,7 @@ export default function CategoryScreen() {
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
+  const [isLoadingOnline, setIsLoadingOnline] = useState(false);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
   const styles = getStyles(colors);
@@ -105,12 +106,13 @@ export default function CategoryScreen() {
     const handleLoadOnlineSpeeches = async () => {
       if (!category || hasLoadedOnline) return;
       
+      setIsLoadingOnline(true);
       try {
         console.log(`Loading content for ${category.name}...`);
         
         // Fetch only category-specific content — no trending cross-pollination.
-      // This ensures every video on the page is relevant to the category title
-      // and all categories consume the same YouTube API quota (3 queries each).
+        // This ensures every video on the page is relevant to the category title
+        // and all categories consume the same YouTube API quota (3 queries each).
         const categoryVideos = await getVideosByCategory(category.name, 30);
 
         const catSpeeches: Speech[] = categoryVideos.map(video => convertVideoToSpeech(video));
@@ -125,10 +127,14 @@ export default function CategoryScreen() {
         }
         
         console.log(`Loaded ${merged.length} videos for ${category.name}`);
-        setYoutubeSpeeches(merged);
+        if (merged.length > 0) {
+          setYoutubeSpeeches(merged);
+        }
         setHasLoadedOnline(true);
       } catch (error) {
         console.error(`Failed to load speeches for ${category?.name}:`, error);
+      } finally {
+        setIsLoadingOnline(false);
       }
     };
 
@@ -253,6 +259,18 @@ export default function CategoryScreen() {
           </View>
 
           <View style={styles.speechList}>
+            {isLoadingOnline && categorySpeeches.length === 0 && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>Loading {category.name} content...</Text>
+              </View>
+            )}
+            {!isLoadingOnline && categorySpeeches.length === 0 && (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.emptyText}>No videos found for {category.name} right now.</Text>
+                <Text style={styles.emptySubtext}>Check back later or try another category.</Text>
+              </View>
+            )}
             {categorySpeeches
               .filter(speech => speech && typeof speech === 'object' && speech.id && speech.title)
               .map((speech, index) => (
@@ -451,6 +469,22 @@ const getStyles = (colors: any) => StyleSheet.create({
   emptyText: {
     color: colors.text,
     fontSize: 18,
+  },
+  emptySubtext: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingTop: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600' as const,
   },
   headerBar: {
     flexDirection: 'row',
