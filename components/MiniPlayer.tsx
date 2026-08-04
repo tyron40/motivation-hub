@@ -22,7 +22,6 @@ export default function MiniPlayer() {
   const {
     currentSpeech,
     isPlaying,
-    playPause,
     skipToNext,
     setCurrentSpeech,
     isMinimized,
@@ -30,12 +29,12 @@ export default function MiniPlayer() {
     currentPlaylist,
     currentTime,
     duration,
+    audioPlayerRef,
   } = useSpeechContext();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const slideAnim = useRef(new Animated.Value(100)).current;
-  const playPauseDebounceRef = useRef(false);
 
   const isOnPlayerScreen = pathname === '/player';
   const shouldShow = currentSpeech && isMinimized && !isOnPlayerScreen;
@@ -64,13 +63,10 @@ export default function MiniPlayer() {
   };
 
   const handlePlayPause = () => {
-    if (playPauseDebounceRef.current) return;
-    playPauseDebounceRef.current = true;
+    console.log('[Playback Trace] MiniPlayer button pressed');
+    console.log('[Playback Trace] Global player ref exists:', Boolean(audioPlayerRef.current));
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    playPause();
-    setTimeout(() => {
-      playPauseDebounceRef.current = false;
-    }, 1000);
+    audioPlayerRef.current?.togglePlay();
   };
 
   const handleSkipNext = () => {
@@ -132,6 +128,7 @@ export default function MiniPlayer() {
 
           <View style={styles.controls}>
             <TouchableOpacity
+              onPressIn={() => console.log('[Playback Trace] physical press detected')}
               onPress={handlePlayPause}
               style={styles.controlButton}
               activeOpacity={0.7}

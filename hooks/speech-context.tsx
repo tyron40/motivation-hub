@@ -325,25 +325,10 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
 
-  const playPauseLockedRef = useRef(false);
-
   const playPause = useCallback(() => {
-    // Much shorter lock window to prevent accidental double taps
-    // while still allowing responsive user control.
-    if (playPauseLockedRef.current) {
-      return;
-    }
-    playPauseLockedRef.current = true;
-    setTimeout(() => { playPauseLockedRef.current = false; }, 180);
-
-    const newState = !isPlayingRef.current;
-    console.log('🎵 Toggle play/pause:', isPlayingRef.current, '->', newState);
-
-    if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
-      audioPlayerRef.current.togglePlay();
-    } else {
-      setIsPlaying(newState);
-    }
+    console.log('[Playback Trace] Context playPause called');
+    console.log('[Playback Trace] Global player ref exists:', Boolean(audioPlayerRef.current));
+    audioPlayerRef.current?.togglePlay();
   }, [audioPlayerRef]);
 
   const skipToNext = useCallback(() => {
@@ -695,7 +680,6 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
 
     if (status.didJustFinish) {
       console.log('🏁 Audio finished playing');
-      playPauseLockedRef.current = false;
       isPlayingRef.current = false;
       setIsPlaying(false);
       setCurrentTime(0);

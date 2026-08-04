@@ -48,9 +48,7 @@ export default function PlayerScreen() {
   const quarterAdShownRef = useRef(false);
   const openAdShownRef = useRef(false);
   const onEndLockedRef = useRef(false);
-  const wasPlayingBeforeAdRef = useRef(false);
-  const pendingOpenAdResumeRef = useRef(false);
-  const adJustFinishedRef = useRef(false);
+  const adSessionRef = useRef(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const styles = getStyles(colors);
   const sortedPlaylists = useMemo(
@@ -58,51 +56,56 @@ export default function PlayerScreen() {
     [playlists]
   );
 
+  // ── Callback ref: assigns both local and shared refs immediately ───────
+  const setPlayerRef = useCallback(
+    (instance: AudioOnlyVideoPlayerRef | null) => {
+      localPlayerRef.current = instance;
+      audioPlayerRef.current = instance;
+      console.log('[Playback Trace] Player ref assigned:', Boolean(instance));
+    },
+    [audioPlayerRef],
+  );
+
   useEffect(() => {
     setIsMinimized(false);
     if (!openAdShownRef.current && canShowAds) {
       openAdShownRef.current = true;
-      pendingOpenAdResumeRef.current = true;
-      localPlayerRef.current?.pause();
+      adSessionRef.current = true;
+      localPlayerRef.current?.pauseForAd();
       console.log('[Ad] Player opened — attempting interstitial before speech starts');
-      void tryShowInterstitialOnTransition().then(() => {
-        pendingOpenAdResumeRef.current = false;
-        setTimeout(() => {
+      void tryShowInterstitialOnTransition().finally(() => {
+        if (adSessionRef.current) {
+          adSessionRef.current = false;
           localPlayerRef.current?.resumeAfterAd();
-        }, 400);
+        }
       });
     }
     return () => {
-      audioPlayerRef.current = null;
+      // Do NOT clear audioPlayerRef here — the callback ref owns it.
     };
-  }, [setIsMinimized, audioPlayerRef, canShowAds, tryShowInterstitialOnTransition]);
+  }, [setIsMinimized, canShowAds, tryShowInterstitialOnTransition]);
 
+  // ── Ad pause/resume — single authoritative path via isShowingAd ────────
+  // The opening ad is handled by the tryShowInterstitialOnTransition .finally() above.
+  // This effect handles midpoint/quarter ads triggered by handleProgressWithAds.
   useEffect(() => {
     if (isShowingAd) {
-      console.log('[Ad] Ad started showing, saving play state');
-      wasPlayingBeforeAdRef.current = (localPlayerRef.current?.getIsPlaying() ?? false) || pendingOpenAdResumeRef.current;
-      localPlayerRef.current?.pause();
-    } else if (wasPlayingBeforeAdRef.current) {
-      console.log('[Ad] Ad finished, resuming playback');
-      adJustFinishedRef.current = true;
-      const shouldResume = wasPlayingBeforeAdRef.current;
-      wasPlayingBeforeAdRef.current = false;
-      setTimeout(() => {
-        if (shouldResume && localPlayerRef.current) {
-          localPlayerRef.current.resumeAfterAd();
-        }
-        adJustFinishedRef.current = false;
-      }, 600);
+      if (!adSessionRef.current) {
+        adSessionRef.current = true;
+        localPlayerRef.current?.pauseForAd();
+      }
+    } else {
+      if (adSessionRef.current) {
+        adSessionRef.current = false;
+        localPlayerRef.current?.resumeAfterAd();
+      }
     }
   }, [isShowingAd]);
 
   useEffect(() => {
-    if (localPlayerRef.current) {
-      audioPlayerRef.current = localPlayerRef.current;
-    }
     midpointAdShownRef.current = false;
     quarterAdShownRef.current = false;
-  }, [audioPlayerRef, currentSpeech]);
+  }, [currentSpeech]);
 
   const handleMinimize = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -159,19 +162,17 @@ export default function PlayerScreen() {
 
   const handleProgressWithAds = useCallback((time: number, dur: number) => {
     handleProgressChange(time, dur);
-    if (adJustFinishedRef.current) return;
+    if (adSessionRef.current) return;
     if (canShowAds && dur > 0) {
       const progress = time / dur;
       if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
         quarterAdShownRef.current = true;
         console.log('[Ad] 25% reached — showing interstitial');
-        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
       if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
         midpointAdShownRef.current = true;
         console.log('[Ad] Midpoint reached — showing interstitial');
-        wasPlayingBeforeAdRef.current = true;
         void showInterstitialAd();
       }
     }
@@ -293,7 +294,7 @@ export default function PlayerScreen() {
           {currentSpeech.youtubeId ? (
             <View style={styles.playerWrapper}>
               <AudioOnlyVideoPlayer
-                ref={localPlayerRef}
+                ref={setPlayerRef}
                 videoId={currentSpeech.youtubeId}
                 title={currentSpeech.title}
                 thumbnail={currentSpeech.youtubeId 
