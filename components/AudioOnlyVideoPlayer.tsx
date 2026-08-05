@@ -224,6 +224,48 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     };
   }, [clearCommandWatchdog, clearAutoplayRetry]);
 
+  const startProgressTracking = useCallback(() => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+    }
+
+    progressInterval.current = setInterval(() => {
+      if (playerRef.current && !isSeekingRef.current && playerReadyRef.current && mountedRef.current) {
+        try {
+          if (typeof playerRef.current.getCurrentTime === 'function') {
+            const timePromise = playerRef.current.getCurrentTime();
+            if (timePromise && typeof timePromise.then === 'function') {
+              timePromise.then((time: number) => {
+                if (mountedRef.current && typeof time === 'number' && !isNaN(time)) {
+                  setCurrentTime(time);
+                  onProgressChangeRef.current?.(time, durationRef.current);
+                }
+              }).catch(() => {
+                // silently ignore progress tracking errors
+              });
+            }
+          }
+        } catch {
+          // silently ignore progress tracking errors
+        }
+      }
+    }, 500);
+  }, []);
+
+  const stopProgressTracking = useCallback(() => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+  }, []);
+
+  if (__DEV__) {
+    console.log('[Playback Init]', {
+      startProgressTracking: typeof startProgressTracking,
+      stopProgressTracking: typeof stopProgressTracking,
+    });
+  }
+
   // ── Imperative handle ──────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
@@ -457,41 +499,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       void fetchVideoMetadata();
     }
   }, [videoId, clearAutoplayRetry, clearCommandWatchdog]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const startProgressTracking = useCallback(() => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-    }
-
-    progressInterval.current = setInterval(() => {
-      if (playerRef.current && !isSeekingRef.current && playerReadyRef.current && mountedRef.current) {
-        try {
-          if (typeof playerRef.current.getCurrentTime === 'function') {
-            const timePromise = playerRef.current.getCurrentTime();
-            if (timePromise && typeof timePromise.then === 'function') {
-              timePromise.then((time: number) => {
-                if (mountedRef.current && typeof time === 'number' && !isNaN(time)) {
-                  setCurrentTime(time);
-                  onProgressChangeRef.current?.(time, durationRef.current);
-                }
-              }).catch(() => {
-                // silently ignore progress tracking errors
-              });
-            }
-          }
-        } catch {
-          // silently ignore progress tracking errors
-        }
-      }
-    }, 500);
-  }, []);
-
-  const stopProgressTracking = useCallback(() => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-      progressInterval.current = null;
-    }
-  }, []);
 
   // ── onPlayerReady: one simple autoplay attempt ──────────────────────────
   const onPlayerReady = useCallback(() => {
