@@ -137,29 +137,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const manualPauseRef = useRef(false);
   const lastRequestedStateRef = useRef<boolean | null>(null);
 
-  const requestPlayState = useCallback((newState: boolean) => {
-    if (!mountedRef.current) return;
-
-    console.log(
-      '[Playback Trace] requested:',
-      newState ? 'play' : 'pause'
-    );
-
-    desiredPlayRef.current = newState;
-    lastRequestedStateRef.current = newState;
-
-    if (Platform.OS === 'web') {
-      postMessageToWebPlayerRef.current?.(
-        newState ? 'playVideo' : 'pauseVideo'
-      );
-      return;
-    }
-
-    setPlayerPlayCommand(newState);
-  }, []);
-
   const applyRequestedPlayState = useCallback(
     (nextState: boolean, source: string) => {
+      if (!mountedRef.current) return;
+
       console.log(
         '[Playback Trace]',
         source,
@@ -172,10 +153,24 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       isPlayingRef.current = nextState;
 
       setIsPlaying(nextState);
-      setPlayerPlayCommand(nextState);
       onPlayingChangeRef.current?.(nextState);
+
+      if (Platform.OS === 'web') {
+        postMessageToWebPlayerRef.current?.(
+          nextState ? 'playVideo' : 'pauseVideo'
+        );
+      } else {
+        setPlayerPlayCommand(nextState);
+      }
     },
     []
+  );
+
+  const requestPlayState = useCallback(
+    (newState: boolean) => {
+      applyRequestedPlayState(newState, 'request');
+    },
+    [applyRequestedPlayState]
   );
 
 
@@ -209,13 +204,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     pauseForAd: () => {
       wasPlayingBeforeAdRef.current =
         isPlayingRef.current || desiredPlayRef.current;
-      desiredPlayRef.current = false;
-      lastRequestedStateRef.current = false;
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      setPlayerPlayCommand(false);
       // Do not set manualPauseRef — ad pause is not a manual pause.
       console.log('[Playback] paused for ad');
+      applyRequestedPlayState(false, 'ad-pause');
     },
     seekForward: (seconds = 15) => {
       if (!playerReadyRef.current || !playerRef.current) return;
@@ -673,7 +664,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
             autoplayInProgressRef.current = true;
             console.log('[Playback Trace] autoplay-ready requested play');
             applyRequestedPlayState(true, 'web-autoplay-ready');
-            postMessageToWebPlayer('playVideo');
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
