@@ -145,6 +145,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const lastRequestedStateRef = useRef<boolean | null>(null);
   const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastManualToggleTargetRef = useRef<boolean | null>(null);
+  const playbackIntentVersionRef = useRef(0);
 
   // ── Autoplay refs (restored from 08dce452) ─────────────────────────────
   const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,6 +207,88 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     setPlayerPlayCommand(newState);
     sendNativeImperativeCommand(newState);
   }, [sendNativeImperativeCommand]);
+
+  // ── activatePlaybackWithSeekNudge (seek-assisted activation) ────────────
+  const activatePlaybackWithSeekNudge = useCallback(
+    async (reason: string) => {
+      if (!mountedRef.current) return;
+      if (!playerReadyRef.current) return;
+      if (!playerRef.current) return;
+      if (manualPauseRef.current) return;
+      if (!desiredPlayRef.current) return;
+
+      const intentVersion = playbackIntentVersionRef.current;
+
+      console.log('[Playback Nudge] starting:', reason);
+
+      try {
+        const getCurrentTime =
+          typeof playerRef.current.getCurrentTime === 'function'
+            ? playerRef.current.getCurrentTime()
+            : Promise.resolve(currentTimeRef.current);
+
+        const rawPosition = await getCurrentTime;
+        if (intentVersion !== playbackIntentVersionRef.current) {
+          console.log('[Playback Nudge] cancelled by newer intent');
+          return;
+        }
+
+        const originalPosition =
+          typeof rawPosition === 'number' && Number.isFinite(rawPosition)
+            ? rawPosition
+            : currentTimeRef.current;
+
+        const durationValue = durationRef.current;
+
+        // Move approximately one second forward, but stay within duration.
+        const forwardPosition =
+          durationValue > 2
+            ? Math.min(originalPosition + 1, durationValue - 1)
+            : Math.max(originalPosition, 0);
+
+        if (
+          typeof playerRef.current.seekTo === 'function' &&
+          forwardPosition !== originalPosition
+        ) {
+          await playerRef.current.seekTo(forwardPosition, true);
+        }
+
+        if (intentVersion !== playbackIntentVersionRef.current) {
+          console.log('[Playback Nudge] cancelled by newer intent');
+          return;
+        }
+        if (!mountedRef.current) return;
+        if (manualPauseRef.current) return;
+        if (!desiredPlayRef.current) return;
+
+        // Immediately return to the original position so playback appears to
+        // begin from where the user selected it.
+        if (typeof playerRef.current.seekTo === 'function') {
+          await playerRef.current.seekTo(originalPosition, true);
+        }
+
+        if (intentVersion !== playbackIntentVersionRef.current) {
+          console.log('[Playback Nudge] cancelled by newer intent');
+          return;
+        }
+        if (!mountedRef.current) return;
+        if (manualPauseRef.current) return;
+        if (!desiredPlayRef.current) return;
+
+        setPlayerPlayCommand(true);
+        sendNativeImperativeCommand(true);
+
+        console.log('[Playback Nudge] completed:', {
+          reason,
+          originalPosition,
+          forwardPosition,
+        });
+      } catch (error) {
+        console.log('[Playback Nudge] failed:', reason, error);
+      }
+    },
+    [sendNativeImperativeCommand]
+  );
 
   // ── clearAutoplayTimer (08dce452: clears all autoplay timers) ───────────
   const clearAutoplayTimer = useCallback(() => {
@@ -297,30 +380,84 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       manualPauseRef.current = !newState;
       desiredPlayRef.current = newState;
       lastRequestedStateRef.current = newState;
+      playbackIntentVersionRef.current += 1;
       clearAutoplayTimer();
       clearCommandWatchdog();
       setIsPlaying(newState);
       setPlayerPlayCommand(newState);
       onPlayingChangeRef.current?.(newState);
       void requestPlayState(newState);
+
+      if (newState) {
+        commandWatchdogRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
+          if (manualPauseRef.current) return;
+          if (!desiredPlayRef.current) return;
+          if (isPlayingRef.current) return;
+          void activatePlaybackWithSeekNudge('manual-play');
+        }, 350);
+      } else {
+        console.log('[Playback Pause] requested');
+        commandWatchdogRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
+          if (desiredPlayRef.current) return;
+          if (isPlayingRef.current) {
+            console.log('[Playback Pause] retrying actual pause');
+            setPlayerPlayCommand(false);
+            sendNativeImperativeCommand(false);
+          }
+        }, 300);
+      }
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      playbackIntentVersionRef.current += 1;
       manualPauseRef.current = false;
       desiredPlayRef.current = true;
-      requestPlayState(true);
+      lastRequestedStateRef.current = true;
+      clearAutoplayTimer();
+      clearCommandWatchdog();
+      setIsPlaying(true);
+      setPlayerPlayCommand(true);
+      onPlayingChangeRef.current?.(true);
+      void requestPlayState(true);
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (manualPauseRef.current) return;
+        if (!desiredPlayRef.current) return;
+        if (isPlayingRef.current) return;
+        void activatePlaybackWithSeekNudge('manual-play');
+      }, 350);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      playbackIntentVersionRef.current += 1;
       manualPauseRef.current = true;
       desiredPlayRef.current = false;
+      lastRequestedStateRef.current = false;
       clearAutoplayTimer();
-      requestPlayState(false);
+      clearCommandWatchdog();
+      setIsPlaying(false);
+      setPlayerPlayCommand(false);
+      onPlayingChangeRef.current?.(false);
+      console.log('[Playback Pause] requested');
+      void requestPlayState(false);
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (desiredPlayRef.current) return;
+        if (isPlayingRef.current) {
+          console.log('[Playback Pause] retrying actual pause');
+          setPlayerPlayCommand(false);
+          sendNativeImperativeCommand(false);
+        }
+      }, 300);
     },
     pauseForAd: () => {
       wasPlayingBeforeAdRef.current =
         isPlayingRef.current || desiredPlayRef.current;
-      // Do not set manualPauseRef — ad pause is not a manual pause.
+      playbackIntentVersionRef.current += 1;
+      clearCommandWatchdog();
+      clearAutoplayTimer();
       console.log('[Playback] paused for ad');
       void requestPlayState(false);
     },
@@ -352,10 +489,20 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         !manualPauseRef.current;
       wasPlayingBeforeAdRef.current = false;
       if (!shouldResume) return;
+      playbackIntentVersionRef.current += 1;
+      clearCommandWatchdog();
+      clearAutoplayTimer();
       console.log('[Playback] resumed after ad');
       void requestPlayState(true);
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (manualPauseRef.current) return;
+        if (!desiredPlayRef.current) return;
+        if (isPlayingRef.current) return;
+        void activatePlaybackWithSeekNudge('manual-play');
+      }, 350);
     },
-  }), [requestPlayState, clearAutoplayTimer, clearCommandWatchdog]);
+  }), [requestPlayState, clearAutoplayTimer, clearCommandWatchdog, activatePlaybackWithSeekNudge, sendNativeImperativeCommand]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -391,6 +538,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     clearAutoplayTimer();
     // Clear command watchdog
     clearCommandWatchdog();
+    // Cancel any pending seek-nudge from the previous speech
+    playbackIntentVersionRef.current += 1;
 
     // Reset all playback state refs
     manualPauseRef.current = false;
@@ -527,7 +676,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayInProgressRef.current = true;
       desiredPlayRef.current = true;
 
-      console.log('[Autoplay] Initial play request');
+      console.log('[Autoplay] initial request');
 
       void requestPlayState(true);
 
@@ -537,20 +686,25 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
 
       autoplayRetryTimerRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        if (activeVideoIdRef.current !== videoId) return;
-        if (manualPauseRef.current) return;
-        if (!desiredPlayRef.current) return;
+        const shouldNudge =
+          mountedRef.current &&
+          activeVideoIdRef.current === videoId &&
+          playerReadyRef.current &&
+          !manualPauseRef.current &&
+          desiredPlayRef.current &&
+          !isPlayingRef.current;
 
-        if (!isPlayingRef.current) {
-          console.log('[Autoplay] One retry because actual player is not playing');
-          void requestPlayState(true);
+        if (!shouldNudge) {
+          autoplayInProgressRef.current = false;
+          return;
         }
 
-        autoplayInProgressRef.current = false;
-      }, 1000);
+        void activatePlaybackWithSeekNudge('autoplay').finally(() => {
+          autoplayInProgressRef.current = false;
+        });
+      }, 500);
     }
-  }, [autoplay, requestPlayState, videoId]);
+  }, [autoplay, requestPlayState, videoId, activatePlaybackWithSeekNudge]);
 
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
@@ -661,42 +815,39 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     desiredPlayRef.current = nextState;
     lastRequestedStateRef.current = nextState;
     manualPauseRef.current = !nextState;
+    playbackIntentVersionRef.current += 1;
 
     // Optimistic visual update — do NOT set isPlayingRef here.
-    // isPlayingRef is only set in onStateChange so the watchdog can detect
-    // whether the real YouTube player obeyed the command.
     setIsPlaying(nextState);
     setPlayerPlayCommand(nextState);
     onPlayingChangeRef.current?.(nextState);
 
     void requestPlayState(nextState);
 
-    // Watchdog: checks real isPlayingRef (not optimistic state)
     clearCommandWatchdog();
-    commandWatchdogRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
 
-      if (nextState && manualPauseRef.current) {
-        return;
-      }
-
-      if (desiredPlayRef.current !== nextState) {
-        return;
-      }
-
-      const actualState = isPlayingRef.current;
-
-      console.log('[Playback Watchdog]', {
-        requested: nextState,
-        actual: actualState,
-        playerRefExists: Boolean(playerRef.current),
-      });
-
-      if (actualState !== nextState) {
-        setPlayerPlayCommand(nextState);
-        sendNativeImperativeCommand(nextState);
-      }
-    }, 350);
+    if (nextState) {
+      // Play watchdog: use seek nudge if play didn't take effect
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (manualPauseRef.current) return;
+        if (!desiredPlayRef.current) return;
+        if (isPlayingRef.current) return;
+        void activatePlaybackWithSeekNudge('manual-play');
+      }, 350);
+    } else {
+      // Pause watchdog: retry pauseVideo if still playing
+      console.log('[Playback Pause] requested');
+      commandWatchdogRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (desiredPlayRef.current) return;
+        if (isPlayingRef.current) {
+          console.log('[Playback Pause] retrying actual pause');
+          setPlayerPlayCommand(false);
+          sendNativeImperativeCommand(false);
+        }
+      }, 300);
+    }
 
     if (!nextState) {
       stopProgressTracking();
@@ -710,6 +861,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     clearCommandWatchdog,
     requestPlayState,
     sendNativeImperativeCommand,
+    activatePlaybackWithSeekNudge,
     stopProgressTracking,
     startProgressTracking,
   ]);
