@@ -123,7 +123,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     mountedRef.current = true;
-    console.log('[Pre-Rork Playback] component mounted', videoId);
+    console.log('[Playback] component mounted', videoId);
     return () => { mountedRef.current = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -141,9 +141,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  const loggedPlaybackMethodsRef = useRef(false);
   const sendNativeImperativeCommand = useCallback((newState: boolean) => {
     try {
       if (!playerRef.current) return;
+      if (!loggedPlaybackMethodsRef.current) {
+        loggedPlaybackMethodsRef.current = true;
+        console.log('[Playback Methods]', {
+          playVideo: typeof playerRef.current?.playVideo,
+          pauseVideo: typeof playerRef.current?.pauseVideo,
+          seekTo: typeof playerRef.current?.seekTo,
+        });
+      }
       const fn = newState ? playerRef.current.playVideo : playerRef.current.pauseVideo;
       if (typeof fn === 'function') {
         fn.call(playerRef.current);
@@ -155,6 +164,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
+    console.log(newState ? '[Playback] request play' : '[Playback] request pause');
     console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
     lastRequestedStateRef.current = newState;
@@ -485,7 +495,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       await playerRef.current.seekTo(0, true);
       setCurrentTime(0);
       console.log('[Autoplay] Delayed warmup seek +1s -> 0s applied');
-      console.log('[Pre-Rork Playback] warmup seek');
+      console.log('[Playback] warm-up seek');
     } catch (e) {
       console.log('[Autoplay] Warmup seek failed (continuing):', e);
     }
@@ -503,7 +513,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       const maxSeek = Math.max(durationRef.current - 0.1, 0);
       const forward = Math.min(1, maxSeek);
       console.log('[Autoplay] Forced user-like seek bootstrap:', 0, '->', forward, '->', 0);
-      console.log('[Pre-Rork Playback] forced seek');
+      console.log('[Playback] forced seek');
       await playerRef.current.seekTo(forward, true);
       await new Promise(resolve => setTimeout(resolve, 180));
       await playerRef.current.seekTo(0, true);
@@ -518,7 +528,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
-    console.log('[Pre-Rork Playback] onReady', videoId);
+    console.log('[Playback] onReady', videoId);
     console.log('[Pre-Rork Playback] ref exists', Boolean(playerRef.current));
     setPlayerReady(true);
     setPlayerError(false);
@@ -625,7 +635,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
-    console.log('[Pre-Rork Playback] state', state);
 
     if (state === 'playing') {
       clearCommandWatchdog();
@@ -636,6 +645,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       setPlayerPlayCommand(true);
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);
+      console.log('[Playback] actual state playing');
       startProgressTracking();
       return;
     }
@@ -650,6 +660,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       setPlayerPlayCommand(false);
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
+      console.log('[Playback] actual state paused');
       stopProgressTracking();
       return;
     }
@@ -703,10 +714,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     const nextState = !isPlayingRef.current;
     lastManualToggleTargetRef.current = nextState;
     console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
-    console.log('[Pre-Rork Playback] manual toggle', nextState);
 
     clearAutoplayTimer();
     autoplayInProgressRef.current = false;
+    if (!nextState) {
+      console.log('[Playback] manual pause cancelled autoplay');
+    }
     desiredPlayRef.current = nextState;
     lastRequestedStateRef.current = nextState;
     manualPauseRef.current = !nextState;
