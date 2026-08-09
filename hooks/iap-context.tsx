@@ -43,9 +43,26 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
   const isDemoAccount = user?.email === 'demo@motivationhub.app';
 
+  // Helper to read the active premium entitlement, keeping compatibility for both 'premium' and 'Premium'
+  const getPremiumEntitlement = useCallback((customerInfo: CustomerInfo) => {
+    return (
+      customerInfo.entitlements.active['premium'] ||
+      customerInfo.entitlements.active['Premium'] ||
+      null
+    );
+  }, []);
+
   useEffect(() => {
     const configureRevenueCat = async () => {
       try {
+        console.log('[IAP Config]', {
+          platform: Platform.OS,
+          native: isNative,
+          appOwnership: Constants.appOwnership,
+          hasIOSKey: Boolean(process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY),
+          hasAndroidKey: Boolean(process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY),
+        });
+
         if (!isNative) {
           console.log('ℹ️ RevenueCat disabled on web');
           setIsConfigured(false);
@@ -60,7 +77,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         }
 
         if (!REVENUECAT_API_KEY) {
-          console.error('❌ Missing RevenueCat API key');
+          console.error('RevenueCat iOS API key missing from this EAS build.');
           setIsConfigured(false);
           return;
         }
@@ -69,6 +86,36 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
         console.log('✅ RevenueCat configured');
         setIsConfigured(true);
+
+        // Connect authenticated users so purchases/restores are consistent across devices
+        if (user?.id) {
+          try {
+            await Purchases.logIn(user.id);
+            console.log('[IAP] RevenueCat user logged in:', user.id);
+          } catch (loginError) {
+            console.warn('[IAP] RevenueCat logIn failed (continuing anonymously):', loginError);
+          }
+        }
+
+        // Verify offerings and report product availability
+        try {
+          const offerings = await Purchases.getOfferings();
+          const current = offerings.current;
+          console.log('[IAP] current offering:', current?.identifier ?? 'none');
+
+          const availableIds = (current?.availablePackages ?? []).map(p => p.product.identifier);
+          console.log('[IAP] package product IDs:', availableIds);
+
+          const expectedIds = Object.values(IAP_PRODUCT_IDS);
+          const missing = expectedIds.filter(id => !availableIds.includes(id));
+          if (missing.length > 0) {
+            console.warn('[IAP] missing expected products:', missing);
+          } else {
+            console.log('[IAP] all expected products present.');
+          }
+        } catch (offeringsError) {
+          console.warn('[IAP] getOfferings failed:', offeringsError);
+        }
       } catch (error) {
         console.error('❌ Failed to configure RevenueCat:', error);
         setIsConfigured(false);
@@ -76,7 +123,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     };
 
     void configureRevenueCat();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const loadEntitlements = useCallback(async () => {
     try {
@@ -170,13 +218,10 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   }, [entitlements, saveEntitlements]);
 
   const syncFromCustomerInfo = useCallback(async (customerInfo: CustomerInfo) => {
-    const premiumActive = !!(
-      customerInfo.entitlements.active['premium'] ||
-      customerInfo.entitlements.active['Premium']
-    );
+    const premiumEntitlement = getPremiumEntitlement(customerInfo);
+    const premiumActive = !!premiumEntitlement;
 
     let expiresAt: number | null = null;
-    const premiumEntitlement = customerInfo.entitlements.active['premium'] || customerInfo.entitlements.active['Premium'];
     const expirationRaw = premiumEntitlement?.expirationDate;
     if (expirationRaw) {
       const parsed = Date.parse(expirationRaw);
@@ -192,7 +237,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     };
 
     await saveEntitlements(merged);
-  }, [entitlements, saveEntitlements]);
+  }, [getPremiumEntitlement, entitlements, saveEntitlements]);
 
   const purchase = useCallback(async (productId: IAPProductId) => {
     if (!isConfigured) {
@@ -222,13 +267,10 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       if (productId === IAP_PRODUCT_IDS.CREDITS_500) updated.credits += 500;
       if (productId === IAP_PRODUCT_IDS.CREDITS_1000) updated.credits += 1000;
 
-      const premiumActive = !!(
-        customerInfo.entitlements.active['premium'] ||
-        customerInfo.entitlements.active['Premium']
-      );
+      const premiumEntitlement = getPremiumEntitlement(customerInfo);
+      const premiumActive = !!premiumEntitlement;
 
       if (premiumActive) {
-        const premiumEntitlement = customerInfo.entitlements.active['premium'] || customerInfo.entitlements.active['Premium'];
         const expirationRaw = premiumEntitlement?.expirationDate;
         const parsedExpiration = expirationRaw ? Date.parse(expirationRaw) : NaN;
 
@@ -245,7 +287,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     } finally {
       setIsPurchasing(false);
     }
-  }, [isConfigured, entitlements, saveEntitlements]);
+  }, [getPremiumEntitlement, isConfigured, entitlements, saveEntitlements]);
 
   const restorePurchases = useCallback(async () => {
     if (!isConfigured) {
@@ -257,19 +299,25 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
       setIsRestoring(true);
       const customerInfo = await Purchases.restorePurchases();
 
-      const premiumActive = !!(
-        customerInfo.entitlements.active['premium'] ||
-        customerInfo.entitlements.active['Premium']
-      );
+      const premiumEntitlement = getPremiumEntitlement(customerInfo);
+      const premiumActive = !!premiumEntitlement;
+
+      let expiresAt: number | null = null;
+      const expirationRaw = premiumEntitlement?.expirationDate;
+      if (expirationRaw) {
+        const parsed = Date.parse(expirationRaw);
+        if (!Number.isNaN(parsed)) {
+          expiresAt = parsed;
+        }
+      }
 
       const restored: Entitlements = {
         ...entitlements,
         isPremium: premiumActive,
-        premiumExpiresAt: premiumActive ? null : null,
+        premiumExpiresAt: premiumActive ? expiresAt : null,
       };
 
       await saveEntitlements(restored);
-      await syncFromCustomerInfo(customerInfo);
       Alert.alert('Restored', 'Purchases restored successfully.');
     } catch (error: any) {
       console.error('❌ Restore failed:', error);
@@ -277,7 +325,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     } finally {
       setIsRestoring(false);
     }
-  }, [isConfigured, entitlements, saveEntitlements, syncFromCustomerInfo]);
+  }, [getPremiumEntitlement, isConfigured, entitlements, saveEntitlements]);
 
   const isPremiumActive = useMemo(() => {
     return entitlements.isPremium &&

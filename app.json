@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "348",
+      "buildNumber": "351",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -97,9 +97,13 @@
       "./plugins/with-appdelegate-rctbridge-fix.js"
     ],
     "extra": {
+      "router": {
+        "origin": "https://rork.com/"
+      },
       "eas": {
-        "projectId": "7389ef4c-4537-4e7b-9081-c30a7e9c22bd"
+        "projectId": "d314e498-92d2-4530-999b-3a0d9803fee2"
       }
-    }
+    },
+    "owner": "tyron51"
   }
 }

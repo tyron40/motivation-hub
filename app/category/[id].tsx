@@ -33,8 +33,14 @@ export default function CategoryScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
+  
+  const rawId = Array.isArray(id) ? id[0] : id;
+  const categoryId = String(rawId ?? '');
+  
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
   const { profile } = useUserProfile();
@@ -100,7 +106,7 @@ export default function CategoryScreen() {
   }, []);
   
   const allCategories = [...categories, churchCategory, athleteCategory];
-  const category = allCategories.find(c => c.id === id);
+  const category = allCategories.find(c => c.id === categoryId);
   const contextSpeeches = useMemo(
     () => (category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : []),
     [category, getSpeechesByCategory]
@@ -108,39 +114,49 @@ export default function CategoryScreen() {
   const TARGET_CATEGORY_COUNT = 40;
   const isChristianOnlyMode = !!profile.includeChurchMotivation;
 
+  const isChristianCategory =
+    category?.id === 'church' ||
+    ['christian motivation', 'christian', 'church']
+      .includes((category?.name || '').trim().toLowerCase());
+
+  const requireChristianContent = isChristianCategory || isChristianOnlyMode;
+
+  const isChristianContent = (speech: Speech) => {
+    const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+    const christianKeywords = [
+      'christian', 'church', 'jesus', 'christ', 'god', 'lord', 'faith',
+      'bible', 'scripture', 'gospel', 'prayer', 'worship', 'sermon',
+      'pastor', 'holy spirit', 'christian motivation', 'biblical',
+      'ministry', 'preaching',
+    ];
+    return christianKeywords.some(k => haystack.includes(k));
+  };
+
   const categorySpeeches = useMemo(() => {
     const base = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
     const unique: Speech[] = [];
     const seen = new Set<string>();
 
-    const isChristianContent = (speech: Speech) => {
-      const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
-      const christianKeywords = [
-        'church', 'christ', 'jesus', 'god', 'bible', 'scripture',
-        'gospel', 'faith', 'prayer', 'worship', 'pastor', 'sermon',
-      ];
-      return christianKeywords.some(k => haystack.includes(k));
-    };
-
     for (const s of [...base, ...contextSpeeches]) {
       if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
-      if (isChristianOnlyMode && !isChristianContent(s)) continue;
+      if (requireChristianContent && !isChristianContent(s)) continue;
 
       seen.add(s.id);
       unique.push(s);
       if (unique.length >= TARGET_CATEGORY_COUNT) break;
     }
     return unique;
-  }, [youtubeSpeeches, contextSpeeches, isChristianOnlyMode]);
+  }, [youtubeSpeeches, contextSpeeches, requireChristianContent]);
 
-  const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
-
-  const isChurchCategory = (category?.name || '').toLowerCase().includes('church');
+  const banner: CategoryBanner | null = category ? getBannerForCategory(categoryId, category.name) : null;
 
   const isMotivationCategory = (category?.name || '').toLowerCase() === 'motivation';
 
   useEffect(() => {
-    if (isChristianOnlyMode && category && !isChurchCategory) {
+    console.log('[Category] route id:', categoryId);
+    console.log('[Category] resolved category:', category?.name);
+    
+    if (isChristianOnlyMode && category && !isChristianCategory && categoryId !== 'church') {
       router.replace('/category/church');
       return;
     }
@@ -154,20 +170,56 @@ export default function CategoryScreen() {
     const next = banner?.imageUrl?.trim() ? banner.imageUrl.trim() : fallback;
     setUseLocalMotivationHero(false);
     setBannerImageUri(next);
-  }, [banner?.imageUrl, isMotivationCategory, isChristianOnlyMode, isChurchCategory, category]);
+  }, [banner?.imageUrl, isMotivationCategory, isChristianOnlyMode, isChristianCategory, category, categoryId]);
+
+  // Reset online-sourced data whenever the category (route id) changes
+  useEffect(() => {
+    setHasLoadedOnline(false);
+    setYoutubeSpeeches([]);
+    setCategoryError(null);
+  }, [categoryId]);
+
+  const handleRetry = useCallback(() => {
+    setHasLoadedOnline(false);
+    setYoutubeSpeeches([]);
+    setCategoryError(null);
+  }, []);
 
   useEffect(() => {
     const handleLoadOnlineSpeeches = async () => {
       if (!category || hasLoadedOnline) return;
-      
+
+      setCategoryLoading(true);
+      setCategoryError(null);
+
+      const christianQueries = [
+        'Christian motivational sermon faith Jesus God church inspirational speech',
+        'Christian motivational sermon',
+        'faith motivation Jesus sermon',
+        'church motivational message',
+      ];
+
+      const query = isChristianCategory ? christianQueries[0] : category.name;
+      console.log('[Category] query:', query);
+
       try {
-        console.log(`Loading content for ${category.name}...`);
-        
-        const [categoryVideos, channelVideos, fallbackSearchVideos] = await Promise.all([
-          getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
+        const results = await Promise.allSettled([
+          isChristianCategory
+            ? Promise.all(christianQueries.map(q => getVideosByCategory(q, TARGET_CATEGORY_COUNT)))
+            : getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
           getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
-          getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
+          isChristianCategory
+            ? Promise.resolve([])
+            : getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
         ]);
+
+        const primaryRaw = results[0].status === 'fulfilled' ? results[0].value : [];
+        const trendingRaw = results[1].status === 'fulfilled' ? results[1].value : [];
+        const fallbackRaw = results[2].status === 'fulfilled' ? results[2].value : [];
+
+        if (results[0].status === 'rejected') console.log('[Category] error source: primary', results[0].reason);
+        if (results[1].status === 'rejected') console.log('[Category] error source: trending', results[1].reason);
+        if (results[2].status === 'rejected') console.log('[Category] error source: fallback', results[2].reason);
 
         const categoryNameLower = category.name.toLowerCase();
         const categoryWords = categoryNameLower
@@ -187,48 +239,93 @@ export default function CategoryScreen() {
           return score;
         };
 
-        const channelSpeeches = channelVideos
+        const primaryArr = Array.isArray(primaryRaw) ? primaryRaw : [];
+        const primarySpeeches: Speech[] = primaryArr
+          .flatMap(video => (Array.isArray(video) ? video : [video]))
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+        const channelSpeeches: Speech[] = (Array.isArray(trendingRaw) ? trendingRaw : [])
           .map(video => convertVideoToSpeech(video))
           .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
           .filter(item => item.score >= 3)
           .sort((a, b) => b.score - a.score)
           .map(item => item.speech);
 
-        const catSpeeches: Speech[] = categoryVideos
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
-          .filter(item => item.score >= 2)
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
-
-        const fallbackSpeeches: Speech[] = fallbackSearchVideos
+        const fallbackSpeeches: Speech[] = (Array.isArray(fallbackRaw) ? fallbackRaw : [])
           .map(video => convertVideoToSpeech(video))
           .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
           .filter(item => item.score >= 1)
           .sort((a, b) => b.score - a.score)
           .map(item => item.speech);
 
+        console.log('[Category] primary count:', primarySpeeches.length);
+        console.log('[Category] trending count:', channelSpeeches.length);
+        console.log('[Category] fallback count:', fallbackSpeeches.length);
+
         const seenIds = new Set<string>();
         const merged: Speech[] = [];
-        for (const s of [...catSpeeches, ...channelSpeeches, ...fallbackSpeeches, ...contextSpeeches]) {
-          if (!seenIds.has(s.id) && s.duration > 60) {
+        const pushUnique = (arr: Speech[]) => {
+          for (const s of arr) {
+            if (!s || !s.id || seenIds.has(s.id)) continue;
             seenIds.add(s.id);
             merged.push(s);
-            if (merged.length >= TARGET_CATEGORY_COUNT) break;
+            if (merged.length >= TARGET_CATEGORY_COUNT) return;
           }
+        };
+
+        // Progressive fallback:
+        // 1. highly relevant >60s category videos
+        // 2. relevant >60s category/search videos
+        // 3. relevant valid videos regardless of duration if list is too small
+        // 4. context/local speeches for that exact category
+        const passChristian = (s: Speech) => !requireChristianContent || isChristianContent(s);
+
+        const preferred = [...primarySpeeches, ...channelSpeeches, ...fallbackSpeeches]
+          .filter(passChristian)
+          .filter(s => s.duration > 60);
+        pushUnique(preferred);
+
+        if (merged.length < TARGET_CATEGORY_COUNT) {
+          const anyDuration = [...primarySpeeches, ...channelSpeeches, ...fallbackSpeeches]
+            .filter(passChristian)
+            .filter(s => !seenIds.has(s.id));
+          pushUnique(anyDuration);
         }
 
-        console.log(`Loaded ${merged.length}/${TARGET_CATEGORY_COUNT} videos for ${category.name}`);
-        setYoutubeSpeeches(merged);
+        if (merged.length < TARGET_CATEGORY_COUNT) {
+          const localPass = contextSpeeches.filter(passChristian);
+          pushUnique(localPass);
+        }
+
+        console.log('[Category] merged count:', merged.length);
+        console.log('[Category] Christian filter count:', requireChristianContent ? merged.filter(s => passChristian(s)).length : 0);
+
+        if (merged.length > 0) {
+          setYoutubeSpeeches(merged);
+          setCategoryError(null);
+        } else if (contextSpeeches.length > 0) {
+          setYoutubeSpeeches([]);
+          setCategoryError('No online content found, showing local speeches.');
+        } else {
+          setYoutubeSpeeches([]);
+          setCategoryError('No content found for this category. Please try again.');
+        }
+
         setHasLoadedOnline(true);
       } catch (error) {
-        console.error(`Failed to load speeches for ${category?.name}:`, error);
+        console.error('[Category] load error:', error);
+        setCategoryError('Failed to load content for this category.');
+      } finally {
+        setCategoryLoading(false);
       }
     };
 
-    console.log(`Category page loaded: ${category?.name}`);
+    console.log('[Category] page loaded, category:', category?.name);
     void handleLoadOnlineSpeeches();
-  }, [category, hasLoadedOnline, contextSpeeches]);
+  }, [category, categoryId, hasLoadedOnline, contextSpeeches, isChristianCategory, requireChristianContent]);
 
   const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);
@@ -354,17 +451,32 @@ export default function CategoryScreen() {
           </View>
 
           <View style={styles.speechList}>
-            {categorySpeeches
-              .filter(speech => speech && typeof speech === 'object' && speech.id && speech.title)
-              .map((speech, index) => (
-                <SpeechCard
-                  key={`category-speech-${speech.id}-${index}`}
-                  speech={speech}
-                  onPress={() => handleSpeechPress(speech)}
-                  onFavorite={() => toggleFavorite(speech.id)}
-                />
-              ))
-            }
+            {categoryLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={category.color} />
+                <Text style={styles.loadingText}>Loading {category.name} content...</Text>
+              </View>
+            ) : categorySpeeches.length === 0 ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.emptyText}>
+                  {categoryError || 'No content found for this category.'}
+                </Text>
+                <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.8}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              categorySpeeches
+                .filter(speech => speech && typeof speech === 'object' && speech.id && speech.title)
+                .map((speech, index) => (
+                  <SpeechCard
+                    key={`category-speech-${speech.id}-${index}`}
+                    speech={speech}
+                    onPress={() => handleSpeechPress(speech)}
+                    onFavorite={() => toggleFavorite(speech.id)}
+                  />
+                ))
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -552,6 +664,29 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   speechList: {
     paddingTop: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary || '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700' as const,
   },
   emptyState: {
     flex: 1,
