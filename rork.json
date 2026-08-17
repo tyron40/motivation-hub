@@ -7,6 +7,12 @@
       "settings": {
         "iosBundleId": "app.rork.motivational-speech-app"
       }
+    },
+    {
+      "name": "Motivation Fuel",
+      "path": "ios-motivation-fuel",
+      "framework": "swift"
     }
-  ]
+  ],
+  "$schema": "https://rork.com/schema/rork.json"
 }
