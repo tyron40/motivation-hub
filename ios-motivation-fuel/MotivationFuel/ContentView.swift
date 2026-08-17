@@ -38,4 +38,7 @@ struct ContentView: View {
         .environment(LibraryStore())
         .environment(PlayerStore())
         .environment(ChatStore())
+        .environment(AuthManager())
+        .environment(StoreManager())
+        .environment(UserProfileStore())
 }

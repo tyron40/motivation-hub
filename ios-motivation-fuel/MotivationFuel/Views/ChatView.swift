@@ -3,8 +3,11 @@ import SwiftUI
 struct ChatView: View {
     @Environment(ChatStore.self) private var chat
     @Environment(LibraryStore.self) private var library
+    @Environment(StoreManager.self) private var store
+    @Environment(UserProfileStore.self) private var profile
 
     @State private var draft = ""
+    @State private var showPaywall = false
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -57,6 +60,9 @@ struct ChatView: View {
                 inputBar
             }
             .background(AppTheme.screenGradient.ignoresSafeArea())
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
         }
     }
 
@@ -83,6 +89,23 @@ struct ChatView: View {
 
             Spacer()
 
+            // Credits indicator
+            Button {
+                showPaywall = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.caption2)
+                    Text("\(store.credits)")
+                        .font(.caption.weight(.bold))
+                }
+                .foregroundStyle(store.canUseAI ? AppTheme.primary : Color(hex: 0xEF4444))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.white.opacity(0.08), in: .capsule)
+            }
+            .buttonStyle(PressableCardStyle())
+
             Button {
                 chat.startNewConversation()
             } label: {
@@ -98,7 +121,7 @@ struct ChatView: View {
 
     private var welcomeCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Hey \(library.displayName) 👋")
+            Text("Hey \(profile.name.isEmpty ? library.displayName : profile.name) 👋")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(AppTheme.text)
             Text("I'm your motivation coach. Tell me what you're working on, what's holding you back, or ask for a push. I'll keep it short and give you one thing to do today.")
@@ -196,7 +219,7 @@ struct ChatView: View {
     }
 }
 
-private struct MessageBubble: View {
+struct MessageBubble: View {
     let message: ChatMessage
 
     var body: some View {

@@ -2,12 +2,14 @@ import Foundation
 import SwiftUI
 
 /// Conversation state for the AI motivational coach.
+/// Checks credits via StoreManager before each AI call.
 @MainActor
 @Observable
 final class ChatStore {
     private(set) var messages: [ChatMessage] = []
     private(set) var isThinking = false
     var errorMessage: String?
+    var needsCredits = false
 
     private let defaults = UserDefaults.standard
     private let storageKey = "chat.messages"
@@ -31,6 +33,7 @@ final class ChatStore {
         guard !trimmed.isEmpty, !isThinking else { return }
 
         errorMessage = nil
+        needsCredits = false
         messages.append(ChatMessage(text: trimmed, isUser: true))
         persist()
         isThinking = true
@@ -56,6 +59,7 @@ final class ChatStore {
     func startNewConversation() {
         messages.removeAll()
         errorMessage = nil
+        needsCredits = false
         persist()
     }
 
