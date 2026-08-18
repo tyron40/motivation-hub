@@ -308,12 +308,11 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const playPauseLockedRef = useRef(false);
 
   const playPause = useCallback(() => {
-    console.log('[Playback Trace] Context playPause called');
-    console.log('[Playback Trace] Global player ref exists:', !!audioPlayerRef.current);
+    // Call the player's togglePlay directly — the actual player state callback
+    // (onPlayingChange) will update isPlaying in the context.
+    // Do NOT flip isPlaying here; it reconciles from the player.
     if (audioPlayerRef.current && audioPlayerRef.current.togglePlay) {
       audioPlayerRef.current.togglePlay();
-    } else {
-      console.warn('[Playback Trace] audioPlayerRef.current or togglePlay missing!');
     }
   }, [audioPlayerRef]);
 
