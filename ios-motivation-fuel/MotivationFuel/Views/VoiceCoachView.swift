@@ -219,7 +219,7 @@ struct VoiceCoachView: View {
         let hour = Calendar.current.component(.hour, from: Date())
         let greeting = hour < 12 ? "Good morning" : (hour < 17 ? "Good afternoon" : "Good evening")
 
-        let greetingText = "\(greeting), \(userName)! I'm \(coachName). I'm ready to help you win today. What's on your mind?"
+        let greetingText = "\(greeting), \(userName)! I'm \(coachName), your personal motivation coach. I'm fired up and ready to help you push past limits, build unstoppable confidence, and turn today's goals into wins. What's on your mind right now?"
 
         messages.append(ChatMessage(text: greetingText, isUser: false))
         statusText = "Coach is greeting you..."
@@ -337,8 +337,11 @@ struct VoiceCoachView: View {
     }
 
     private func speak(_ text: String) async {
+        guard store.canUseAI else { return }
+
         do {
             let player = try await AudioService.shared.synthesize(text: text, voice: profile.preferredVoice)
+            _ = store.useCredit()
 
             await MainActor.run {
                 audioPlayer = player
