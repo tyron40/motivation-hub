@@ -115,6 +115,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const playerReadyRef = useRef(false);
   const playerErrorRef = useRef(false);
   const autoplayAttemptedRef = useRef(false);
+  const autoplayJumpstartedRef = useRef(false);
+  const jumpstartAbortRef = useRef(false);
+  const activeVideoIdRef = useRef(videoId);
 
   // Refs mirroring state for imperative access without stale closures
   const shouldPlayRef = useRef(false);
@@ -173,6 +176,65 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       progressInterval.current = null;
     }
   }, []);
+
+  // ── Silent autoplay kickstart ───────────────────────────────────────────
+  // Some devices/YouTube embeds refuse to start audio until the playhead is
+  // nudged. This runs once per speech load, then self-disables so the user's
+  // play/pause button remains the only source of play-state changes afterwards.
+  const runSilentAutoplayJumpstart = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    if (!autoplay) return;
+    if (autoplayJumpstartedRef.current) return;
+    if (userPausedRef.current || pausedForAdRef.current) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+    if (durationRef.current < 1) return;
+
+    autoplayJumpstartedRef.current = true;
+    jumpstartAbortRef.current = false;
+
+    // Let the initial play command reach the native player
+    await new Promise(resolve => setTimeout(resolve, 400));
+    if (
+      jumpstartAbortRef.current ||
+      userPausedRef.current ||
+      pausedForAdRef.current ||
+      !mountedRef.current ||
+      activeVideoIdRef.current !== videoId
+    ) {
+      return;
+    }
+
+    // If playback already started on its own, no nudge is needed
+    if (actualPlayerStateRef.current === 'playing' || currentTimeRef.current > 0.25) {
+      console.log('[Autoplay Jumpstart] already playing, no nudge needed');
+      return;
+    }
+
+    try {
+      console.log('[Autoplay Jumpstart] silent +1s/-1s kickstart');
+      await playerRef.current.seekTo(1, true);
+      await new Promise(resolve => setTimeout(resolve, 120));
+      if (
+        jumpstartAbortRef.current ||
+        userPausedRef.current ||
+        pausedForAdRef.current ||
+        !mountedRef.current ||
+        activeVideoIdRef.current !== videoId
+      ) {
+        return;
+      }
+      await playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
+
+      // Re-affirm play unless the user interrupted during the nudge
+      if (!userPausedRef.current && !pausedForAdRef.current) {
+        shouldPlayRef.current = true;
+        setShouldPlay(true);
+      }
+    } catch (e) {
+      console.log('[Autoplay Jumpstart] kickstart failed:', e);
+    }
+  }, [autoplay, videoId]);
 
   // ── Imperative handle ──────────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
@@ -305,6 +367,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // ── Video change: reset everything ─────────────────────────────────────
   useEffect(() => {
     console.log('[Playback Trace] component mounted for videoId:', videoId);
+    activeVideoIdRef.current = videoId;
+    jumpstartAbortRef.current = true; // abort any in-flight jumpstart for previous video
+    autoplayJumpstartedRef.current = false;
     onEndCalledRef.current = false;
     autoplayAttemptedRef.current = false;
 
@@ -329,6 +394,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     userPausedRef.current = false;
     pausedForAdRef.current = false;
     wasPlayingBeforeAdRef.current = false;
+    jumpstartAbortRef.current = false;
 
     if (videoId) {
       const fetchVideoMetadata = async () => {
@@ -445,8 +511,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       autoplayAttemptedRef.current = true;
       console.log('[Playback] autoplay attempt for:', videoId);
       setShouldPlay(true);
+      void runSilentAutoplayJumpstart();
     }
-  }, [autoplay, videoId]);
+  }, [autoplay, videoId, runSilentAutoplayJumpstart]);
 
   // ── Player error handler ───────────────────────────────────────────────
   const onPlayerError = useCallback((errorMsg: string) => {
@@ -529,6 +596,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Cancel any in-flight autoplay jumpstart so user intent wins
+    jumpstartAbortRef.current = true;
 
     const nextState = !shouldPlayRef.current;
     console.log('[Playback Trace] Requested state:', nextState ? 'play' : 'pause');

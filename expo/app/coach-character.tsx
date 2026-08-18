@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,69 +16,199 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
 
+function buildAvatarUrl({
+  seed,
+  backgroundColor,
+  skin,
+  top,
+  topColor,
+  facialHair = 'none',
+  facialHairColor = '1a1a1a',
+  clothing,
+  clothingColor,
+  accessories = 'none',
+  eyes = 'default',
+  eyebrows = 'default',
+  mouth = 'smile',
+}: {
+  seed: string;
+  backgroundColor: string;
+  skin: string;
+  top: string;
+  topColor: string;
+  facialHair?: string;
+  facialHairColor?: string;
+  clothing: string;
+  clothingColor: string;
+  accessories?: string;
+  eyes?: string;
+  eyebrows?: string;
+  mouth?: string;
+}) {
+  const params = new URLSearchParams({
+    seed,
+    backgroundColor,
+    style: 'circle',
+    skin,
+    top,
+    topColor,
+    facialHair,
+    facialHairColor,
+    clothing,
+    clothingColor,
+    accessories,
+    eyes,
+    eyebrows,
+    mouth,
+  });
+  return `https://api.dicebear.com/7.x/avataaars/png?${params.toString()}`;
+}
+
 /**
- * Preset coach characters with DiceBear avatars.
- * Each avatar uses explicit gender-appropriate style parameters so the
- * generated image matches the character's name and personality.
- * Valid DiceBear 'avataaars' style params are used to avoid broken images.
+ * Preset coach characters — casual, everyday-looking avatars.
+ * Includes black male coaches and clear male/female presentation.
  */
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
     id: 'alex',
     name: 'Coach Alex',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=AlexMotivatePro&backgroundColor=8b4513&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=1e3a8a&skinColor=c9a07a&eyes=default&eyebrows=default&mouth=default',
-    description: 'Energetic and motivating, perfect for daily inspiration',
+    imageUrl: buildAvatarUrl({
+      seed: 'AlexCasual2024',
+      backgroundColor: '1e3a8a',
+      skin: 'light',
+      top: 'shortHairShortFlat',
+      topColor: '1a1a1a',
+      clothing: 'hoodie',
+      clothingColor: '2563eb',
+      mouth: 'smile',
+      eyes: 'happy',
+    }),
+    description: 'Laid-back and motivating, perfect for daily inspiration',
     isCustom: false,
   },
   {
     id: 'sophia',
     name: 'Coach Sophia',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=SophiaCalmWisdom&backgroundColor=10b981&style=circle&top=longHair&topColor=4a3520&accessories=none&clothingColor=065f46&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
+    imageUrl: buildAvatarUrl({
+      seed: 'SophiaCasual2024',
+      backgroundColor: '065f46',
+      skin: 'tanned',
+      top: 'longHairStraight',
+      topColor: '3f2e22',
+      clothing: 'hoodie',
+      clothingColor: '10b981',
+      mouth: 'smile',
+      eyes: 'default',
+    }),
     description: 'Calm and wise, great for mindfulness and reflection',
     isCustom: false,
   },
   {
     id: 'marcus',
     name: 'Coach Marcus',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MarcusIronDiscipline&backgroundColor=3b82f6&style=circle&top=shortFlat&topColor=111111&accessories=none&clothingColor=1e3a8a&skinColor=b58a5a&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardLight&facialHairColor=111111',
+    imageUrl: buildAvatarUrl({
+      seed: 'MarcusCasual2024',
+      backgroundColor: '3b82f6',
+      skin: 'darkBrown',
+      top: 'shortHairDreads',
+      topColor: '111111',
+      facialHair: 'beardLight',
+      clothing: 'shirtCrewNeck',
+      clothingColor: '1e3a8a',
+      mouth: 'serious',
+      eyes: 'squint',
+    }),
     description: 'Strong and disciplined, ideal for fitness and goals',
     isCustom: false,
   },
   {
     id: 'emma',
     name: 'Coach Emma',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=EmmaWarmSupport&backgroundColor=ec4899&style=circle&top=longHair&topColor=2d1810&accessories=none&clothingColor=831843&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
+    imageUrl: buildAvatarUrl({
+      seed: 'EmmaCasual2024',
+      backgroundColor: '831843',
+      skin: 'pale',
+      top: 'longHairBob',
+      topColor: '2d1810',
+      clothing: 'shirtScoopNeck',
+      clothingColor: 'db2777',
+      mouth: 'smile',
+      eyes: 'happy',
+    }),
     description: 'Friendly and supportive, perfect for personal growth',
     isCustom: false,
   },
   {
     id: 'david',
     name: 'Coach David',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DavidStrategyPro&backgroundColor=8b5cf6&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=2e1065&skinColor=d4a373&eyes=default&eyebrows=default&mouth=default&facialHair=beardMajestic&facialHairColor=1a1a1a',
+    imageUrl: buildAvatarUrl({
+      seed: 'DavidCasual2024',
+      backgroundColor: '5b21b6',
+      skin: 'brown',
+      top: 'shortHairShortCurly',
+      topColor: '1a1a1a',
+      facialHair: 'beardMedium',
+      clothing: 'hoodie',
+      clothingColor: '4c1d95',
+      mouth: 'smile',
+      eyes: 'default',
+    }),
     description: 'Professional and strategic, great for career coaching',
     isCustom: false,
   },
   {
     id: 'maya',
     name: 'Coach Maya',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MayaCreativeFire&backgroundColor=f59e0b&style=circle&top=longHairCurly&topColor=1a0d00&accessories=none&clothingColor=78350f&skinColor=ffdfba&eyes=default&eyebrows=default&mouth=smile&facialHair=none',
+    imageUrl: buildAvatarUrl({
+      seed: 'MayaCasual2024',
+      backgroundColor: '78350f',
+      skin: 'brown',
+      top: 'longHairCurly',
+      topColor: '1a0d00',
+      clothing: 'hoodie',
+      clothingColor: 'd97706',
+      mouth: 'smile',
+      eyes: 'happy',
+    }),
     description: 'Creative and inspiring, ideal for artistic pursuits',
     isCustom: false,
   },
   {
     id: 'dre',
     name: 'Coach Dre',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreBossHustle27&backgroundColor=2563eb&style=circle&top=shortFlat&topColor=1a1a1a&accessories=round&clothingColor=1e3a8a&skinColor=7b4f3a&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardLight&facialHairColor=1a1a1a',
+    imageUrl: buildAvatarUrl({
+      seed: 'DreCasual2024',
+      backgroundColor: '0f766e',
+      skin: 'black',
+      top: 'shortHairShortCurly',
+      topColor: '111111',
+      facialHair: 'beardLight',
+      clothing: 'hoodie',
+      clothingColor: '115e59',
+      mouth: 'smile',
+      eyes: 'squint',
+    }),
     description: 'Relentless and real, pushes you to dominate every goal',
     isCustom: false,
   },
   {
     id: 'malik',
     name: 'Coach Malik',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikHustleGrind42&backgroundColor=1d4ed8&style=circle&top=shortFlat&topColor=111111&accessories=round&clothingColor=1e40af&skinColor=6b4533&eyes=squint&eyebrows=serious&mouth=serious&facialHair=beardMajestic&facialHairColor=111111',
+    imageUrl: buildAvatarUrl({
+      seed: 'MalikCasual2024',
+      backgroundColor: '1d4ed8',
+      skin: 'black',
+      top: 'shortHairDreads',
+      topColor: '111111',
+      facialHair: 'beardMajestic',
+      clothing: 'shirtCrewNeck',
+      clothingColor: '1e40af',
+      mouth: 'serious',
+      eyes: 'default',
+    }),
     description: 'No-nonsense accountability coach who turns talk into action',
     isCustom: false,
-  }
+  },
 ];
 
 export default function CoachCharacterScreen() {
@@ -86,6 +216,13 @@ export default function CoachCharacterScreen() {
   const { profile, updateProfile } = useUserProfile();
   const [selectedCharacter, setSelectedCharacter] = useState<CoachCharacter | null>(
     profile.coachCharacter || PRESET_CHARACTERS[0]
+  );
+  const [imageFallbacks, setImageFallbacks] = useState<Record<string, boolean>>({});
+
+  const fallbackAvatarUri = useMemo(
+    () =>
+      'https://api.dicebear.com/7.x/avataaars/png?seed=CoachFallback&backgroundColor=1f2937&style=circle&top=shortHairShortFlat&clothing=hoodie&skin=light',
+    []
   );
 
   const handleSelectCharacter = async (character: CoachCharacter) => {
@@ -133,12 +270,22 @@ export default function CoachCharacterScreen() {
                   style={[
                     styles.characterCard,
                     { backgroundColor: colors.cardBackground },
-                    selectedCharacter?.id === character.id && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
+                    selectedCharacter?.id === character.id && {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.primary + '20',
+                    },
                   ]}
                   onPress={() => handleSelectCharacter(character)}
                 >
                   <Image
-                    source={{ uri: character.imageUrl }}
+                    source={{
+                      uri: imageFallbacks[character.id] ? fallbackAvatarUri : character.imageUrl,
+                    }}
+                    onError={() =>
+                      setImageFallbacks((prev) =>
+                        prev[character.id] ? prev : { ...prev, [character.id]: true }
+                      )
+                    }
                     style={styles.characterImage}
                   />
                   {selectedCharacter?.id === character.id && (
