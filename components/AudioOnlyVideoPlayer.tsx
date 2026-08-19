@@ -146,34 +146,34 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => { mountedRef.current = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loggedPlaybackMethodsRef = useRef(false);
-  const sendNativeImperativeCommand = useCallback((newState: boolean) => {
-    try {
-      console.log('[Manual Playback] native methods', {
+  // Optional diagnostic/fallback ONLY — playback is driven by the `play` prop
+  // (playerPlayCommand). playVideo/pauseVideo are NOT documented ref methods
+  // of react-native-youtube-iframe; undefined is expected, never an error.
+  const sendNativeImperativeCommand = useCallback(
+    (newState: boolean) => {
+      const player = playerRef.current;
+
+      console.log('[Playback Methods]', {
         requested: newState,
-        refExists: Boolean(playerRef.current),
-        playVideo: typeof playerRef.current?.playVideo,
-        pauseVideo: typeof playerRef.current?.pauseVideo,
-        seekTo: typeof playerRef.current?.seekTo,
+        refExists: Boolean(player),
+        playVideo: typeof player?.playVideo,
+        pauseVideo: typeof player?.pauseVideo,
+        seekTo: typeof player?.seekTo,
       });
-      if (!playerRef.current) return;
-      if (!loggedPlaybackMethodsRef.current) {
-        loggedPlaybackMethodsRef.current = true;
-        console.log('[Playback Methods]', {
-          playVideo: typeof playerRef.current?.playVideo,
-          pauseVideo: typeof playerRef.current?.pauseVideo,
-          seekTo: typeof playerRef.current?.seekTo,
-        });
-      }
-      const fn = newState ? playerRef.current.playVideo : playerRef.current.pauseVideo;
+
+      const fn = newState ? player?.playVideo : player?.pauseVideo;
+
       if (typeof fn === 'function') {
-        console.log('[Manual Playback] calling', newState ? 'playVideo' : 'pauseVideo');
-        fn.call(playerRef.current);
+        try {
+          console.log('[Manual Playback] calling', newState ? 'playVideo' : 'pauseVideo');
+          fn.call(player);
+        } catch (error) {
+          console.log('[Playback] optional imperative command failed', error);
+        }
       }
-    } catch (e) {
-      console.log('Imperative player command failed:', e);
-    }
-  }, []);
+    },
+    []
+  );
 
   // ── requestPlayState — the single entry point for native play/pause ────
   const requestPlayState = useCallback(async (newState: boolean) => {
@@ -189,6 +189,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     setPlayerPlayCommand(newState);
     sendNativeImperativeCommand(newState);
   }, [sendNativeImperativeCommand]);
+
+  // Diagnostic: the authoritative play prop must visibly transition on every command.
+  useEffect(() => {
+    console.log('[Playback Prop] playerPlayCommand:', playerPlayCommand);
+  }, [playerPlayCommand]);
 
   // ── Progress tracking ───────────────────────────────────────────────────
   const startProgressTracking = useCallback(() => {
@@ -654,6 +659,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log(nextState ? '[Playback] user requested play' : '[Playback] user requested pause');
 
     manualPauseRef.current = !nextState;
+    desiredPlayRef.current = nextState;
 
     // Optimistically update UI state for instant feedback.
     // isPlayingRef stays untouched — onStateChange will confirm.
