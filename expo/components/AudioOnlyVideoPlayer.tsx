@@ -72,6 +72,10 @@ interface VideoMetadata {
 
 const EMBEDDING_ERROR_CODES = new Set([100, 101, 150, 153]);
 
+// YouTube IFrame API requires a player viewport of at least 200x200.
+// The native player is hosted at 220x220 but visually hidden.
+const NATIVE_PLAYER_SIZE = 220;
+
 const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoPlayerProps>(({
   videoId,
   title: _title,
@@ -637,6 +641,14 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     setIsPlaying(nextState);
     onPlayingChangeRef.current?.(nextState);
 
+    console.log('[PlayPause Diagnostic]', {
+      requested: nextState,
+      playerRefExists: Boolean(playerRef.current),
+      playMethod: typeof playerRef.current?.playVideo,
+      pauseMethod: typeof playerRef.current?.pauseVideo,
+      currentActualState: isPlayingRef.current,
+    });
+
     void requestPlayState(nextState);
 
     if (!nextState) {
@@ -825,12 +837,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   ) : null;
 
   const nativePlayerElement = Platform.OS !== 'web' && YoutubePlayer ? (
-    <View style={styles.hiddenPlayer}>
+    <View
+      pointerEvents="none"
+      style={styles.nativePlayerHost}
+    >
       <YoutubePlayer
         ref={playerRef}
         videoId={videoId}
-        height={200}
-        width={300}
+        height={NATIVE_PLAYER_SIZE}
+        width={NATIVE_PLAYER_SIZE}
         play={playerPlayCommand}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
@@ -843,14 +858,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           playsinline: true,
           preventFullScreen: true,
         }}
-        webViewStyle={styles.hiddenWebView}
+        webViewStyle={styles.nativePlayerWebView}
         webViewProps={{
-          mediaPlaybackRequiresUserAction: false,
           allowsInlineMediaPlayback: true,
-          javaScriptEnabled: true,
-          domStorageEnabled: true,
-          bounces: false,
-          scrollEnabled: false,
+          mediaPlaybackRequiresUserAction: false,
         }}
       />
     </View>
@@ -1081,6 +1092,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -9999,
     left: -9999,
+  },
+  nativePlayerHost: {
+    width: 220,
+    height: 220,
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: -110,
+    opacity: 0.01,
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  nativePlayerWebView: {
+    width: 220,
+    height: 220,
+    backgroundColor: 'transparent',
   },
   hiddenWebView: {
     backgroundColor: 'transparent',
