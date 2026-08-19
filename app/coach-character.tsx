@@ -16,61 +16,67 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import { CoachCharacter } from '@/types/speech';
 import { useTheme } from '@/hooks/theme-context';
 
+/**
+ * Preset coach characters using DiceBear avataaars API with explicit
+ * style parameters for reliable, casual rendering.
+ * Mix of male and female coaches, multiple Black male options (Malik, Andre).
+ * Descriptions focus only on coaching personality/style.
+ */
 const PRESET_CHARACTERS: CoachCharacter[] = [
   {
-    id: 'alex',
-    name: 'Coach Alex',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Alex&backgroundColor=8b4513',
-    description: 'Energetic and motivating, perfect for daily inspiration',
+    id: 'marcus',
+    name: 'Marcus',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MarcusMF&skin=darkBrown&top=dreads01&topChance=100&facialHair=beardMagestic&facialHairChance=100&facialHairColor=2c1b18&clothing=hoodie&clothingColor=3b82f6&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'High-energy hype coach. Pushes you past your limits.',
     isCustom: false,
   },
   {
     id: 'sophia',
-    name: 'Coach Sophia',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Sophia&backgroundColor=10b981',
-    description: 'Calm and wise, great for mindfulness and reflection',
-    isCustom: false,
-  },
-  {
-    id: 'marcus',
-    name: 'Coach Marcus',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Marcus&backgroundColor=3b82f6',
-    description: 'Strong and disciplined, ideal for fitness and goals',
-    isCustom: false,
-  },
-  {
-    id: 'emma',
-    name: 'Coach Emma',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Emma&backgroundColor=ec4899',
-    description: 'Friendly and supportive, perfect for personal growth',
-    isCustom: false,
-  },
-  {
-    id: 'david',
-    name: 'Coach David',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=David&backgroundColor=8b5cf6',
-    description: 'Professional and strategic, great for career coaching',
-    isCustom: false,
-  },
-  {
-    id: 'maya',
-    name: 'Coach Maya',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Maya&backgroundColor=f59e0b',
-    description: 'Creative and inspiring, ideal for artistic pursuits',
-    isCustom: false,
-  },
-  {
-    id: 'malik',
-    name: 'Coach Malik',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Malik&skinColor=8d5524,9b6a3f,b68655,c8a77e&hairColor=2c1b18,4a312c&backgroundColor=0ea5e9',
-    description: 'Powerful and focused, built for discipline and high performance',
+    name: 'Sophia',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=SophiaMF&skin=light&top=longHairStraight&topChance=100&hairColor=8d5524&clothing=hoodie&clothingColor=ec4899&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Calm and thoughtful. Great for mindful daily habits.',
     isCustom: false,
   },
   {
     id: 'andre',
-    name: 'Coach Andre',
-    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=Andre&skinColor=8d5524,9b6a3f,b68655,c8a77e&hairColor=2c1b18,4a312c&backgroundColor=14b8a6',
-    description: 'Confident and uplifting, perfect for momentum and consistency',
+    name: 'Andre',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=AndreMF&skin=black&top=shortHairDreads01&topChance=100&facialHair=beardLight&facialHairChance=100&facialHairColor=2c1b18&clothing=hoodie&clothingColor=0ea5e9&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Steady and consistent. Keeps you accountable day by day.',
+    isCustom: false,
+  },
+  {
+    id: 'emma',
+    name: 'Emma',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=EmmaMF&skin=light&top=longHairCurly&topChance=100&hairColor=a52a2a&clothing=hoodie&clothingColor=8b5cf6&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Warm and supportive. Perfect for building new routines.',
+    isCustom: false,
+  },
+  {
+    id: 'malik',
+    name: 'Malik',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MalikMF&skin=black&top=dreads01&topChance=100&facialHair=beardMagestic&facialHairChance=100&facialHairColor=2c1b18&clothing=hoodie&clothingColor=f59e0b&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Powerful and focused. Built for discipline and performance.',
+    isCustom: false,
+  },
+  {
+    id: 'maya',
+    name: 'Maya',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=MayaMF&skin=brown&top=longHairStraight&topChance=100&hairColor=2c1b18&clothing=hoodie&clothingColor=14b8a6&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Creative and inspiring. Great for finding your purpose.',
+    isCustom: false,
+  },
+  {
+    id: 'dre',
+    name: 'Dre',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=DreMF&skin=darkBrown&top=shortHairCurly&topChance=100&facialHair=beardMedium&facialHairChance=100&facialHairColor=2c1b18&clothing=hoodie&clothingColor=10b981&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Laid-back but relentless. Steady drive, no excuses.',
+    isCustom: false,
+  },
+  {
+    id: 'alex',
+    name: 'Alex',
+    imageUrl: 'https://api.dicebear.com/7.x/avataaars/png?seed=AlexMF&skin=light&top=shortHairShortFlat&topChance=100&hairColor=3a3027&clothing=hoodie&clothingColor=ef4444&mouth=smile&eyes=happy&backgroundColor=1f2937',
+    description: 'Bold and direct. Cuts through doubt with straight talk.',
     isCustom: false,
   },
 ];
@@ -153,7 +159,7 @@ export default function CoachCharacterScreen() {
                   />
                   {selectedCharacter?.id === character.id && (
                     <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
-                      <Check color="white" size={16} />
+                      <Check color="white" size={14} />
                     </View>
                   )}
                   <Text style={[styles.characterName, { color: colors.text }]}>{character.name}</Text>
@@ -226,35 +232,35 @@ const styles = StyleSheet.create({
   charactersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
     marginTop: 16,
   },
   characterCard: {
     width: '47%',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     alignItems: 'center' as const,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   characterImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 12,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginBottom: 10,
   },
   selectedBadge: {
     position: 'absolute' as const,
-    top: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    top: 10,
+    right: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
   },
   characterName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600' as const,
     marginBottom: 4,
     textAlign: 'center' as const,
@@ -262,6 +268,6 @@ const styles = StyleSheet.create({
   characterDescription: {
     fontSize: 12,
     textAlign: 'center' as const,
-    lineHeight: 16,
+    lineHeight: 15,
   },
 });

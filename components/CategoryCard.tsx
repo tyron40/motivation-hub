@@ -37,7 +37,7 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress })
     <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.card, { backgroundColor: categoryColor + '20' }]}>
         <View style={[styles.iconContainer, { backgroundColor: categoryColor }]}>
-          <Icon color={colors.text} size={24} />
+          <Icon color={colors.text} size={21} />
         </View>
         <Text style={styles.name} numberOfLines={2}>{String(category.name)}</Text>
       </View>
@@ -47,25 +47,25 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress })
 
 const getStyles = (colors: any) => StyleSheet.create({
   card: {
-    width: 110,
-    height: 110,
-    borderRadius: 16,
-    padding: 12,
-    marginRight: 12,
+    width: 92,
+    height: 92,
+    borderRadius: 14,
+    padding: 10,
+    marginRight: 10,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   name: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600' as const,
     textAlign: 'center' as const,
   },

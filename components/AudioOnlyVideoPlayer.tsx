@@ -90,7 +90,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState(false);
-  
+
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -101,10 +101,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const playerErrorRef = useRef(playerError);
   const activeVideoIdRef = useRef(videoId);
   const onEndCalledRef = useRef(false);
-  const autoplayTriggeredRef = useRef(false);
   const isSeekingRef = useRef(isSeeking);
   const mountedRef = useRef(true);
 
+  // ── Autoplay bootstrap refs ─────────────────────────────────────────────
+  // ONE deterministic bootstrap per video. Self-disables after firing.
+  const autoplayBootstrapDoneRef = useRef(false);
+  const autoplayBootstrapRunningRef = useRef(false);
+  // Incremented on every cancel (video change, manual pause). The bootstrap
+  // captures the value at start and bails if it changes, so a stale async
+  // seek cannot issue a Play command after the user pressed Pause.
+  const bootstrapIntentRef = useRef(0);
+
+  // ── Play-state refs ──────────────────────────────────────────────────────
+  // desiredPlayRef: what the user/app last requested (play or pause).
+  // isPlayingRef: ONLY set by onStateChange — confirmed YouTube state.
+  const desiredPlayRef = useRef(false);
+  const wasPlayingBeforeAdRef = useRef(false);
+  const manualPauseRef = useRef(false);
+
+  // Callback refs
   const onEndRef = useRef(onEnd);
   const onErrorRef = useRef(onError);
   const onPlayingChangeRef = useRef(onPlayingChange);
@@ -114,7 +130,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onPlayingChangeRef.current = onPlayingChange; }, [onPlayingChange]);
   useEffect(() => { onProgressChangeRef.current = onProgressChange; }, [onProgressChange]);
-  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { playerReadyRef.current = playerReady; }, [playerReady]);
@@ -126,20 +141,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('[Playback] component mounted', videoId);
     return () => { mountedRef.current = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const desiredPlayRef = useRef(false);
-  const wasPlayingBeforeAdRef = useRef(false);
-  const manualPauseRef = useRef(false);
-  const lastRequestedStateRef = useRef<boolean | null>(null);
-  const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastManualToggleTargetRef = useRef<boolean | null>(null);
-
-  const clearCommandWatchdog = useCallback(() => {
-    if (commandWatchdogRef.current) {
-      clearTimeout(commandWatchdogRef.current);
-      commandWatchdogRef.current = null;
-    }
-  }, []);
 
   const loggedPlaybackMethodsRef = useRef(false);
   const sendNativeImperativeCommand = useCallback((newState: boolean) => {
@@ -162,12 +163,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  // ── requestPlayState — the single entry point for native play/pause ────
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log(newState ? '[Playback] request play' : '[Playback] request pause');
-    console.log('requestPlayState:', isPlayingRef.current, '->', newState);
     desiredPlayRef.current = newState;
-    lastRequestedStateRef.current = newState;
 
     if (Platform.OS === 'web') {
       postMessageToWebPlayerRef.current?.(newState ? 'playVideo' : 'pauseVideo');
@@ -178,25 +178,32 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     sendNativeImperativeCommand(newState);
   }, [sendNativeImperativeCommand]);
 
-
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
       if (!playerReadyRef.current || playerErrorRef.current) {
         console.log('Player not ready for toggle');
         return;
       }
-      const newState = !isPlayingRef.current;
-      console.log('Ref togglePlay:', isPlayingRef.current, '->', newState);
+      const newState = !desiredPlayRef.current;
+      console.log('Ref togglePlay:', desiredPlayRef.current, '->', newState);
+      manualPauseRef.current = !newState;
+      // Cancel any in-flight bootstrap
+      bootstrapIntentRef.current++;
+      autoplayBootstrapRunningRef.current = false;
       void requestPlayState(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
-      if (isPlayingRef.current) return;
+      manualPauseRef.current = false;
+      bootstrapIntentRef.current++;
+      autoplayBootstrapRunningRef.current = false;
       requestPlayState(true);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
-      if (!isPlayingRef.current) return;
+      manualPauseRef.current = true;
+      bootstrapIntentRef.current++;
+      autoplayBootstrapRunningRef.current = false;
       requestPlayState(false);
     },
     seekForward: (seconds = 15) => {
@@ -225,6 +232,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       wasPlayingBeforeAdRef.current =
         isPlayingRef.current || desiredPlayRef.current;
       manualPauseRef.current = false;
+      bootstrapIntentRef.current++;
+      autoplayBootstrapRunningRef.current = false;
       void requestPlayState(false);
     },
     resumeAfterAd: () => {
@@ -265,32 +274,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   useEffect(() => {
     return () => {
-      clearCommandWatchdog();
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
         progressInterval.current = null;
       }
     };
-  }, [clearCommandWatchdog]);
+  }, []);
 
+  // ── Video change: reset everything, cancel old bootstrap ────────────────
   useEffect(() => {
     activeVideoIdRef.current = videoId;
     manualPauseRef.current = false;
     onEndCalledRef.current = false;
-    autoplayTriggeredRef.current = false;
-    autoplayAttemptRef.current = 0;
-    mediaLoadedRef.current = false;
-    autoplayWarmupDoneRef.current = false;
-    autoplayPulseDoneRef.current = false;
-    autoplayForceSeekDoneRef.current = false;
-    if (autoplayRetryTimerRef.current) {
-      clearTimeout(autoplayRetryTimerRef.current);
-      autoplayRetryTimerRef.current = null;
-    }
-    if (loadPollTimerRef.current) {
-      clearTimeout(loadPollTimerRef.current);
-      loadPollTimerRef.current = null;
-    }
+    desiredPlayRef.current = false;
+    autoplayBootstrapDoneRef.current = false;
+    autoplayBootstrapRunningRef.current = false;
+    bootstrapIntentRef.current++; // cancel any in-flight bootstrap
 
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
@@ -314,19 +313,19 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         detailsUrl.searchParams.set('key', apiKey);
 
         const response = await fetch(detailsUrl.toString());
-        
+
         if (!response.ok) {
           throw new Error(`YouTube API error: ${response.status}`);
         }
 
         const data = await response.json();
-        
+
         if (!data.items || data.items.length === 0) {
           throw new Error('Video not found');
         }
 
         const video = data.items[0];
-        
+
         const parseDuration = (dur: string): number => {
           const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
           if (!match) return 0;
@@ -378,7 +377,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
     }
-    
+
     progressInterval.current = setInterval(() => {
       if (playerRef.current && !isSeekingRef.current && playerReadyRef.current && mountedRef.current) {
         try {
@@ -409,137 +408,97 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
-  const autoplayRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayAttemptRef = useRef(0);
-  const mediaLoadedRef = useRef(false);
-  const loadPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayInProgressRef = useRef(false);
-  const autoplayWarmupDoneRef = useRef(false);
-  const autoplayRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoplayPulseDoneRef = useRef(false);
-  const autoplayForceSeekDoneRef = useRef(false);
-
-  const clearAutoplayTimer = useCallback(() => {
-    if (autoplayRetryTimerRef.current) {
-      clearTimeout(autoplayRetryTimerRef.current);
-      autoplayRetryTimerRef.current = null;
-    }
-    if (loadPollTimerRef.current) {
-      clearTimeout(loadPollTimerRef.current);
-      loadPollTimerRef.current = null;
-    }
-    if (autoplayRecoveryTimerRef.current) {
-      clearTimeout(autoplayRecoveryTimerRef.current);
-      autoplayRecoveryTimerRef.current = null;
-    }
-    if (autoplayPulseTimerRef.current) {
-      clearTimeout(autoplayPulseTimerRef.current);
-      autoplayPulseTimerRef.current = null;
-    }
-    if (autoplayWatchdogTimerRef.current) {
-      clearTimeout(autoplayWatchdogTimerRef.current);
-      autoplayWatchdogTimerRef.current = null;
-    }
-    autoplayInProgressRef.current = false;
-  }, []);
-
-  const startAutoplay = useCallback(() => {
-    if (!autoplay || !mountedRef.current || activeVideoIdRef.current !== videoId) return;
+  // ── ONE-SHOT autoplay bootstrap ─────────────────────────────────────────
+  // Fires once per video after onPlayerReady. Performs a silent seek 0->1->0
+  // to activate the native player, then issues a play command. Self-disables
+  // via autoplayBootstrapDoneRef so it never runs again for that video.
+  // If the user presses Pause while the bootstrap is in flight, the intent
+  // ref is incremented and the async work bails out — no stale Play command.
+  const runAutoplayBootstrap = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    if (!autoplay) return;
+    if (autoplayBootstrapDoneRef.current) return;
+    if (autoplayBootstrapRunningRef.current) return;
     if (manualPauseRef.current) return;
-    if (autoplayInProgressRef.current) return;
+    if (!mountedRef.current) return;
+    if (activeVideoIdRef.current !== videoId) return;
+    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
 
-    autoplayInProgressRef.current = true;
-    console.log('[Autoplay] Starting deterministic autoplay for:', videoId);
+    autoplayBootstrapRunningRef.current = true;
+    autoplayBootstrapDoneRef.current = true; // lock — never run again for this video
+    const intent = bootstrapIntentRef.current;
+    desiredPlayRef.current = true;
 
-    const kickPlay = () => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-      desiredPlayRef.current = true;
-      requestPlayState(true);
-    };
+    console.log('[Autoplay Bootstrap] start');
 
-    kickPlay();
-    autoplayRetryTimerRef.current = setTimeout(() => {
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-      if (!isPlayingRef.current) {
-        console.log('[Autoplay] Single retry kick');
-        kickPlay();
+    // Step 1: Issue initial play command
+    await requestPlayState(true);
+
+    // Step 2: Silent seek 0 -> 1 -> 0 to activate the player
+    try {
+      const maxSeek = Math.max(durationRef.current - 0.1, 1);
+      const forward = Math.min(1, maxSeek);
+
+      await playerRef.current.seekTo(forward, true);
+      console.log('[Autoplay Bootstrap] seek 0 -> 1');
+
+      // Wait briefly for the seek to register
+      await new Promise(resolve => setTimeout(resolve, 120));
+
+      // Bail if cancelled (video change, manual pause, unmount)
+      if (
+        bootstrapIntentRef.current !== intent ||
+        !mountedRef.current ||
+        activeVideoIdRef.current !== videoId ||
+        manualPauseRef.current
+      ) {
+        console.log('[Autoplay Bootstrap] cancelled before return seek');
+        autoplayBootstrapRunningRef.current = false;
+        return;
       }
-      autoplayInProgressRef.current = false;
-    }, 1200);
+
+      await playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
+      console.log('[Autoplay Bootstrap] seek 0 -> 1 -> 0');
+
+      // Bail if cancelled after return seek
+      if (
+        bootstrapIntentRef.current !== intent ||
+        !mountedRef.current ||
+        activeVideoIdRef.current !== videoId ||
+        manualPauseRef.current
+      ) {
+        console.log('[Autoplay Bootstrap] cancelled after return seek');
+        autoplayBootstrapRunningRef.current = false;
+        return;
+      }
+
+      // Step 3: Re-affirm play
+      await requestPlayState(true);
+      console.log('[Autoplay Bootstrap] complete');
+    } catch (e) {
+      console.log('[Autoplay Bootstrap] failed:', e);
+    }
+
+    autoplayBootstrapRunningRef.current = false;
   }, [autoplay, videoId, requestPlayState]);
 
-  useEffect(() => {
-    return () => clearAutoplayTimer();
-  }, [clearAutoplayTimer]);
-
-  const runWarmupSeek = useCallback(async () => {
-    if (autoplayWarmupDoneRef.current) return;
-    if (manualPauseRef.current) return;
-    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
-    if (!playerReadyRef.current || !mediaLoadedRef.current) return;
-
-    autoplayWarmupDoneRef.current = true;
-    try {
-      await new Promise(resolve => setTimeout(resolve, 900));
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-
-      const oneSecondTarget = Math.min(1, Math.max(durationRef.current - 0.1, 0));
-      await playerRef.current.seekTo(oneSecondTarget, true);
-      setCurrentTime(oneSecondTarget);
-
-      await new Promise(resolve => setTimeout(resolve, 150));
-      if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-
-      await playerRef.current.seekTo(0, true);
-      setCurrentTime(0);
-      console.log('[Autoplay] Delayed warmup seek +1s -> 0s applied');
-      console.log('[Playback] warm-up seek');
-    } catch (e) {
-      console.log('[Autoplay] Warmup seek failed (continuing):', e);
-    }
-  }, [videoId]);
-
-  const runForcedAutoplaySeek = useCallback(async () => {
-    if (Platform.OS === 'web') return;
-    if (manualPauseRef.current) return;
-    if (autoplayForceSeekDoneRef.current) return;
-    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
-    if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-
-    autoplayForceSeekDoneRef.current = true;
-    try {
-      const maxSeek = Math.max(durationRef.current - 0.1, 0);
-      const forward = Math.min(1, maxSeek);
-      console.log('[Autoplay] Forced user-like seek bootstrap:', 0, '->', forward, '->', 0);
-      console.log('[Playback] forced seek');
-      await playerRef.current.seekTo(forward, true);
-      await new Promise(resolve => setTimeout(resolve, 180));
-      await playerRef.current.seekTo(0, true);
-      setCurrentTime(0);
-      requestPlayState(true);
-    } catch (e) {
-      console.log('[Autoplay] Forced seek bootstrap failed:', e);
-      autoplayForceSeekDoneRef.current = false;
-    }
-  }, [requestPlayState, videoId]);
-
+  // ── Player ready handler ────────────────────────────────────────────────
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
     console.log('[Playback] onReady', videoId);
-    console.log('[Pre-Rork Playback] ref exists', Boolean(playerRef.current));
     setPlayerReady(true);
     setPlayerError(false);
     setError(null);
-    
+
     try {
       if (playerRef.current && typeof playerRef.current.getDuration === 'function') {
         void playerRef.current.getDuration().then((dur: number) => {
           if (dur > 0 && mountedRef.current) {
             console.log('[Autoplay] Duration from onReady:', dur);
             setDuration(dur);
+            durationRef.current = dur;
           }
         }).catch((err: any) => {
           console.log('[Autoplay] Could not get duration on ready:', err);
@@ -549,100 +508,35 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
+    // ONE bootstrap per video — nothing else
     if (autoplay && !manualPauseRef.current) {
-      desiredPlayRef.current = true;
-      mediaLoadedRef.current = true;
-      void runWarmupSeek().finally(() => {
-        requestPlayState(true);
-      });
-
-      if (Platform.OS !== 'web') {
-        void runForcedAutoplaySeek();
-
-        if (!autoplayPulseDoneRef.current) {
-          autoplayPulseDoneRef.current = true;
-          requestPlayState(true);
-          autoplayPulseTimerRef.current = setTimeout(() => {
-            if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-            requestPlayState(false);
-            setTimeout(() => {
-              if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-              requestPlayState(true);
-            }, 180);
-          }, 220);
-        }
-
-        if (autoplayRecoveryTimerRef.current) {
-          clearTimeout(autoplayRecoveryTimerRef.current);
-        }
-        autoplayRecoveryTimerRef.current = setTimeout(async () => {
-          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          if (manualPauseRef.current) return;
-          if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
-          if (isPlayingRef.current || currentTimeRef.current > 0.25) return;
-
-          try {
-            const base = Math.max(currentTimeRef.current, 0);
-            const nudge = Math.min(base + 0.12, Math.max(durationRef.current - 0.05, 0.12));
-            console.log('[Autoplay] Native recovery nudge seek:', base, '->', nudge);
-            await playerRef.current.seekTo(nudge, true);
-            await new Promise(resolve => setTimeout(resolve, 140));
-            await playerRef.current.seekTo(base, true);
-            requestPlayState(true);
-          } catch (e) {
-            console.log('[Autoplay] Native recovery nudge failed:', e);
-          }
-        }, 1800);
-
-        if (autoplayWatchdogTimerRef.current) {
-          clearTimeout(autoplayWatchdogTimerRef.current);
-        }
-        autoplayWatchdogTimerRef.current = setTimeout(async () => {
-          if (!mountedRef.current || activeVideoIdRef.current !== videoId) return;
-          if (manualPauseRef.current) return;
-          if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
-          if (isPlayingRef.current || currentTimeRef.current > 0.35) return;
-
-          try {
-            console.log('[Autoplay] Watchdog forcing play retry');
-            await playerRef.current.seekTo(1, true);
-            await new Promise(resolve => setTimeout(resolve, 180));
-            await playerRef.current.seekTo(0, true);
-            requestPlayState(true);
-          } catch (e) {
-            console.log('[Autoplay] Watchdog retry failed:', e);
-          }
-        }, 2800);
-      }
+      void runAutoplayBootstrap();
     }
+  }, [autoplay, videoId, runAutoplayBootstrap]);
 
-    if (autoplay && !autoplayTriggeredRef.current) {
-      autoplayTriggeredRef.current = true;
-      console.log('[Autoplay] Player ready — starting autoplay:', activeVideoIdRef.current);
-      startAutoplay();
-    }
-  }, [autoplay, requestPlayState, runForcedAutoplaySeek, runWarmupSeek, startAutoplay]);
-
+  // ── Player error handler ────────────────────────────────────────────────
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
     setPlayerError(true);
     setPlayerReady(false);
-    requestPlayState(false);
+    bootstrapIntentRef.current++; // cancel bootstrap
+    autoplayBootstrapRunningRef.current = false;
+    desiredPlayRef.current = false;
+    setPlayerPlayCommand(false);
+    setIsPlaying(false);
+    isPlayingRef.current = false;
     stopProgressTracking();
-  }, [requestPlayState, stopProgressTracking]);
+  }, [stopProgressTracking]);
 
+  // ── State change handler — AUTHORITATIVE for isPlayingRef ───────────────
+  // Only this callback sets isPlayingRef. It NEVER issues new playback commands.
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('Player state:', state, 'for video:', activeVideoIdRef.current);
 
     if (state === 'playing') {
-      clearCommandWatchdog();
-      lastRequestedStateRef.current = true;
-      autoplayInProgressRef.current = false;
-      clearAutoplayTimer();
       isPlayingRef.current = true;
-      setPlayerPlayCommand(true);
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);
       console.log('[Playback] actual state playing');
@@ -651,13 +545,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'paused') {
-      clearCommandWatchdog();
-      lastRequestedStateRef.current = false;
-      // Always trust real player paused state (prevents UI-only pause masking)
-      autoplayInProgressRef.current = false;
-      lastManualToggleTargetRef.current = null;
       isPlayingRef.current = false;
-      setPlayerPlayCommand(false);
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
       console.log('[Playback] actual state paused');
@@ -671,10 +559,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         return;
       }
       onEndCalledRef.current = true;
-      autoplayInProgressRef.current = false;
       isPlayingRef.current = false;
-      setPlayerPlayCommand(false);
       setIsPlaying(false);
+      onPlayingChangeRef.current?.(false);
       stopProgressTracking();
       setCurrentTime(0);
       console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
@@ -691,7 +578,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     } else if (state === 'unstarted') {
       console.log('[Autoplay] Player unstarted');
     }
-  }, [clearAutoplayTimer, clearCommandWatchdog, startProgressTracking, stopProgressTracking]);
+  }, [startProgressTracking, stopProgressTracking]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -703,6 +590,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  // ── Manual play/pause button ────────────────────────────────────────────
+  // Uses desiredPlayRef for requested state. Does NOT set isPlayingRef —
+  // that is reserved for onStateChange (confirmed YouTube state).
   const handlePlayPause = useCallback(() => {
     if (playerError || !playerReady) {
       console.log('Player not ready for play/pause');
@@ -711,59 +601,34 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const nextState = !isPlayingRef.current;
-    lastManualToggleTargetRef.current = nextState;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState);
+    // Cancel any in-flight autoplay bootstrap — user intent wins
+    bootstrapIntentRef.current++;
+    autoplayBootstrapRunningRef.current = false;
 
-    clearAutoplayTimer();
-    autoplayInProgressRef.current = false;
-    if (!nextState) {
-      console.log('[Playback] manual pause cancelled autoplay');
-    }
-    desiredPlayRef.current = nextState;
-    lastRequestedStateRef.current = nextState;
+    const nextState = !desiredPlayRef.current;
+    console.log(nextState ? '[Playback] user requested play' : '[Playback] user requested pause');
+
     manualPauseRef.current = !nextState;
 
-    isPlayingRef.current = nextState;
-    setPlayerPlayCommand(nextState);
+    // Optimistically update UI state for instant feedback.
+    // isPlayingRef stays untouched — onStateChange will confirm.
     setIsPlaying(nextState);
     onPlayingChangeRef.current?.(nextState);
 
-    try {
-      void requestPlayState(nextState);
+    void requestPlayState(nextState);
 
-      clearCommandWatchdog();
-      commandWatchdogRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        const actual = isPlayingRef.current;
-        if (actual !== nextState) {
-          console.log('[PlayPause] Watchdog retry imperative command:', nextState);
-          sendNativeImperativeCommand(nextState);
-        }
-      }, 350);
-
-      if (!nextState) {
-        stopProgressTracking();
-      } else {
-        startProgressTracking();
-      }
-    } catch (err) {
-      console.error('Manual play/pause failed:', err);
+    if (!nextState) {
+      stopProgressTracking();
+    } else {
+      startProgressTracking();
     }
   }, [
     playerError,
     playerReady,
-    clearAutoplayTimer,
-    clearCommandWatchdog,
     requestPlayState,
-    sendNativeImperativeCommand,
     stopProgressTracking,
     startProgressTracking,
   ]);
-
-  useEffect(() => {
-    wasPlayingBeforeAdRef.current = isPlayingRef.current;
-  }, [isPlaying]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
@@ -824,10 +689,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
+  // ── Web player ──────────────────────────────────────────────────────────
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const postMessageToWebPlayerRef = useRef<((command: string, args?: any) => void) | null>(null);
   const webPlayerReadyRef = useRef(false);
   const webProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const webAutoplayTriggeredRef = useRef(false);
 
   const postMessageToWebPlayer = useCallback((command: string, args?: any) => {
     try {
@@ -860,39 +727,37 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           setPlayerError(false);
           setError(null);
 
-          if (autoplay && !autoplayTriggeredRef.current) {
-            autoplayTriggeredRef.current = true;
-            autoplayInProgressRef.current = true;
+          if (autoplay && !webAutoplayTriggeredRef.current) {
+            webAutoplayTriggeredRef.current = true;
+            desiredPlayRef.current = true;
             setTimeout(() => {
               if (mountedRef.current) {
                 postMessageToWebPlayer('playVideo');
-                requestPlayState(true);
+                setPlayerPlayCommand(true);
               }
             }, 300);
           }
         } else if (data.event === 'onStateChange') {
           const state = data.info;
-          if (state === 1) {
-            autoplayInProgressRef.current = false;
+          if (state === 1) { // playing
             isPlayingRef.current = true;
             setIsPlaying(true);
             onPlayingChangeRef.current?.(true);
+            console.log('[Playback] actual state playing');
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
                 postMessageToWebPlayer('getDuration');
               }, 500);
             }
-          } else if (state === 2) {
-            if (!autoplayInProgressRef.current) {
-              isPlayingRef.current = false;
-              setIsPlaying(false);
-              onPlayingChangeRef.current?.(false);
-            }
-          } else if (state === 0) {
+          } else if (state === 2) { // paused
+            isPlayingRef.current = false;
+            setIsPlaying(false);
+            onPlayingChangeRef.current?.(false);
+            console.log('[Playback] actual state paused');
+          } else if (state === 0) { // ended
             if (!onEndCalledRef.current) {
               onEndCalledRef.current = true;
-              autoplayInProgressRef.current = false;
               isPlayingRef.current = false;
               setIsPlaying(false);
               onPlayingChangeRef.current?.(false);
@@ -923,7 +788,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webProgressIntervalRef.current = null;
       }
     };
-  }, [videoId, autoplay, requestPlayState, postMessageToWebPlayer]);
+  }, [videoId, autoplay, postMessageToWebPlayer]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -933,6 +798,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       postMessageToWebPlayer('pauseVideo');
     }
   }, [isPlaying, postMessageToWebPlayer]);
+
+  // Reset web autoplay trigger on video change
+  useEffect(() => {
+    webAutoplayTriggeredRef.current = false;
+  }, [videoId]);
 
   const webPlayerElement = Platform.OS === 'web' ? (
     <View style={styles.hiddenPlayer}>
@@ -1045,18 +915,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       </View>
 
       <View style={styles.controls}>
-        <TouchableOpacity 
-          onPress={handlePrevious} 
-          style={[styles.navButton, !onPrevious && styles.buttonDisabled]} 
+        <TouchableOpacity
+          onPress={handlePrevious}
+          style={[styles.navButton, !onPrevious && styles.buttonDisabled]}
           disabled={!onPrevious}
           activeOpacity={0.7}
         >
           <SkipBack size={22} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={() => void handleSkipBackward()} 
-          style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
+        <TouchableOpacity
+          onPress={() => void handleSkipBackward()}
+          style={[styles.seekButton, !playerReady && styles.buttonDisabled]}
           disabled={!playerReady}
           activeOpacity={0.7}
         >
@@ -1064,8 +934,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           <Text style={styles.seekLabel}>15</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={handlePlayPause} 
+        <TouchableOpacity
+          onPress={handlePlayPause}
           style={styles.playButton}
           activeOpacity={0.8}
         >
@@ -1078,9 +948,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={() => void handleSkipForward()} 
-          style={[styles.seekButton, !playerReady && styles.buttonDisabled]} 
+        <TouchableOpacity
+          onPress={() => void handleSkipForward()}
+          style={[styles.seekButton, !playerReady && styles.buttonDisabled]}
           disabled={!playerReady}
           activeOpacity={0.7}
         >
@@ -1088,9 +958,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           <Text style={styles.seekLabel}>15</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={handleNext} 
-          style={[styles.navButton, !onNext && styles.buttonDisabled]} 
+        <TouchableOpacity
+          onPress={handleNext}
+          style={[styles.navButton, !onNext && styles.buttonDisabled]}
           disabled={!onNext}
           activeOpacity={0.7}
         >
