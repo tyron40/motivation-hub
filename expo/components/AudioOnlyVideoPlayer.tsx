@@ -156,6 +156,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const loggedPlaybackMethodsRef = useRef(false);
   const sendNativeImperativeCommand = useCallback((newState: boolean) => {
     try {
+      console.log('[Manual Playback] native methods', {
+        requested: newState,
+        refExists: Boolean(playerRef.current),
+        playVideo: typeof playerRef.current?.playVideo,
+        pauseVideo: typeof playerRef.current?.pauseVideo,
+        seekTo: typeof playerRef.current?.seekTo,
+      });
       if (!playerRef.current) return;
       if (!loggedPlaybackMethodsRef.current) {
         loggedPlaybackMethodsRef.current = true;
@@ -167,6 +174,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       const fn = newState ? playerRef.current.playVideo : playerRef.current.pauseVideo;
       if (typeof fn === 'function') {
+        console.log('[Manual Playback] calling', newState ? 'playVideo' : 'pauseVideo');
         fn.call(playerRef.current);
       }
     } catch (e) {
@@ -575,6 +583,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
     console.log('[Playback] YouTube state:', state);
+    console.log('[Manual Playback] YouTube state:', state);
 
     if (state === 'playing') {
       isPlayingRef.current = true;
@@ -621,6 +630,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // Uses desiredPlayRef for requested state. Does NOT set isPlayingRef —
   // that is reserved for onStateChange (confirmed YouTube state).
   const handlePlayPause = useCallback(() => {
+    console.log('[Manual Playback] button pressed', {
+      desiredBefore: desiredPlayRef.current,
+      actualBefore: isPlayingRef.current,
+      ready: playerReadyRef.current,
+      error: playerErrorRef.current,
+    });
     if (!playerReadyRef.current || playerErrorRef.current) {
       console.log('[Playback] button blocked — ready:', playerReadyRef.current, 'error:', playerErrorRef.current);
       return;
@@ -649,6 +664,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       currentActualState: isPlayingRef.current,
     });
 
+    console.log('[Manual Playback] requesting', nextState ? 'PLAY' : 'PAUSE');
     void requestPlayState(nextState);
 
     if (!nextState) {
