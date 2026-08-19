@@ -30,6 +30,10 @@ if (Platform.OS !== 'web') {
   }
 }
 
+// YouTube IFrame API requires a player viewport of at least 200x200.
+// The native player is hosted at 220x220 but visually hidden.
+const NATIVE_PLAYER_SIZE = 220;
+
 interface AudioOnlyVideoPlayerProps {
   videoId: string;
   title: string;
@@ -842,12 +846,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   ) : null;
 
   const nativePlayerElement = Platform.OS !== 'web' && YoutubePlayer ? (
-    <View style={styles.hiddenPlayer}>
+    <View
+      pointerEvents="none"
+      style={styles.nativePlayerHost}
+    >
       <YoutubePlayer
         ref={playerRef}
         videoId={videoId}
-        height={1}
-        width={1}
+        height={NATIVE_PLAYER_SIZE}
+        width={NATIVE_PLAYER_SIZE}
         play={playerPlayCommand}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
@@ -860,7 +867,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           playsinline: true,
           preventFullScreen: true,
         }}
-        webViewStyle={styles.hiddenWebView}
+        webViewStyle={styles.nativePlayerWebView}
+        webViewProps={{
+          allowsInlineMediaPlayback: true,
+          mediaPlaybackRequiresUserAction: false,
+        }}
       />
     </View>
   ) : null;
@@ -1071,6 +1082,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -9999,
     left: -9999,
+  },
+  nativePlayerHost: {
+    width: 220,
+    height: 220,
+    position: 'absolute',
+    top: 0,
+    left: '50%',
+    marginLeft: -110,
+    opacity: 0.01,
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  nativePlayerWebView: {
+    width: 220,
+    height: 220,
+    backgroundColor: 'transparent',
   },
   hiddenWebView: {
     backgroundColor: 'transparent',
