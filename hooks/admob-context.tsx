@@ -4,6 +4,7 @@ import { Alert, Platform } from 'react-native';
 import { useIAP } from './iap-context';
 import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
+import AppodealManager from '@/lib/AppodealManager';
 
 const { REWARD_AMOUNT } = AD_CONFIG;
 
@@ -16,8 +17,20 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const manager = useMemo(() => AdManager.getInstance(), []);
+  const appodeal = useMemo(() => AppodealManager.getInstance(), []);
 
   useEffect(() => {
+    const reportAdState = () => {
+      if (appodeal.active) {
+        setIsRewardedAdLoaded(appodeal.rewardedLoaded);
+        setIsInterstitialAdLoaded(appodeal.interstitialLoaded);
+      } else {
+        const state = manager.getState();
+        setIsRewardedAdLoaded(state.isRewardedReady);
+        setIsInterstitialAdLoaded(state.isInterstitialReady);
+      }
+    };
+
     manager.setRewardCallback(async (reward: any) => {
       console.log('🎁 [AdMob] Reward earned:', reward);
       await addCredits(REWARD_AMOUNT);
@@ -28,36 +41,45 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       );
     });
 
-    manager.setEventCallback((_event: string) => {
-      const state = manager.getState();
-      setIsRewardedAdLoaded(state.isRewardedReady);
-      setIsInterstitialAdLoaded(state.isInterstitialReady);
+    // Appodeal mediation layer — same reward flow as the AdMob path.
+    appodeal.setRewardCallback(async (reward: any) => {
+      console.log('🎁 [Appodeal] Reward earned:', reward);
+      await addCredits(REWARD_AMOUNT);
+      Alert.alert(
+        '🎉 Reward Earned!',
+        `You earned ${REWARD_AMOUNT} credits!`,
+        [{ text: 'Awesome!' }]
+      );
     });
+
+    manager.setEventCallback((_event: string) => reportAdState());
+    appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
       await manager.initialize();
+      appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
       setIsInitialized(true);
-      const state = manager.getState();
-      setIsRewardedAdLoaded(state.isRewardedReady);
-      setIsInterstitialAdLoaded(state.isInterstitialReady);
+      reportAdState();
     };
 
     void init();
 
-    pollRef.current = setInterval(() => {
-      const state = manager.getState();
-      setIsRewardedAdLoaded(state.isRewardedReady);
-      setIsInterstitialAdLoaded(state.isInterstitialReady);
-    }, 2000);
+    pollRef.current = setInterval(() => reportAdState(), 2000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [manager, addCredits]);
+  }, [manager, appodeal, addCredits]);
 
   const canShowAds = useMemo(() => {
     return !usageStats.isAdFree;
   }, [usageStats.isAdFree]);
+
+  // Premium (RevenueCat) users: immediately stop all Appodeal ad displays,
+  // including any visible banner, the moment the entitlement is active.
+  useEffect(() => {
+    appodeal.setPremiumDisabled(!canShowAds);
+  }, [appodeal, canShowAds]);
 
   const showRewardedAd = useCallback(async () => {
     if (!canShowAds) {
@@ -73,6 +95,20 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     if (isShowingAd) {
       console.warn('⚠️ Ad already showing');
       return false;
+    }
+
+    // Appodeal mediation takes priority when active; otherwise AdMob serves.
+    if (appodeal.active && appodeal.rewardedLoaded) {
+      try {
+        setIsShowingAd(true);
+        const shown = await appodeal.showRewarded();
+        setIsShowingAd(false);
+        return shown;
+      } catch (error: any) {
+        console.error('❌ Error showing Appodeal rewarded ad:', error);
+        setIsShowingAd(false);
+        return false;
+      }
     }
 
     if (!manager.rewardedReady) {
@@ -96,7 +132,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       Alert.alert('Error', 'Unable to show ad. Please try again later.');
       return false;
     }
-  }, [canShowAds, isShowingAd, manager]);
+  }, [canShowAds, isShowingAd, manager, appodeal]);
 
   const showInterstitialAd = useCallback(async () => {
     if (!canShowAds) {
@@ -107,6 +143,24 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     if (isShowingAd) {
       console.warn('⚠️ Ad already showing');
       return false;
+    }
+
+    // Appodeal mediation takes priority when active; otherwise AdMob serves.
+    if (appodeal.active) {
+      if (!appodeal.canShowInterstitial()) {
+        console.log('📡 [Appodeal] Interstitial not available or cooldown active');
+        return false;
+      }
+      try {
+        setIsShowingAd(true);
+        const shown = await appodeal.showInterstitial();
+        setIsShowingAd(false);
+        return shown;
+      } catch (error: any) {
+        console.error('❌ Error showing Appodeal interstitial:', error);
+        setIsShowingAd(false);
+        return false;
+      }
     }
 
     if (!manager.canShowInterstitial()) {
@@ -124,7 +178,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       setIsShowingAd(false);
       return false;
     }
-  }, [canShowAds, isShowingAd, manager]);
+  }, [canShowAds, isShowingAd, manager, appodeal]);
 
   const recordInteraction = useCallback(() => {
     return manager.recordInteraction();
@@ -132,6 +186,24 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
   const tryShowInterstitialOnTransition = useCallback(async () => {
     if (!canShowAds || isShowingAd) return false;
+
+    // Appodeal mediation takes priority when active; otherwise AdMob serves.
+    if (appodeal.active) {
+      const shouldShow = appodeal.recordInteraction();
+      if (shouldShow && appodeal.canShowInterstitial()) {
+        try {
+          setIsShowingAd(true);
+          const shown = await appodeal.showInterstitial();
+          setIsShowingAd(false);
+          return shown;
+        } catch {
+          setIsShowingAd(false);
+          return false;
+        }
+      }
+      return false;
+    }
+
     const shouldShow = manager.recordInteraction();
     if (shouldShow && manager.canShowInterstitial()) {
       try {
@@ -145,7 +217,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       }
     }
     return false;
-  }, [canShowAds, isShowingAd, manager]);
+  }, [canShowAds, isShowingAd, manager, appodeal]);
 
   return useMemo(
     () => ({
