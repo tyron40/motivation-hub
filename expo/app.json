@@ -95,6 +95,13 @@
           "androidAppId": "ca-app-pub-7788769813708919~4966903177",
           "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
         }
+      ],
+      [
+        "./plugins/with-appodeal",
+        {
+          "iosAppId": "ca-app-pub-7788769813708919~4966903177",
+          "userTrackingUsageDescription": "Motivation Fuel uses your advertising identifier to deliver more relevant ads."
+        }
       ]
     ],
     "extra": {
