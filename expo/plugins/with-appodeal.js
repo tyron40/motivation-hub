@@ -137,15 +137,14 @@ function withAppodealInfoPlist(config, props) {
         'Motivation Fuel uses your advertising identifier to deliver more relevant ads.';
     }
 
-    // ATS: only the Appodeal-required local networking exception.
-    // Existing ATS settings (incl. NSAllowsArbitraryLoads: false) are preserved.
-    if (infoPlist.NSAppTransportSecurity) {
-      if (infoPlist.NSAppTransportSecurity.NSAllowsLocalNetworking === undefined) {
-        infoPlist.NSAppTransportSecurity.NSAllowsLocalNetworking = true;
-      }
-    } else {
-      infoPlist.NSAppTransportSecurity = { NSAllowsLocalNetworking: true };
-    }
+    // ATS: Appodeal SDK requires arbitrary loads to serve ads
+    // (docs.appodeal.com/ios/get-started and react-native-appodeal README,
+    // SDK 4.x). NSAllowsLocalNetworking covers local ad assets. Existing
+    // exception domains are preserved.
+    const ats = infoPlist.NSAppTransportSecurity || {};
+    ats.NSAllowsArbitraryLoads = true;
+    ats.NSAllowsLocalNetworking = true;
+    infoPlist.NSAppTransportSecurity = ats;
 
     // SKAdNetworkItems — merge + dedupe with existing entries.
     const existing = Array.isArray(infoPlist.SKAdNetworkItems)
