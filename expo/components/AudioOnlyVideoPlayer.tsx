@@ -112,7 +112,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const currentTimeRef = useRef(0);
   const isSeekingRef = useRef(isSeeking);
 
-  // isPlayingRef: ONLY set by onStateChange — confirmed YouTube state.
+  // isPlayingRef: confirmed YouTube state (onStateChange + state sync).
   const isPlayingRef = useRef(false);
   const playerReadyRef = useRef(false);
   const playerErrorRef = useRef(false);
@@ -121,11 +121,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // desiredPlayRef: what the user/app last requested (play or pause).
   const desiredPlayRef = useRef(false);
   const manualPauseRef = useRef(false);
-  // Position captured on manual pause — used to freeze actual media and resume.
-  const manualPausedPositionRef = useRef<number | null>(null);
-  // Bumped on every manual Play/Pause press; stale async play nudges bail on mismatch.
-  const manualPlayIntentRef = useRef(0);
+  const lastRequestedStateRef = useRef<boolean | null>(null);
+  const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastManualToggleTargetRef = useRef<boolean | null>(null);
   const wasPlayingBeforeAdRef = useRef(false);
+
+  const clearCommandWatchdog = useCallback(() => {
+    if (commandWatchdogRef.current) {
+      clearTimeout(commandWatchdogRef.current);
+      commandWatchdogRef.current = null;
+    }
+  }, []);
 
   // ── Autoplay bootstrap refs ─────────────────────────────────────────────
   // ONE deterministic bootstrap per video. Self-disables after firing.
@@ -150,12 +156,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { playerReadyRef.current = playerReady; }, [playerReady]);
   useEffect(() => { playerErrorRef.current = playerError; }, [playerError]);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { isSeekingRef.current = isSeeking; }, [isSeeking]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  // Clear any pending command watchdog on unmount.
+  useEffect(() => {
+    return () => clearCommandWatchdog();
+  }, [clearCommandWatchdog]);
 
   // Optional diagnostic/fallback ONLY — playback is driven by the `play` prop
   // (playerPlayCommand). playVideo/pauseVideo are NOT documented ref methods
@@ -191,6 +203,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
     console.log(newState ? '[Playback] request play' : '[Playback] request pause');
     desiredPlayRef.current = newState;
+    lastRequestedStateRef.current = newState;
 
     if (Platform.OS === 'web') {
       postMessageToWebPlayerRef.current?.(newState ? 'playVideo' : 'pauseVideo');
@@ -241,55 +254,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
       if (!playerReadyRef.current || playerErrorRef.current) {
-        console.log('[Playback] toggle blocked — ready:', playerReadyRef.current, 'error:', playerErrorRef.current);
+        console.log('Player not ready for toggle');
         return;
       }
-
-      bootstrapIntentRef.current++;
-      autoplayBootstrapRunningRef.current = false;
-
-      const newState = !desiredPlayRef.current;
-
-      console.log(
-        newState
-          ? '[Playback] ref requested play'
-          : '[Playback] ref requested pause'
-      );
-
-      manualPauseRef.current = !newState;
-
-      setIsPlaying(newState);
-      onPlayingChangeRef.current?.(newState);
-
+      const newState = !isPlayingRef.current;
+      console.log('Ref togglePlay:', isPlayingRef.current, '->', newState);
       void requestPlayState(newState);
     },
     play: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
-
-      bootstrapIntentRef.current++;
-      autoplayBootstrapRunningRef.current = false;
-
-      manualPauseRef.current = false;
-
-      setIsPlaying(true);
-      onPlayingChangeRef.current?.(true);
-
-      void requestPlayState(true);
+      if (isPlayingRef.current) return;
+      requestPlayState(true);
     },
     pause: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
-
-      bootstrapIntentRef.current++;
-      autoplayBootstrapRunningRef.current = false;
-
-      manualPauseRef.current = true;
-
-      setIsPlaying(false);
-      onPlayingChangeRef.current?.(false);
-
-      stopProgressTracking();
-
-      void requestPlayState(false);
+      if (!isPlayingRef.current) return;
+      requestPlayState(false);
     },
     pauseForAd: () => {
       wasPlayingBeforeAdRef.current = isPlayingRef.current || desiredPlayRef.current;
@@ -360,7 +340,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('[Playback] component mounted for videoId:', videoId);
     activeVideoIdRef.current = videoId;
     manualPauseRef.current = false;
-    manualPausedPositionRef.current = null;
+    lastManualToggleTargetRef.current = null;
+    clearCommandWatchdog();
     onEndCalledRef.current = false;
     desiredPlayRef.current = false;
     isPlayingRef.current = false;
@@ -636,164 +617,48 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, [startProgressTracking, stopProgressTracking]);
 
-  // ── Manual media control (native only) ───────────────────────────────
-  // The play prop alone is not reliably obeyed by the native YouTube iframe.
-  // Pause freezes the actual media at the captured position; Play falls back
-  // to the proven seek nudge only when direct play is not confirmed by
-  // onStateChange. Autoplay (runAutoplayBootstrap) stays completely separate.
-  const runManualPauseFreeze = useCallback(async () => {
-    if (Platform.OS === 'web') return;
-
-    console.log('[Manual Media] pause requested');
-
-    const player = playerRef.current;
-    let pausedPosition = currentTimeRef.current;
-    if (player && typeof player.getCurrentTime === 'function') {
-      try {
-        const t = await player.getCurrentTime();
-        if (typeof t === 'number' && !Number.isNaN(t)) {
-          pausedPosition = t;
-        }
-      } catch {
-        // keep tracked position
-      }
-    }
-    manualPausedPositionRef.current = pausedPosition;
-    console.log('[Manual Media] paused position', pausedPosition);
-
-    // Reassert the pause command.
-    setPlayerPlayCommand(false);
-
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    // If YouTube still reports playing, freeze the media at the pause point.
-    if (isPlayingRef.current && mountedRef.current && !desiredPlayRef.current) {
-      console.log('[Manual Media] pause freeze retry');
-      const p = playerRef.current;
-      if (p && typeof p.seekTo === 'function') {
-        try {
-          await p.seekTo(pausedPosition, true);
-        } catch {
-          // freeze is best-effort
-        }
-      }
-      setPlayerPlayCommand(false);
-    }
-  }, []);
-
-  const runManualPlayConfirm = useCallback(async () => {
-    if (Platform.OS === 'web') return;
-
-    console.log('[Manual Media] play requested');
-    const intentVersion = manualPlayIntentRef.current;
-
-    // Give direct play (play prop) a chance to confirm via onStateChange.
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const cancelled = () =>
-      intentVersion !== manualPlayIntentRef.current ||
-      manualPauseRef.current ||
-      !desiredPlayRef.current ||
-      !mountedRef.current;
-
-    if (cancelled()) {
-      console.log('[Manual Media] play nudge cancelled');
-      return;
-    }
-    if (isPlayingRef.current) return; // direct play confirmed — nothing else to do
-
-    const player = playerRef.current;
-    if (!player || typeof player.seekTo !== 'function') return;
-
-    console.log('[Manual Media] direct play failed, running seek nudge');
-
-    const resumePosition = manualPausedPositionRef.current ?? currentTimeRef.current;
-    const nudgeTarget = Math.min(
-      resumePosition + 1,
-      Math.max(durationRef.current - 1, 0)
-    );
-
-    try {
-      await player.seekTo(nudgeTarget, true);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      if (cancelled()) {
-        console.log('[Manual Media] play nudge cancelled');
-        return;
-      }
-
-      await player.seekTo(resumePosition, true);
-
-      if (cancelled()) {
-        console.log('[Manual Media] play nudge cancelled');
-        return;
-      }
-
-      setPlayerPlayCommand(true);
-      console.log('[Manual Media] play nudge complete');
-    } catch (e) {
-      console.log('[Manual Media] play nudge failed:', e);
-    }
-  }, []);
-
-  // ── Manual play/pause button ──────────────────────────────────────────
-  // Uses desiredPlayRef for requested state. Does NOT set isPlayingRef —
-  // that is reserved for onStateChange (confirmed YouTube state).
+  // ── Manual play/pause button ───────────────────────────────────────────────
+  // Restored from working commit 08dce452: manual target toggle +
+  // imperative command watchdog. No manual seek workarounds.
   const handlePlayPause = useCallback(() => {
-    console.log('[Manual Playback] button pressed', {
-      desiredBefore: desiredPlayRef.current,
-      actualBefore: isPlayingRef.current,
-      ready: playerReadyRef.current,
-      error: playerErrorRef.current,
-    });
     if (!playerReadyRef.current || playerErrorRef.current) {
-      console.log('[Playback] button blocked — ready:', playerReadyRef.current, 'error:', playerErrorRef.current);
+      console.log('Player not ready for play/pause');
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Cancel any in-flight autoplay bootstrap — user intent wins
+    const nextState = lastManualToggleTargetRef.current === null
+      ? !isPlayingRef.current
+      : !lastManualToggleTargetRef.current;
+    lastManualToggleTargetRef.current = nextState;
+    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState, '(manual target)');
+
+    // Cancel any in-flight one-shot autoplay bootstrap — user intent wins
     bootstrapIntentRef.current++;
     autoplayBootstrapRunningRef.current = false;
-    // Bump manual intent — cancels any in-flight play nudge (Pause wins).
-    manualPlayIntentRef.current++;
 
-    const nextState = !desiredPlayRef.current;
-    console.log(nextState ? '[Playback] user requested play' : '[Playback] user requested pause');
-
-    manualPauseRef.current = !nextState;
     desiredPlayRef.current = nextState;
+    lastRequestedStateRef.current = nextState;
+    manualPauseRef.current = !nextState;
 
-    // Optimistically update UI state for instant feedback.
-    // isPlayingRef stays untouched — onStateChange will confirm.
-    setIsPlaying(nextState);
-    onPlayingChangeRef.current?.(nextState);
-
-    console.log('[PlayPause Diagnostic]', {
-      requested: nextState,
-      playerRefExists: Boolean(playerRef.current),
-      playMethod: typeof playerRef.current?.playVideo,
-      pauseMethod: typeof playerRef.current?.pauseVideo,
-      currentActualState: isPlayingRef.current,
-    });
-
-    console.log('[Manual Playback] requesting', nextState ? 'PLAY' : 'PAUSE');
     void requestPlayState(nextState);
 
-    // Ensure the actual media obeys the manual command (native only).
-    if (nextState) {
-      void runManualPlayConfirm();
-    } else {
-      void runManualPauseFreeze();
-    }
+    clearCommandWatchdog();
+    commandWatchdogRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+      const actual = isPlayingRef.current;
+      if (actual !== nextState) {
+        console.log('[PlayPause] Watchdog retry imperative command:', nextState);
+        sendNativeImperativeCommand(nextState);
+      }
+    }, 350);
 
     if (!nextState) {
       stopProgressTracking();
     } else {
       startProgressTracking();
     }
-  }, [requestPlayState, stopProgressTracking, startProgressTracking, runManualPlayConfirm, runManualPauseFreeze]);
+  }, [clearCommandWatchdog, requestPlayState, sendNativeImperativeCommand, stopProgressTracking, startProgressTracking]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReadyRef.current || !playerRef.current) return;
