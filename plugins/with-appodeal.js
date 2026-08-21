@@ -41,8 +41,8 @@ def appodeal
   pod 'AppLovinMediationChartboostAdapter', '9.10.1.0'
   pod 'AppLovinMediationFacebookAdapter', '6.20.1.0'
   pod 'AppLovinMediationFyberAdapter', '8.4.1.0'
-  pod 'AppLovinMediationGoogleAdManagerAdapter', '12.13.0.0'
-  pod 'AppLovinMediationGoogleAdapter', '12.13.0.0'
+  pod 'AppLovinMediationGoogleAdManagerAdapter', '13.5.0.0'
+  pod 'AppLovinMediationGoogleAdapter', '13.5.0.0'
   pod 'AppLovinMediationInMobiAdapter', '11.1.0.0'
   pod 'AppLovinMediationIronSourceAdapter', '9.1.0.0.0'
   pod 'AppLovinMediationMintegralAdapter', '7.7.9.0.0'
@@ -57,7 +57,7 @@ def appodeal
   pod 'AppLovinMediationVungleAdapter', '7.6.2.0'
   pod 'AppLovinMediationYandexAdapter', '7.17.0.0'
   # Level Play
-  pod 'IronSourceAdMobAdapter', '5.3.0.0'
+  pod 'IronSourceAdMobAdapter', '5.10.0.0'
   pod 'IronSourceAppLovinAdapter', '5.3.0.0'
   pod 'IronSourceBidMachineAdapter', '5.7.0.0'
   pod 'IronSourceBigoAdapter', '5.1.0.0'
@@ -86,7 +86,7 @@ def appodeal
   pod 'AppodealDTExchangeAdapter', '8.4.1.0'
   pod 'AppodealFacebookAdapter', '18.0.1.0'
   pod 'AppodealFirebaseAdapter', '12.4.0.1'
-  pod 'AppodealGoogleAdMobAdapter', '12.13.0.0'
+  pod 'AppodealGoogleAdMobAdapter', '13.5.0.0'
   pod 'AppodealIABAdapter', '3.5.0.0'
   pod 'AppodealInMobiAdapter', '11.1.0.0'
   pod 'AppodealIronSourceAdapter', '9.1.0.0.0'
@@ -166,10 +166,13 @@ function withAppodealInfoPlist(config, props) {
 }
 
 function withAppodealPodfile(config) {
-  return withDangerousMod(config, 'ios', (cfg) => {
-    const podfilePath = path.join(cfg.modRequest.projectRoot, 'ios', 'Podfile');
+  return withDangerousMod(config, [
+    'ios',
+    (cfg) => {
+    const podfilePath = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
     if (!fs.existsSync(podfilePath)) {
-      return cfg; // no native project yet (e.g. config introspection)
+      console.log('[with-appodeal] Podfile not found, skipping');
+      return cfg;
     }
     let podfile = fs.readFileSync(podfilePath, 'utf8');
 
@@ -220,7 +223,7 @@ function withAppodealPodfile(config) {
     }
 
     // 4. Activate the pods inside the app target, right after native modules.
-    const nativeModulesIndex = podfile.search(/^\s*config = use_native_modules!.*$/m);
+    const nativeModulesIndex = podfile.search(/^[ \t]*config = use_native_modules!.*$/m);
     if (nativeModulesIndex >= 0) {
       const lineEnd =
         nativeModulesIndex + podfile.slice(nativeModulesIndex).indexOf('\n') + 1;
@@ -231,8 +234,10 @@ function withAppodealPodfile(config) {
     }
 
     fs.writeFileSync(podfilePath, podfile);
+    console.log('[with-appodeal] Appodeal pods + sources injected into Podfile');
     return cfg;
-  });
+  },
+  ]);
 }
 
 function withAppodeal(config, props = {}) {
