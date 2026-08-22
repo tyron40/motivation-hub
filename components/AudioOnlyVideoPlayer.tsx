@@ -44,6 +44,7 @@ interface AudioOnlyVideoPlayerProps {
   onError?: (error: string) => void;
   onNext?: () => void;
   onPrevious?: () => void;
+  hideUI?: boolean;
   onPlayingChange?: (isPlaying: boolean) => void;
   onProgressChange?: (currentTime: number, duration: number) => void;
 }
@@ -77,6 +78,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   thumbnail,
   channelTitle: _channelTitle,
   autoplay = true,
+  hideUI = false,
   onEnd,
   onError,
   onNext,
@@ -907,6 +909,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   ) : null;
 
   const hiddenPlayerElement = Platform.OS === 'web' ? webPlayerElement : nativePlayerElement;
+
+  // Persistent global playback mode.
+  // Keep the YouTube player mounted while suppressing the full player UI.
+  if (hideUI) {
+    return (
+      <View style={styles.container}>
+        {hiddenPlayerElement}
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (

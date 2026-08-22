@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+﻿import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -14,11 +14,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Heart, Share2, Plus } from 'lucide-react-native';
+import Slider from '@react-native-community/slider';
+import { ChevronDown, Heart, Share2, Plus, Play, Pause, SkipForward, SkipBack, RotateCcw, RotateCw } from 'lucide-react-native';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
-import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
-import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { usePlaylists } from '@/hooks/playlist-context';
@@ -35,20 +34,15 @@ export default function PlayerScreen() {
     setIsMinimized,
     currentPlaylist,
     audioPlayerRef,
-    setIsPlaying,
+    isPlaying,
+    currentTime,
+    duration,
     setCurrentTime,
-    setDuration,
   } = useSpeechContext();
   const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition, isShowingAd } = useAdMob();
   const { playlists, addToPlaylist } = usePlaylists();
-  const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const midpointAdShownRef = useRef(false);
-  const quarterAdShownRef = useRef(false);
-  const openAdShownRef = useRef(false);
-  const onEndLockedRef = useRef(false);
-  const adSessionRef = useRef(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const styles = getStyles(colors);
   const sortedPlaylists = useMemo(
@@ -56,56 +50,13 @@ export default function PlayerScreen() {
     [playlists]
   );
 
-  // ── Callback ref: assigns both local and shared refs immediately ───────
-  const setPlayerRef = useCallback(
-    (instance: AudioOnlyVideoPlayerRef | null) => {
-      localPlayerRef.current = instance;
-      audioPlayerRef.current = instance;
-      console.log('[Playback Trace] Player ref assigned:', Boolean(instance));
-    },
-    [audioPlayerRef],
-  );
-
+  // â”€â”€ Callback ref: assigns both local and shared refs immediately â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     setIsMinimized(false);
-    if (!openAdShownRef.current && canShowAds) {
-      openAdShownRef.current = true;
-      adSessionRef.current = true;
-      localPlayerRef.current?.pauseForAd();
-      console.log('[Ad] Player opened — attempting interstitial before speech starts');
-      void tryShowInterstitialOnTransition().finally(() => {
-        if (adSessionRef.current) {
-          adSessionRef.current = false;
-          localPlayerRef.current?.resumeAfterAd();
-        }
-      });
-    }
     return () => {
-      // Do NOT clear audioPlayerRef here — the callback ref owns it.
+      // GlobalYouTubePlayer owns audioPlayerRef and remains mounted.
     };
-  }, [setIsMinimized, canShowAds, tryShowInterstitialOnTransition]);
-
-  // ── Ad pause/resume — single authoritative path via isShowingAd ────────
-  // The opening ad is handled by the tryShowInterstitialOnTransition .finally() above.
-  // This effect handles midpoint/quarter ads triggered by handleProgressWithAds.
-  useEffect(() => {
-    if (isShowingAd) {
-      if (!adSessionRef.current) {
-        adSessionRef.current = true;
-        localPlayerRef.current?.pauseForAd();
-      }
-    } else {
-      if (adSessionRef.current) {
-        adSessionRef.current = false;
-        localPlayerRef.current?.resumeAfterAd();
-      }
-    }
-  }, [isShowingAd]);
-
-  useEffect(() => {
-    midpointAdShownRef.current = false;
-    quarterAdShownRef.current = false;
-  }, [currentSpeech]);
+  }, [setIsMinimized]);
 
   const handleMinimize = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -121,63 +72,48 @@ export default function PlayerScreen() {
     skipToPrevious();
   }, [skipToPrevious]);
 
-  const handlePlayingChange = useCallback((playing: boolean) => {
-    console.log('Player playing state changed:', playing);
-    setIsPlaying(playing);
-  }, [setIsPlaying]);
+  const handlePlayPause = useCallback(() => {
+    console.log('[Playback Trace] Player screen button pressed');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-  const handleProgressChange = useCallback((time: number, dur: number) => {
-    setCurrentTime(time);
-    if (dur > 0) {
-      setDuration(dur);
+    if (audioPlayerRef.current?.togglePlay) {
+      audioPlayerRef.current.togglePlay();
+    } else {
+      console.warn('[Playback Trace] Global player ref or togglePlay missing');
     }
-  }, [setCurrentTime, setDuration]);
+  }, [audioPlayerRef]);
 
-  const handleEnd = useCallback(async () => {
-    try {
-      if (onEndLockedRef.current) {
-        console.log('onEnd already processing, skipping');
-        return;
-      }
-      onEndLockedRef.current = true;
-      console.log('Audio playback ended');
-      midpointAdShownRef.current = false;
-      if (canShowAds) {
-        try {
-          const shown = await tryShowInterstitialOnTransition();
-          if (shown) {
-            console.log('[Ad] Speech ended — showed interstitial');
-          }
-        } catch (adErr) {
-          console.log('Ad error on end, continuing:', adErr);
-        }
-      }
-      handleNext();
-    } catch (err) {
-      console.error('Error in handleEnd:', err);
-    } finally {
-      setTimeout(() => { onEndLockedRef.current = false; }, 2000);
+  const handleSkipForward = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    audioPlayerRef.current?.seekForward?.(15);
+  }, [audioPlayerRef]);
+
+  const handleSkipBackward = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    audioPlayerRef.current?.seekBackward?.(15);
+  }, [audioPlayerRef]);
+
+  const handleSliderChange = useCallback((value: number) => {
+    setCurrentTime(value);
+  }, [setCurrentTime]);
+
+  const handleSliderComplete = useCallback(async (value: number) => {
+    await audioPlayerRef.current?.seekTo?.(value);
+    setCurrentTime(value);
+  }, [audioPlayerRef, setCurrentTime]);
+
+  const formatDuration = (seconds: number): string => {
+    const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    const h = Math.floor(safeSeconds / 3600);
+    const m = Math.floor((safeSeconds % 3600) / 60);
+    const s = Math.floor(safeSeconds % 60);
+
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
-  }, [canShowAds, tryShowInterstitialOnTransition, handleNext]);
 
-  const handleProgressWithAds = useCallback((time: number, dur: number) => {
-    handleProgressChange(time, dur);
-    if (adSessionRef.current) return;
-    if (canShowAds && dur > 0) {
-      const progress = time / dur;
-      if (!quarterAdShownRef.current && dur >= 120 && progress >= 0.25 && progress < 0.30) {
-        quarterAdShownRef.current = true;
-        console.log('[Ad] 25% reached — showing interstitial');
-        void showInterstitialAd();
-      }
-      if (!midpointAdShownRef.current && dur >= 60 && progress >= 0.5 && progress < 0.55) {
-        midpointAdShownRef.current = true;
-        console.log('[Ad] Midpoint reached — showing interstitial');
-        void showInterstitialAd();
-      }
-    }
-  }, [handleProgressChange, canShowAds, showInterstitialAd]);
-
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
   const handleAddToPlaylist = useCallback(async () => {
     if (!currentSpeech) return;
     if (!playlists.length) {
@@ -291,48 +227,108 @@ export default function PlayerScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          {currentSpeech.youtubeId ? (
-            <View style={styles.playerWrapper}>
-              <AudioOnlyVideoPlayer
-                ref={setPlayerRef}
-                videoId={currentSpeech.youtubeId}
-                title={currentSpeech.title}
-                thumbnail={currentSpeech.youtubeId 
+          <Animated.View style={[styles.imageContainer, { transform: [{ scale: scaleAnim }] }]}>
+            <Image
+              source={{
+                uri: currentSpeech.youtubeId
                   ? `https://i.ytimg.com/vi/${currentSpeech.youtubeId}/hqdefault.jpg`
                   : currentSpeech.imageUrl
-                }
-                channelTitle={currentSpeech.speaker}
-                autoplay={true}
-                onError={(error: string) => {
-                  console.error('Audio playback error:', error);
-                }}
-                onEnd={handleEnd}
-                onNext={currentPlaylist.length > 1 ? handleNext : undefined}
-                onPrevious={currentPlaylist.length > 1 ? handlePrevious : undefined}
-                onPlayingChange={handlePlayingChange}
-                onProgressChange={handleProgressWithAds}
-              />
-            </View>
-          ) : (
-            <>
-              <Animated.View style={[styles.imageContainer, { transform: [{ scale: scaleAnim }] }]}>
-                <Image source={{ uri: currentSpeech.imageUrl }} style={styles.image} />
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.4)']}
-                  style={styles.imageGradient}
-                />
-              </Animated.View>
-              
-              <View style={styles.info}>
-                <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
-                <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{(currentSpeech.category || '').toUpperCase()}</Text>
-                </View>
-              </View>
-            </>
-          )}
+              }}
+              style={styles.image}
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.4)']}
+              style={styles.imageGradient}
+            />
+          </Animated.View>
 
+          <View style={styles.info}>
+            <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
+            <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{(currentSpeech.category || '').toUpperCase()}</Text>
+            </View>
+          </View>
+
+          <View style={styles.progressSection}>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={duration > 0 ? duration : 1}
+              value={Math.min(currentTime, duration > 0 ? duration : 1)}
+              onValueChange={handleSliderChange}
+              onSlidingComplete={handleSliderComplete}
+              minimumTrackTintColor="#FFFFFF"
+              maximumTrackTintColor="rgba(255,255,255,0.22)"
+              thumbTintColor="#FFFFFF"
+            />
+
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>{formatDuration(currentTime)}</Text>
+              <Text style={styles.timeText}>{formatDuration(duration)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.controls}>
+            <TouchableOpacity
+              onPress={handlePrevious}
+              style={[
+                styles.navButton,
+                currentPlaylist.length <= 1 && styles.buttonDisabled,
+              ]}
+              disabled={currentPlaylist.length <= 1}
+              activeOpacity={0.7}
+            >
+              <SkipBack size={22} color="#FFFFFF" fill="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleSkipBackward}
+              style={styles.seekButton}
+              activeOpacity={0.7}
+            >
+              <RotateCcw size={20} color="#FFFFFF" />
+              <Text style={styles.seekLabel}>15</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handlePlayPause}
+              style={styles.playButton}
+              activeOpacity={0.8}
+            >
+              {isPlaying ? (
+                <Pause size={32} color="#000000" fill="#000000" />
+              ) : (
+                <Play
+                  size={32}
+                  color="#000000"
+                  fill="#000000"
+                  style={{ marginLeft: 3 }}
+                />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleSkipForward}
+              style={styles.seekButton}
+              activeOpacity={0.7}
+            >
+              <RotateCw size={20} color="#FFFFFF" />
+              <Text style={styles.seekLabel}>15</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleNext}
+              style={[
+                styles.navButton,
+                currentPlaylist.length <= 1 && styles.buttonDisabled,
+              ]}
+              disabled={currentPlaylist.length <= 1}
+              activeOpacity={0.7}
+            >
+              <SkipForward size={22} color="#FFFFFF" fill="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
           <View style={styles.bottomActions}>
             <TouchableOpacity 
               onPress={() => toggleFavorite(currentSpeech.id)} 
@@ -527,6 +523,66 @@ const getStyles = (_colors: any) => StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
     opacity: 0.9,
+  },
+  progressSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -8,
+  },
+  timeText: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  navButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seekButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seekLabel: {
+    position: 'absolute',
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  playButton: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 2,
+    elevation: 10,
+  },
+  buttonDisabled: {
+    opacity: 0.3,
   },
   bottomActions: {
     flexDirection: 'row',

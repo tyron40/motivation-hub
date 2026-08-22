@@ -1,4 +1,4 @@
-import { Stack, Redirect } from "expo-router";
+﻿import { Stack, Redirect } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Platform } from "react-native";
@@ -18,6 +18,7 @@ import { ThemeProvider } from "@/hooks/theme-context";
 import { AdMobProvider } from "@/hooks/admob-context";
 import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
+import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -73,14 +74,14 @@ function AudioPlayerWrapper() {
       }
 
       if (currentSpeechYoutubeId) {
-        console.log('🎵 Skipping global AudioPlayer for YouTube video:', currentSpeechTitle);
+        console.log('ðŸŽµ Skipping global AudioPlayer for YouTube video:', currentSpeechTitle);
         setAudioUrl('');
         setIsLoadingAudio(false);
         return;
       }
 
       if (!currentSpeechAudioUrl) {
-        console.log('🎵 No audioUrl found for speech:', currentSpeechTitle);
+        console.log('ðŸŽµ No audioUrl found for speech:', currentSpeechTitle);
         setAudioUrl('');
         setIsLoadingAudio(false);
         return;
@@ -88,11 +89,11 @@ function AudioPlayerWrapper() {
 
       try {
         setIsLoadingAudio(true);
-        console.log('🎵 Loading audio URL for global player:', currentSpeechTitle);
+        console.log('ðŸŽµ Loading audio URL for global player:', currentSpeechTitle);
 
         timeoutId = setTimeout(() => {
           if (isMounted) {
-            console.warn('⚠️ Audio URL loading timeout');
+            console.warn('âš ï¸ Audio URL loading timeout');
             setIsLoadingAudio(false);
             handleAudioErrorRef.current?.('Audio loading timeout');
           }
@@ -104,14 +105,14 @@ function AudioPlayerWrapper() {
         if (timeoutId) clearTimeout(timeoutId);
 
         if (isMounted && url && typeof url === 'string' && url.trim().length > 0) {
-          console.log('✅ Setting audio URL for global player:', url);
+          console.log('âœ… Setting audio URL for global player:', url);
           setAudioUrl(url);
         } else {
-          console.warn('⚠️ Invalid audio URL received:', url);
+          console.warn('âš ï¸ Invalid audio URL received:', url);
           setAudioUrl('');
         }
       } catch (error) {
-        console.error('❌ Error loading audio URL:', error);
+        console.error('âŒ Error loading audio URL:', error);
         if (isMounted) {
           handleAudioErrorRef.current?.('Failed to load audio');
         }
@@ -241,6 +242,7 @@ function RootLayoutNav() {
         />
       </Stack>
       {isAuthenticated && <AudioPlayerWrapper />}
+      {isAuthenticated && <GlobalYouTubePlayer />}
     </>
   );
 }
@@ -254,7 +256,7 @@ export default function RootLayout() {
     
     const prepare = async () => {
       try {
-        console.log('🚀 Starting app initialization...');
+        console.log('ðŸš€ Starting app initialization...');
         
         if (Platform.OS !== 'web') {
           try {
@@ -266,9 +268,9 @@ export default function RootLayout() {
               shouldDuckAndroid: true,
               playThroughEarpieceAndroid: false,
             });
-            console.log('🔊 Background audio mode configured');
+            console.log('ðŸ”Š Background audio mode configured');
           } catch (audioErr) {
-            console.warn('⚠️ Failed to set audio mode:', audioErr);
+            console.warn('âš ï¸ Failed to set audio mode:', audioErr);
           }
         }
         
@@ -278,20 +280,20 @@ export default function RootLayout() {
         timeoutId = setTimeout(() => {
           if (Platform.OS !== 'web') {
             SplashScreen.hideAsync().catch((splashError) => {
-              console.warn('⚠️ Failed to hide splash screen:', splashError);
+              console.warn('âš ï¸ Failed to hide splash screen:', splashError);
             });
           }
         }, 500);
         
-        console.log('✅ App initialization completed');
+        console.log('âœ… App initialization completed');
       } catch (error) {
-        console.error('❌ Error during app initialization:', error);
+        console.error('âŒ Error during app initialization:', error);
         setInitError(error instanceof Error ? error.message : 'Unknown initialization error');
         setIsReady(true);
         
         if (Platform.OS !== 'web') {
           SplashScreen.hideAsync().catch((splashError) => {
-            console.warn('⚠️ Failed to hide splash screen after error:', splashError);
+            console.warn('âš ï¸ Failed to hide splash screen after error:', splashError);
           });
         }
       }
@@ -309,7 +311,7 @@ export default function RootLayout() {
   }
 
   if (initError) {
-    console.warn('⚠️ App started with initialization error:', initError);
+    console.warn('âš ï¸ App started with initialization error:', initError);
   }
 
   return (
