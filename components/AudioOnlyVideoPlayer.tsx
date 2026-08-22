@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -108,7 +108,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const isSeekingRef = useRef(isSeeking);
   const mountedRef = useRef(true);
 
-  // ── Autoplay bootstrap refs ─────────────────────────────────────────────
+  // â”€â”€ Autoplay bootstrap refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // ONE deterministic bootstrap per video. Self-disables after firing.
   const autoplayBootstrapDoneRef = useRef(false);
   const autoplayBootstrapRunningRef = useRef(false);
@@ -117,7 +117,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // seek cannot issue a Play command after the user pressed Pause.
   const bootstrapIntentRef = useRef(0);
 
-  // ── Play-state refs ──────────────────────────────────────────────────────
+  // â”€â”€ Play-state refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // desiredPlayRef: what the user/app last requested (play or pause).
   // isPlayingRef: confirmed YouTube state (onStateChange + state sync).
   const desiredPlayRef = useRef(false);
@@ -162,7 +162,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => clearCommandWatchdog();
   }, [clearCommandWatchdog]);
 
-  // Optional diagnostic/fallback ONLY — playback is driven by the `play` prop
+  // Optional diagnostic/fallback ONLY â€” playback is driven by the `play` prop
   // (playerPlayCommand). playVideo/pauseVideo are NOT documented ref methods
   // of react-native-youtube-iframe; undefined is expected, never an error.
   const sendNativeImperativeCommand = useCallback(
@@ -191,7 +191,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     []
   );
 
-  // ── requestPlayState — the single entry point for native play/pause ────
+  // â”€â”€ requestPlayState â€” the single entry point for native play/pause â”€â”€â”€â”€
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log(newState ? '[Playback] request play' : '[Playback] request pause');
@@ -212,7 +212,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('[Playback Prop] playerPlayCommand:', playerPlayCommand);
   }, [playerPlayCommand]);
 
-  // ── Progress tracking ───────────────────────────────────────────────────
+  // â”€â”€ Progress tracking â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
@@ -343,7 +343,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     };
   }, []);
 
-  // ── Video change: reset everything, cancel old bootstrap ────────────────
+  // â”€â”€ Video change: reset everything, cancel old bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     activeVideoIdRef.current = videoId;
     manualPauseRef.current = false;
@@ -437,12 +437,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, [videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── ONE-SHOT autoplay bootstrap ─────────────────────────────────────────
+  // â”€â”€ ONE-SHOT autoplay bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Fires once per video after onPlayerReady. Performs a silent seek 0->1->0
   // to activate the native player, then issues a play command. Self-disables
   // via autoplayBootstrapDoneRef so it never runs again for that video.
   // If the user presses Pause while the bootstrap is in flight, the intent
-  // ref is incremented and the async work bails out — no stale Play command.
+  // ref is incremented and the async work bails out â€” no stale Play command.
   const runAutoplayBootstrap = useCallback(async () => {
     if (Platform.OS === 'web') return;
     if (!autoplay) return;
@@ -454,7 +454,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
 
     autoplayBootstrapRunningRef.current = true;
-    autoplayBootstrapDoneRef.current = true; // lock — never run again for this video
+    autoplayBootstrapDoneRef.current = true; // lock â€” never run again for this video
     const intent = bootstrapIntentRef.current;
     desiredPlayRef.current = true;
 
@@ -512,7 +512,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     autoplayBootstrapRunningRef.current = false;
   }, [autoplay, videoId, requestPlayState]);
 
-  // ── Player ready handler ────────────────────────────────────────────────
+  // â”€â”€ Player ready handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
@@ -537,13 +537,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       console.log('[Autoplay] getDuration call failed:', e);
     }
 
-    // ONE bootstrap per video — nothing else
+    // ONE bootstrap per video â€” nothing else
     if (autoplay && !manualPauseRef.current) {
       void runAutoplayBootstrap();
     }
   }, [autoplay, videoId, runAutoplayBootstrap]);
 
-  // ── Player error handler ────────────────────────────────────────────────
+  // â”€â”€ Player error handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
@@ -558,7 +558,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     stopProgressTracking();
   }, [stopProgressTracking]);
 
-  // ── State change handler — AUTHORITATIVE for isPlayingRef ───────────────
+  // â”€â”€ State change handler â€” AUTHORITATIVE for isPlayingRef â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Only this callback sets isPlayingRef. It NEVER issues new playback commands.
   const onStateChange = useCallback((state: string) => {
     if (!mountedRef.current) return;
@@ -620,57 +620,75 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // ── Manual play/pause button ───────────────────────────────────────────────
+  // â”€â”€ Manual play/pause button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Restored from working commit 08dce452: manual target toggle +
   // imperative command watchdog. No manual seek workarounds.
   const handlePlayPause = useCallback(() => {
-    if (playerError || !playerReady) {
-      console.log('Player not ready for play/pause');
-      return;
+  if (playerError || !playerReady) {
+    console.log('Player not ready for play/pause');
+    return;
+  }
+
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+  // Restore proven manual toggle behavior from 71dd741:
+  // toggle from the actual current player state.
+  const nextState = !isPlayingRef.current;
+
+  lastManualToggleTargetRef.current = nextState;
+
+  console.log(
+    'Manual play/pause:',
+    isPlayingRef.current,
+    '->',
+    nextState
+  );
+
+  // User intent always wins over the one-shot autoplay bootstrap.
+  bootstrapIntentRef.current++;
+  autoplayBootstrapRunningRef.current = false;
+
+  desiredPlayRef.current = nextState;
+  lastRequestedStateRef.current = nextState;
+  manualPauseRef.current = !nextState;
+
+  // Restore the direct state/prop transition from 71dd741.
+  isPlayingRef.current = nextState;
+  setPlayerPlayCommand(nextState);
+  setIsPlaying(nextState);
+  onPlayingChangeRef.current?.(nextState);
+
+  void requestPlayState(nextState);
+
+  clearCommandWatchdog();
+  commandWatchdogRef.current = setTimeout(() => {
+    if (!mountedRef.current) return;
+
+    const actual = isPlayingRef.current;
+
+    if (actual !== nextState) {
+      console.log(
+        '[PlayPause] Watchdog retry imperative command:',
+        nextState
+      );
+      sendNativeImperativeCommand(nextState);
     }
+  }, 350);
 
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    const nextState = lastManualToggleTargetRef.current === null
-      ? !isPlayingRef.current
-      : !lastManualToggleTargetRef.current;
-    lastManualToggleTargetRef.current = nextState;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState, '(manual target)');
-
-    // Cancel any in-flight one-shot autoplay bootstrap — user intent wins
-    bootstrapIntentRef.current++;
-    autoplayBootstrapRunningRef.current = false;
-
-    desiredPlayRef.current = nextState;
-    lastRequestedStateRef.current = nextState;
-    manualPauseRef.current = !nextState;
-
-    void requestPlayState(nextState);
-
-    clearCommandWatchdog();
-    commandWatchdogRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
-      const actual = isPlayingRef.current;
-      if (actual !== nextState) {
-        console.log('[PlayPause] Watchdog retry imperative command:', nextState);
-        sendNativeImperativeCommand(nextState);
-      }
-    }, 350);
-
-    if (!nextState) {
-      stopProgressTracking();
-    } else {
-      startProgressTracking();
-    }
-  }, [
-    playerError,
-    playerReady,
-    clearCommandWatchdog,
-    requestPlayState,
-    sendNativeImperativeCommand,
-    stopProgressTracking,
-    startProgressTracking,
-  ]);
+  if (!nextState) {
+    stopProgressTracking();
+  } else {
+    startProgressTracking();
+  }
+}, [
+  playerError,
+  playerReady,
+  clearCommandWatchdog,
+  requestPlayState,
+  sendNativeImperativeCommand,
+  stopProgressTracking,
+  startProgressTracking,
+]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReady || !playerRef.current) return;
@@ -731,7 +749,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   const coverImageUrl = thumbnail || metadata?.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-  // ── Web player ──────────────────────────────────────────────────────────
+  // â”€â”€ Web player â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const postMessageToWebPlayerRef = useRef<((command: string, args?: any) => void) | null>(null);
   const webPlayerReadyRef = useRef(false);
@@ -1234,3 +1252,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
