@@ -1,3 +1,5 @@
+import { Settings } from 'react-native';
+
 type AdEventCallback = (event: string, data?: any) => void;
 
 // Frequency caps mirror AdManager exactly so the Appodeal mediation layer
@@ -102,6 +104,8 @@ class AppodealManager {
   private interstitialCloseTimeout: ReturnType<typeof setTimeout> | null = null;
   private rewardedCloseResolver: ((shown: boolean) => void) | null = null;
   private rewardedCloseTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** True while a debug-only post-consent verification ad is pending show. */
+  private postConsentAdRequested = false;
 
   private constructor() {}
 
@@ -219,6 +223,10 @@ class AppodealManager {
     add(InterstitialEvents.SHOWN, () => {
       this.lastInterstitialShownAt = Date.now();
       debugLog('[Appodeal] interstitial shown');
+      if (this.postConsentAdRequested) {
+        this.postConsentAdRequested = false;
+        debugLog('[Appodeal CMP] post-consent ad confirmed — native interstitial shown callback fired');
+      }
       this.log('Interstitial shown');
     });
     add(InterstitialEvents.FAILED_TO_SHOW, () => {
@@ -285,6 +293,7 @@ class AppodealManager {
         debugLog(`[Appodeal CMP] consent form dismissed: ${consentStatusName(finalStatus)}`);
       }
       this.logTCStringPresence();
+      await this.verifyConsentAfterForm();
     } catch (error: any) {
       debugLog(`[Appodeal CMP] consent sync error: ${error?.message ?? 'unknown'}`);
     }
@@ -301,6 +310,117 @@ class AppodealManager {
         .catch(() => debugLog('[Appodeal CMP] IAB TCF consent string exists: false (read failed)'));
     } catch {
       // TCF presence check is best-effort
+    }
+  }
+
+  // ─── Debug-only post-consent verification ─────────────────────
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Reads IAB TCF presence flags from NSUserDefaults (iOS) / SharedPreferences
+   * (Android) — the stores where Google UMP persists consent data. Presence
+   * booleans only; the stored values themselves are never logged.
+   */
+  private readIabTcfPresence() {
+    const read = (key: string): boolean => {
+      try {
+        const raw: unknown = Settings.get(key);
+        return raw !== null && raw !== undefined && String(raw).length > 0;
+      } catch {
+        return false;
+      }
+    };
+    return {
+      tcString: read('IABTCF_TCString'),
+      gdprApplies: read('IABTCF_gdprApplies'),
+      purposeConsents: read('IABTCF_PurposeConsents'),
+      vendorConsents: read('IABTCF_VendorConsents'),
+    };
+  }
+
+  /** Logs consent status + IAB key presence (booleans only — never values). */
+  private logConsentState() {
+    let status = -1;
+    try {
+      status = Appodeal.consentStatus?.() ?? -1;
+    } catch {}
+    debugLog(`[Appodeal CMP] consent status: ${consentStatusName(status)}`);
+    const presence = this.readIabTcfPresence();
+    debugLog(`[Appodeal CMP] IABTCF_TCString exists: ${presence.tcString}`);
+    debugLog(`[Appodeal CMP] gdprApplies exists: ${presence.gdprApplies}`);
+    debugLog(`[Appodeal CMP] purpose consents exist: ${presence.purposeConsents}`);
+    debugLog(`[Appodeal CMP] vendor consents exist: ${presence.vendorConsents}`);
+    return presence;
+  }
+
+  /**
+   * Debug-only verification after the consent form is dismissed: logs consent
+   * status + IAB TCF key presence, re-runs the consent flow once if the TC
+   * string is still missing, then forces one fresh Appodeal mediation request
+   * (bypassing the cached AdMob fallback path entirely).
+   */
+  private async verifyConsentAfterForm(): Promise<void> {
+    if (!ADS_DEBUG) return;
+
+    // Give UMP a moment to persist IABTCF_* defaults after form dismissal.
+    await this.delay(1000);
+
+    let presence = this.logConsentState();
+
+    if (!presence.tcString) {
+      debugLog('[Appodeal CMP] IABTCF_TCString missing after consent — re-running consent flow');
+      try {
+        const status = await Appodeal.requestConsentInfoUpdate(APPODEAL_APP_KEY);
+        debugLog(`[Appodeal CMP] consent info update completed: ${consentStatusName(status)}`);
+        await Appodeal.showConsentFormIfNeeded();
+        await this.delay(1000);
+        presence = this.logConsentState();
+      } catch (error: any) {
+        debugLog(`[Appodeal CMP] consent retry error: ${error?.message ?? 'unknown'}`);
+      }
+    }
+
+    this.requestPostConsentAd();
+  }
+
+  /**
+   * Forces one fresh Appodeal ad request after consent completes. Calls the
+   * Appodeal SDK directly (cache + show), so the request is served and
+   * consentized by the mediation layer — never the cached AdMob fallback.
+   */
+  private requestPostConsentAd(): void {
+    try {
+      debugLog('[Appodeal CMP] requesting fresh Appodeal ad after consent');
+      debugLog('[Ads] serving provider: APPODEAL');
+      this.postConsentAdRequested = true;
+      Appodeal.cache(AdType.INTERSTITIAL);
+
+      const deadline = Date.now() + 15000;
+      const poll = setInterval(() => {
+        let loaded = false;
+        try {
+          loaded = Boolean(Appodeal.isLoaded(AdType.INTERSTITIAL));
+        } catch {}
+        if (loaded) {
+          clearInterval(poll);
+          try {
+            Appodeal.show(AdType.INTERSTITIAL);
+          } catch (error: any) {
+            this.postConsentAdRequested = false;
+            debugLog(`[Appodeal CMP] post-consent ad show error: ${error?.message ?? 'unknown'}`);
+          }
+        } else if (Date.now() > deadline) {
+          clearInterval(poll);
+          this.postConsentAdRequested = false;
+          debugLog('[Appodeal CMP] post-consent ad request timed out (no fill)');
+        }
+      }, 1000);
+    } catch (error: any) {
+      this.postConsentAdRequested = false;
+      debugLog(`[Appodeal CMP] post-consent ad request error: ${error?.message ?? 'unknown'}`);
     }
   }
 
