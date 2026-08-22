@@ -621,44 +621,71 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // Restored from working commit 08dce452: manual target toggle +
   // imperative command watchdog. No manual seek workarounds.
   const handlePlayPause = useCallback(() => {
-    if (!playerReadyRef.current || playerErrorRef.current) {
-      console.log('Player not ready for play/pause');
-      return;
+  if (playerError || !playerReady) {
+    console.log('Player not ready for play/pause');
+    return;
+  }
+
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+  // Restore proven manual toggle behavior from 71dd741:
+  // toggle from the actual current player state.
+  const nextState = !isPlayingRef.current;
+
+  lastManualToggleTargetRef.current = nextState;
+
+  console.log(
+    'Manual play/pause:',
+    isPlayingRef.current,
+    '->',
+    nextState
+  );
+
+  // User intent always wins over the one-shot autoplay bootstrap.
+  bootstrapIntentRef.current++;
+  autoplayBootstrapRunningRef.current = false;
+
+  desiredPlayRef.current = nextState;
+  lastRequestedStateRef.current = nextState;
+  manualPauseRef.current = !nextState;
+
+  // Restore the direct state/prop transition from 71dd741.
+  isPlayingRef.current = nextState;
+  setPlayerPlayCommand(nextState);
+  setIsPlaying(nextState);
+  onPlayingChangeRef.current?.(nextState);
+
+  void requestPlayState(nextState);
+
+  clearCommandWatchdog();
+  commandWatchdogRef.current = setTimeout(() => {
+    if (!mountedRef.current) return;
+
+    const actual = isPlayingRef.current;
+
+    if (actual !== nextState) {
+      console.log(
+        '[PlayPause] Watchdog retry imperative command:',
+        nextState
+      );
+      sendNativeImperativeCommand(nextState);
     }
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, 350);
 
-    const nextState = lastManualToggleTargetRef.current === null
-      ? !isPlayingRef.current
-      : !lastManualToggleTargetRef.current;
-    lastManualToggleTargetRef.current = nextState;
-    console.log('Manual play/pause:', isPlayingRef.current, '->', nextState, '(manual target)');
-
-    // Cancel any in-flight one-shot autoplay bootstrap — user intent wins
-    bootstrapIntentRef.current++;
-    autoplayBootstrapRunningRef.current = false;
-
-    desiredPlayRef.current = nextState;
-    lastRequestedStateRef.current = nextState;
-    manualPauseRef.current = !nextState;
-
-    void requestPlayState(nextState);
-
-    clearCommandWatchdog();
-    commandWatchdogRef.current = setTimeout(() => {
-      if (!mountedRef.current) return;
-      const actual = isPlayingRef.current;
-      if (actual !== nextState) {
-        console.log('[PlayPause] Watchdog retry imperative command:', nextState);
-        sendNativeImperativeCommand(nextState);
-      }
-    }, 350);
-
-    if (!nextState) {
-      stopProgressTracking();
-    } else {
-      startProgressTracking();
-    }
-  }, [clearCommandWatchdog, requestPlayState, sendNativeImperativeCommand, stopProgressTracking, startProgressTracking]);
+  if (!nextState) {
+    stopProgressTracking();
+  } else {
+    startProgressTracking();
+  }
+}, [
+  playerError,
+  playerReady,
+  clearCommandWatchdog,
+  requestPlayState,
+  sendNativeImperativeCommand,
+  stopProgressTracking,
+  startProgressTracking,
+]);
 
   const handleSkipForward = useCallback(async () => {
     if (!playerReadyRef.current || !playerRef.current) return;
