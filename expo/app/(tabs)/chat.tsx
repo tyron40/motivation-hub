@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,34 +10,120 @@ import {
   Platform,
   Alert,
   Modal,
+  Keyboard,
   Animated,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus } from 'lucide-react-native';
+import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus, ChevronDown } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
 import { useChatSessions } from '@/hooks/chat-sessions-context';
 import { useIAP } from '@/hooks/iap-context';
 import PaywallModal from '@/components/PaywallModal';
-import { useChatInterstitialAd } from '@/hooks/useChatInterstitialAd';
+import { useAdMob } from '@/hooks/admob-context';
 import { useAuth } from '@/hooks/auth-context';
-import { generateTextToSpeech, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
+import { generateTextToSpeech, sendChatMessage, transcribeAudio as transcribeAudioApi } from '@/lib/api-client';
 
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
   id: string;
   text: string;
+  visibleText?: string;
   isUser: boolean;
   timestamp: Date;
   audioUrl?: string;
   isPlaying?: boolean;
 }
+
+const extractTextDeep = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = extractTextDeep(item);
+      if (nested) return nested;
+    }
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    const directKeys = ['text', 'content', 'message', 'output_text', 'response'];
+    for (const key of directKeys) {
+      const nested = extractTextDeep((value as any)[key]);
+      if (nested) return nested;
+    }
+
+    const commonNestedPaths = [
+      (value as any)?.choices?.[0]?.message?.content,
+      (value as any)?.data?.message,
+      (value as any)?.data?.content,
+      (value as any)?.result?.message,
+      (value as any)?.result?.content,
+    ];
+    for (const candidate of commonNestedPaths) {
+      const nested = extractTextDeep(candidate);
+      if (nested) return nested;
+    }
+  }
+
+  try {
+    const asString = String(value).trim();
+    return asString === '[object Object]' ? '' : asString;
+  } catch {
+    return '';
+  }
+};
+
+const normalizeVisibleText = (value: string): string => {
+  const cleaned = (value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\u0000/g, '')
+    .trim();
+  return cleaned;
+};
+
+const toRenderableText = (value: any): string => {
+  const normalized = normalizeVisibleText(typeof value === 'string' ? value : String(value ?? ''));
+  if (normalized.length > 0) return normalized;
+  return 'â€¦';
+};
+
+const extractAssistantText = (rawResult: any): { text: string; source: string } => {
+  const candidates: Array<{ source: string; value: any }> = [
+    { source: 'message', value: rawResult?.message },
+    { source: 'text', value: rawResult?.text },
+    { source: 'response', value: rawResult?.response },
+    { source: 'data.message', value: rawResult?.data?.message },
+    { source: 'data.result', value: rawResult?.data?.result },
+    { source: 'choices[0].message.content', value: rawResult?.choices?.[0]?.message?.content },
+    { source: 'choices[0].delta.content', value: rawResult?.choices?.[0]?.delta?.content },
+    { source: 'output_text', value: rawResult?.output_text },
+    { source: 'output[0].content[0].text', value: rawResult?.output?.[0]?.content?.[0]?.text },
+    { source: 'content', value: rawResult?.content },
+    { source: 'root', value: rawResult },
+  ];
+
+  for (const candidate of candidates) {
+    const text = extractTextDeep(candidate.value);
+    if (text) return { text, source: candidate.source };
+  }
+
+  try {
+    const preview = JSON.stringify(rawResult).slice(0, 280);
+    if (preview) return { text: preview, source: 'json-preview' };
+  } catch {}
+
+  return { text: '', source: 'none' };
+};
 
 const suggestedPrompts = [
   {
@@ -68,18 +154,18 @@ function ChatScreenContent() {
   const { useCredit: deductCredit, usageStats } = useIAP();
   const { isAuthenticated } = useAuth();
   const insets = useSafeAreaInsets();
-  const { recordMessageSent, recordMessageComplete, setTyping: setAdTyping, recordInteraction: recordAdInteraction } = useChatInterstitialAd();
+  const { tryShowInterstitialOnTransition } = useAdMob();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
-  const { 
-    sessions, 
-    currentSessionId, 
-    createSession, 
+  const {
+    sessions,
+    currentSessionId,
+    createSession,
     deleteSession,
     addMessageToSession,
     getCurrentSession,
-    setCurrentSessionId 
+    setCurrentSessionId
   } = useChatSessions();
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -90,8 +176,16 @@ function ChatScreenContent() {
   const [hasStartedChat, setHasStartedChat] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const requestCounterRef = useRef(0);
+  const activeRequestIdRef = useRef<number>(0);
+  const hasInitializedGreetingRef = useRef(false);
+  const responseCommittedRef = useRef(false);
+  const messagesRef = useRef<Message[]>([]);
+  const skipNextSessionReloadRef = useRef(false);
+  const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
+  const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
+  const appVersion = `${runtimeVersion} (${runtimeBuild})`;
 
-  const isSendingRef = useRef(false);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -100,13 +194,17 @@ function ChatScreenContent() {
   const typingAnim = useRef(new Animated.Value(0)).current;
   const micAnim = useRef(new Animated.Value(1)).current;
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
     try {
       if (sound) {
         await sound.unloadAsync();
       }
 
-      setMessages(prev => prev.map(msg => 
+      setMessages(prev => prev.map(msg =>
         msg.id === messageId ? { ...msg, isPlaying: true } : { ...msg, isPlaying: false }
       ));
 
@@ -123,9 +221,9 @@ function ChatScreenContent() {
         { uri: audioUrl },
         { shouldPlay: true, volume: 1.0 }
       );
-      
+
       setSound(newSound);
-      
+
       newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
         if (status.isLoaded && status.didJustFinish) {
           setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
@@ -139,36 +237,37 @@ function ChatScreenContent() {
 
   const generateVoice = useCallback(async (messageId: string, text: string) => {
     try {
-      console.log('🎤 Generating voice for message:', messageId);
-      console.log('🎤 Using Rork backend /api/tts endpoint');
-      
+      console.log('ðŸŽ¤ Generating voice for message:', messageId);
+      console.log('ðŸŽ¤ Using Vercel backend /api/tts endpoint');
+
       const result = await generateTextToSpeech({
         text: text.substring(0, 500),
         voice: (profile.preferredVoice || 'alloy') as any,
       });
-      
-      console.log('✅ TTS response received');
-      
+
+      console.log('âœ… TTS response received');
+
       const audioUrl = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
-      console.log('✅ Audio URL created');
-      
-      setMessages(prev => prev.map(msg => 
+      console.log('âœ… Audio URL created');
+
+      setMessages(prev => prev.map(msg =>
         msg.id === messageId ? { ...msg, audioUrl } : msg
       ));
-      
-      console.log('✅ Voice generated successfully for message:', messageId);
-      
+
+      console.log('âœ… Voice generated successfully for message:', messageId);
+
       setTimeout(() => {
         void playAudio(messageId, audioUrl);
       }, 500);
     } catch (error: any) {
-      console.error('❌ Voice generation error:', error);
+      console.error('âŒ Voice generation error:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('❌ Error details:', errorMsg);
+      console.error('âŒ Error details:', errorMsg);
     }
   }, [profile.preferredVoice, playAudio]);
 
   useEffect(() => {
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -204,14 +303,8 @@ function ChatScreenContent() {
     }
   }, [isTyping, typingAnim]);
 
-  const hasInitializedRef = useRef(false);
-
   useEffect(() => {
-    if (isSendingRef.current) {
-      return;
-    }
-
-    if (currentSessionId) {
+    const loadCurrentSession = () => {
       const currentSession = getCurrentSession();
       if (currentSession && currentSession.messages.length > 0) {
         const convertedMessages: Message[] = currentSession.messages.map((msg, idx) => ({
@@ -224,68 +317,47 @@ function ChatScreenContent() {
         if (currentSession.messages.length > 1) {
           setHasStartedChat(true);
         }
+        hasInitializedGreetingRef.current = true;
+        return;
       }
-    } else if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      const greeting = profile.name 
+    };
+
+    if (currentSessionId) {
+      if (skipNextSessionReloadRef.current) {
+        skipNextSessionReloadRef.current = false;
+      } else {
+        loadCurrentSession();
+      }
+    } else if (messages.length === 0 && !hasInitializedGreetingRef.current && !isLoading) {
+      const greeting = profile.name
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
         : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
-      
+
       const greetingMessage = {
         id: '1',
         text: greeting,
         isUser: false,
         timestamp: new Date(),
       };
-      
+
       setMessages([greetingMessage]);
-      // Do NOT auto-speak the greeting — user must press the speak button manually
+      hasInitializedGreetingRef.current = true;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSessionId]);
+  }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession, isLoading]);
 
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
   const sendMessage = useCallback(async (text: string, isSuggestion: boolean = false) => {
-    if (!text.trim() || isLoading) return;
+    const trimmedText = text.trim();
+    if (!trimmedText || isLoading) return;
 
-    recordMessageSent();
+    void tryShowInterstitialOnTransition();
 
-    if (!isSuggestion && !usageStats.canUseAI) {
-      console.log('❌ No credits available');
-      Alert.alert(
-        'No Credits',
-        'You need credits to use the AI chat feature. Purchase credits to continue.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-        ]
-      );
-      return;
-    }
-
-    try {
-      const nameMatch = text.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
-      if (nameMatch && !profile.name) {
-        await updateProfile({ name: nameMatch[1] });
-      }
-    } catch (e) {
-      console.warn('⚠️ Name extraction failed:', e);
-    }
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: text.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    if (!isSuggestion) {
-      const creditUsed = await deductCredit();
-      if (!creditUsed) {
-        console.log('❌ Failed to deduct credit');
+    if (!isSuggestion && usageStats.credits <= 0) {
+      console.log('âŒ No credits available');
+      if (Platform.OS !== 'web') {
         Alert.alert(
           'No Credits',
           'You need credits to use the AI chat feature. Purchase credits to continue.',
@@ -294,133 +366,316 @@ function ChatScreenContent() {
             { text: 'Get Credits', onPress: () => setShowPaywall(true) },
           ]
         );
-        return;
-      }
-      console.log('✅ Credit deducted');
-    }
-
-    isSendingRef.current = true;
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
-    setIsTyping(true);
-    setHasStartedChat(true);
-
-    let sessionId = currentSessionId;
-    try {
-      if (!sessionId) {
-        const newSession = await createSession(
-          text.trim().substring(0, 50) + (text.trim().length > 50 ? '...' : ''),
-          [{ role: 'user', content: text.trim(), timestamp: Date.now() }]
-        );
-        sessionId = newSession.id;
       } else {
-        await addMessageToSession(sessionId, {
-          role: 'user',
-          content: text.trim(),
-          timestamp: Date.now(),
-        });
+        console.error('You need credits to use the AI chat feature.');
       }
-    } catch (sessionError) {
-      console.warn('⚠️ Session save failed, continuing:', sessionError);
+      return;
     }
 
-    const systemPrompt = `You are Coach Alex, an AI motivation coach. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals. ${profile.name ? `The user's name is ${profile.name}. ` : ''}Keep responses encouraging, actionable, and under 200 words. Focus on motivation, personal development, and positive mindset.`;
+    const currentRequestId = ++requestCounterRef.current;
+    const messageBaseId = Date.now().toString();
+    const pendingAssistantId = `pending-${messageBaseId}-${currentRequestId}`;
 
-    const chatHistory: { role: 'user' | 'assistant'; content: string }[] = messages
-      .filter(msg => msg.id !== '1' || msg.isUser)
-      .map(msg => ({
-        role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: msg.text,
-      }));
+    const userMessage: Message = {
+      id: messageBaseId,
+      text: trimmedText,
+      isUser: true,
+      timestamp: new Date(),
+    };
 
-    chatHistory.push({ role: 'user', content: text.trim() });
+    const baseMessagesSnapshot = [...messagesRef.current];
+    activeRequestIdRef.current = currentRequestId;
+
+    const chatHistoryBase = baseMessagesSnapshot.filter(
+      msg => (msg.id !== '1' || msg.isUser) && !String(msg.id).startsWith('pending-')
+    );
+    const isFirstRealUserTurn = !chatHistoryBase.some(msg => msg.isUser);
 
     const allMessages: { role: 'user' | 'assistant'; content: string }[] = [
-      { role: 'user', content: `[System Instructions - do not repeat these]: ${systemPrompt}` },
-      { role: 'assistant', content: 'Understood. I am Coach Alex, your AI motivation coach. How can I help you today?' },
-      ...chatHistory,
+      ...chatHistoryBase.map(msg => ({
+        role: (msg.isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: msg.text,
+      })),
+      { role: 'user', content: trimmedText },
     ];
 
+    if (isFirstRealUserTurn) {
+      console.log('ðŸ§ª First turn outbound payload:', allMessages.map(m => `${m.role}:${m.content.slice(0, 40)}`));
+    }
+
     try {
-      console.log('🤖 Sending chat message | Platform:', Platform.OS, '| count:', allMessages.length);
-
-      const chatResult = await sendChatMessage({
-        messages: allMessages.map(m => ({
-          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        })),
-      });
-      const completion = chatResult?.message;
-      console.log('✅ AI responded | length:', completion?.length);
-
-      if (!completion || typeof completion !== 'string' || completion.trim().length === 0) {
-        throw new Error('Empty response from AI');
+      const nameMatch = trimmedText.match(/(?:my name is|i'm|i am|call me)\s+([a-zA-Z]+)/i);
+      if (nameMatch && !profile.name) {
+        const name = nameMatch[1];
+        await updateProfile({ name });
       }
+
+      if (!isSuggestion) {
+        const creditUsed = await deductCredit();
+        if (!creditUsed) {
+          console.log('âŒ Failed to deduct credit');
+          if (Platform.OS !== 'web') {
+            Alert.alert(
+              'No Credits',
+              'You need credits to use the AI chat feature. Purchase credits to continue.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+              ]
+            );
+          } else {
+            console.error('You need credits to use the AI chat feature.');
+          }
+          return;
+        }
+        console.log('âœ… Credit deducted. Remaining credits:', usageStats.credits - 1);
+      } else {
+        console.log('âœ… Suggested question - no credit needed');
+      }
+
+      setMessages(prev => ([
+        ...prev,
+        userMessage,
+        {
+          id: pendingAssistantId,
+          text: 'Thinking...',
+          visibleText: 'Thinking...',
+          isUser: false,
+          timestamp: new Date(),
+        },
+      ]));
+      setInputText('');
+      setIsLoading(true);
+      setIsTyping(true);
+      setHasStartedChat(true);
+
+      let sessionId = currentSessionId;
+      if (!sessionId) {
+        try {
+          skipNextSessionReloadRef.current = true;
+          const newSession = await createSession(
+            trimmedText.substring(0, 50) + (trimmedText.length > 50 ? '...' : ''),
+            [{ role: 'user', content: trimmedText, timestamp: Date.now() }]
+          );
+          sessionId = newSession.id;
+        } catch (sessionCreateErr) {
+          console.error('âš ï¸ Session create failed (non-blocking):', sessionCreateErr);
+        }
+      } else {
+        try {
+          await addMessageToSession(sessionId, {
+            role: 'user',
+            content: trimmedText,
+            timestamp: Date.now(),
+          });
+        } catch (sessionAddErr) {
+          console.error('âš ï¸ Session add (user) failed (non-blocking):', sessionAddErr);
+        }
+      }
+
+      console.log('ðŸ¤– Sending chat message...');
+      console.log(
+        'ðŸ“¤ Messages count:',
+        allMessages.length,
+        '| isSuggestion:',
+        isSuggestion,
+        '| requestId:',
+        currentRequestId,
+        '| firstTurn:',
+        isFirstRealUserTurn
+      );
+
+      const sendPayload = allMessages.map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }));
+
+      let rawResult: any = await sendChatMessage({ messages: sendPayload });
+      let extracted = extractAssistantText(rawResult);
+      let completion = normalizeVisibleText(extracted.text);
+
+      if (isFirstRealUserTurn && !completion) {
+        console.warn('âš ï¸ First-turn empty response. Retrying once...');
+        rawResult = await sendChatMessage({ messages: sendPayload });
+        extracted = extractAssistantText(rawResult);
+        completion = normalizeVisibleText(extracted.text);
+      }
+
+      console.log(
+        'âœ… Vercel backend responded, length:',
+        completion?.length,
+        'keys:',
+        Object.keys(rawResult || {}),
+        '| source:',
+        extracted.source
+      );
+
+      if (isFirstRealUserTurn) {
+        console.log('ðŸ§ª First-turn parse diagnostics:', {
+          requestId: currentRequestId,
+          source: extracted.source,
+          completionLength: completion.length,
+          keys: Object.keys(rawResult || {}),
+        });
+      }
+
+      if (currentRequestId !== activeRequestIdRef.current) {
+        console.log('âš ï¸ Ignoring stale chat response for requestId:', currentRequestId);
+        return;
+      }
+
+      console.log(
+        'ðŸ“¥ Assistant parse result | completion length:',
+        completion.length,
+        '| usedFallback:',
+        completion.length === 0
+      );
+
+      const responseText =
+        completion || `I received an empty first response (request ${currentRequestId}). Please try again.`;
 
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: completion,
+        text: responseText,
+        visibleText: responseText,
         isUser: false,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, aiMessage]);
+      responseCommittedRef.current = true;
+      setIsTyping(false);
+
+      setMessages(prev => {
+        const withoutPending = prev.filter(m => m.id !== pendingAssistantId);
+        const hasSameAssistant = withoutPending.some(
+          m => !m.isUser && normalizeVisibleText(m.text) === normalizeVisibleText(aiMessage.text)
+        );
+        const next = hasSameAssistant ? withoutPending : [...withoutPending, aiMessage];
+        return next;
+      });
+
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      });
 
       if (sessionId) {
         try {
           await addMessageToSession(sessionId, {
             role: 'assistant',
-            content: completion,
+            content: responseText,
             timestamp: Date.now(),
           });
-        } catch (saveErr) {
-          console.warn('⚠️ Failed to save AI response to session:', saveErr);
+        } catch (sessionAddErr) {
+          console.error('âš ï¸ Session add (assistant) failed (non-blocking):', sessionAddErr);
         }
       }
 
-      // Do NOT auto-speak AI responses — user must press the speak button manually
+      if (profile.voiceEnabled && completion) {
+        if (usageStats.credits > 0) {
+          const voiceCreditUsed = await deductCredit();
+          if (voiceCreditUsed) {
+            console.log('âœ… Voice credit deducted. Remaining credits:', usageStats.credits - 1);
+            void generateVoice(aiMessage.id, completion);
+          } else {
+            console.log('âš ï¸ Not enough credits for voice generation');
+          }
+        } else {
+          console.log('âš ï¸ Not enough credits for voice generation');
+        }
+      }
     } catch (error: any) {
-      console.error('❌ Chat error:', error?.message || error);
+      const errMsg = error?.message || String(error || 'Unknown error');
+      const normalizedReason =
+        errMsg.includes('No Credits') || errMsg.includes('credit') ? 'credit' :
+        errMsg.includes('session') ? 'session' :
+        errMsg.includes('timed out') ? 'timeout' :
+        (errMsg.includes('Network request failed') || errMsg.includes('Failed to fetch') || errMsg.includes('Cannot connect to server')) ? 'network' :
+        errMsg.includes('401') || errMsg.includes('403') ? 'auth' :
+        errMsg.includes('500') ? 'server' : 'unknown';
+
+      console.error('Chat error:', {
+        requestId: currentRequestId,
+        endpoint: 'API_ENDPOINTS.chat',
+        reason: normalizedReason,
+        message: errMsg,
+      });
+
+      if (currentRequestId !== activeRequestIdRef.current) {
+        console.log('âš ï¸ Ignoring stale chat error for requestId:', currentRequestId);
+        return;
+      }
 
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         text: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Remember, you have the strength to overcome any challenge!",
+        visibleText: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. Remember, you have the strength to overcome any challenge!",
         isUser: false,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, errorMessage]);
+      responseCommittedRef.current = true;
+      setIsTyping(false);
 
-      Alert.alert(
-        'Connection Error',
-        'Failed to get AI response. Please check your internet connection and try again.'
-      );
+      setMessages(prev => {
+        const withoutPending = prev.filter(m => m.id !== pendingAssistantId);
+        const next = [...withoutPending, errorMessage];
+        return next;
+      });
+
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      });
+
+      const userFacingError =
+        normalizedReason === 'credit'
+          ? 'You need credits to send chat messages.'
+          : normalizedReason === 'session'
+            ? 'Message sent, but chat history save failed. Please continue chatting.'
+            : normalizedReason === 'timeout'
+              ? 'The request timed out. Please try again.'
+              : normalizedReason === 'network'
+                ? 'Cannot reach server. Please check internet connection and try again.'
+                : normalizedReason === 'auth'
+                  ? 'Server authorization error. Please try again shortly.'
+                  : normalizedReason === 'server'
+                    ? 'Server error while generating response. Please try again.'
+                    : 'Failed to get response. Please check your internet connection and try again.';
+
+      if (Platform.OS !== 'web') {
+        Alert.alert('Connection Error', userFacingError);
+      } else {
+        console.error(userFacingError);
+      }
     } finally {
       setIsLoading(false);
-      setIsTyping(false);
-      isSendingRef.current = false;
-      recordMessageComplete();
+      if (!responseCommittedRef.current) {
+        setIsTyping(false);
+      }
+      responseCommittedRef.current = false;
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, messages, currentSessionId, createSession, addMessageToSession, recordMessageSent, recordMessageComplete]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, currentSessionId, createSession, addMessageToSession, tryShowInterstitialOnTransition]);
 
 
 
 
 
-  const stopAudio = async () => {
-    if (sound) {
-      await sound.stopAsync();
-
+  const stopAudio = useCallback(async () => {
+    try {
+      if (sound) {
+        await sound.stopAsync();
+      }
+    } catch (error) {
+      console.warn('Error stopping chat audio:', error);
+    } finally {
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
     }
-  };
+  }, [sound]);
 
   const startRecording = async () => {
     try {
-      console.log('🎤 Requesting microphone permissions...');
+      console.log('ðŸŽ¤ Requesting microphone permissions...');
       const permission = await Audio.requestPermissionsAsync();
-      
+
       if (!permission.granted) {
         if (Platform.OS !== 'web') {
           Alert.alert('Permission Required', 'Please enable microphone access to use voice input.');
@@ -430,7 +685,7 @@ function ChatScreenContent() {
         return;
       }
 
-      console.log('✅ Microphone permission granted');
+      console.log('âœ… Microphone permission granted');
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -439,7 +694,7 @@ function ChatScreenContent() {
         shouldDuckAndroid: true,
       });
 
-      console.log('🎤 Starting recording...');
+      console.log('ðŸŽ¤ Starting recording...');
       const { recording: newRecording } = await Audio.Recording.createAsync({
         android: {
           extension: '.m4a',
@@ -468,7 +723,7 @@ function ChatScreenContent() {
 
       setRecording(newRecording);
       setIsRecording(true);
-      console.log('✅ Recording started');
+      console.log('âœ… Recording started');
 
       Animated.loop(
         Animated.sequence([
@@ -485,7 +740,7 @@ function ChatScreenContent() {
         ])
       ).start();
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
+      console.error('âŒ Failed to start recording:', error);
       if (Platform.OS !== 'web') {
         Alert.alert('Recording Error', 'Failed to start recording. Please try again.');
       }
@@ -494,19 +749,19 @@ function ChatScreenContent() {
 
   const stopRecording = async () => {
     if (!recording) {
-      console.warn('⚠️ No recording to stop');
+      console.warn('âš ï¸ No recording to stop');
       return;
     }
 
     try {
-      console.log('🛑 Stopping recording...');
+      console.log('ðŸ›‘ Stopping recording...');
       setIsRecording(false);
       micAnim.stopAnimation();
       micAnim.setValue(1);
 
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      console.log('✅ Recording stopped, URI:', uri);
+      console.log('âœ… Recording stopped, URI:', uri);
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -520,13 +775,13 @@ function ChatScreenContent() {
       if (uri) {
         await transcribeAudio(uri);
       } else {
-        console.error('❌ No recording URI available');
+        console.error('âŒ No recording URI available');
         if (Platform.OS !== 'web') {
           Alert.alert('Error', 'Failed to save recording');
         }
       }
     } catch (error) {
-      console.error('❌ Failed to stop recording:', error);
+      console.error('âŒ Failed to stop recording:', error);
       setIsRecording(false);
       setRecording(null);
       if (Platform.OS !== 'web') {
@@ -537,24 +792,42 @@ function ChatScreenContent() {
 
   const transcribeAudio = async (uri: string) => {
     try {
-      console.log('🎯 Starting transcription for URI:', uri);
+      console.log('ðŸŽ¯ Starting transcription for URI:', uri);
       setIsTranscribing(true);
 
-      console.log('📤 Sending audio to backend transcription service...');
-      const transcribedText = await transcribeAudioViaBackend(uri);
-      console.log('✅ Transcription result:', transcribedText);
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
 
-      if (transcribedText && transcribedText.trim()) {
-        setInputText(transcribedText.trim());
-        console.log('✅ Transcription successful:', transcribedText);
+      const formData = new FormData();
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('audio', blob, `recording.${fileType}`);
       } else {
-        console.warn('⚠️ Empty transcription result');
+        const audioFile = {
+          uri,
+          name: `recording.${fileType}`,
+          type: `audio/${fileType}`,
+        } as any;
+        formData.append('audio', audioFile);
+      }
+
+      console.log('ðŸ“¤ Sending audio to Vercel transcription service...');
+      const data = await transcribeAudioApi({ audio: formData });
+      console.log('âœ… Transcription response:', data);
+
+      if (data.text && data.text.trim()) {
+        setInputText(data.text.trim());
+        console.log('âœ… Transcription successful:', data.text);
+      } else {
+        console.warn('âš ï¸ Empty transcription result');
         if (Platform.OS !== 'web') {
           Alert.alert('No Speech Detected', 'Please try speaking again.');
         }
       }
     } catch (error) {
-      console.error('❌ Transcription error:', error);
+      console.error('âŒ Transcription error:', error);
       if (Platform.OS !== 'web') {
         Alert.alert('Transcription Error', 'Failed to transcribe audio. Please try again.');
       }
@@ -563,33 +836,23 @@ function ChatScreenContent() {
     }
   };
 
-  // NOTE: TTS playback intentionally continues when navigating away from chat.
-  // Only stop recording (not playback) on navigation away.
-  useFocusEffect(
-    React.useCallback(() => {
-      return () => {
-        // Only stop recording on navigation away — let TTS continue playing
-        if (recording) {
-          recording.stopAndUnloadAsync().catch(() => {});
-          setRecording(null);
-          setIsRecording(false);
-        }
-        setIsTyping(false);
-        isSendingRef.current = false;
-      };
-    }, [recording])
-  );
-
-  // Only clean up recording on unmount — TTS sound is allowed to continue
   useEffect(() => {
     return () => {
+      void stopAudio();
       if (recording) {
-        recording.stopAndUnloadAsync().catch((err: unknown) => 
+        console.log('ðŸ§¹ Cleaning up recording on unmount');
+        recording.stopAndUnloadAsync().catch((err: unknown) =>
           console.error('Error cleaning up recording:', err)
         );
       }
+      if (sound) {
+        console.log('ðŸ§¹ Cleaning up sound on unmount');
+        sound.unloadAsync().catch((err: unknown) =>
+          console.error('Error cleaning up sound:', err)
+        );
+      }
     };
-  }, [recording]);
+  }, [recording, sound, stopAudio]);
 
   const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
     const bubbleAnim = useRef(new Animated.Value(0)).current;
@@ -615,7 +878,7 @@ function ChatScreenContent() {
     }, [index, bubbleAnim, scaleAnim]);
 
     return (
-      <Animated.View 
+      <Animated.View
         style={[
           styles.messageBubbleContainer,
           message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
@@ -626,7 +889,7 @@ function ChatScreenContent() {
         ]}
       >
         <LinearGradient
-          colors={message.isUser 
+          colors={message.isUser
             ? [Colors.primary, Colors.secondary]
             : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
           }
@@ -659,33 +922,12 @@ function ChatScreenContent() {
             ]}>
               {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
             </Text>
-            {!message.isUser && (
-              <TouchableOpacity
-                style={styles.voiceButton}
-                onPress={() => {
-                  if (message.isPlaying) {
-                    void stopAudio();
-                  } else if (message.audioUrl) {
-                    void playAudio(message.id, message.audioUrl!);
-                  } else {
-                    // Generate voice on-demand when user presses speak
-                    void generateVoice(message.id, message.text);
-                  }
-                }}
-              >
-                {message.isPlaying ? (
-                  <Pause color={Colors.text} size={14} />
-                ) : (
-                  <Volume2 color={Colors.text} size={14} />
-                )}
-              </TouchableOpacity>
-            )}
           </View>
           <Text style={[
             styles.messageText,
-            { color: message.isUser ? Colors.background : Colors.text }
+            { color: message.isUser ? Colors.background : '#FFFFFF' }
           ]}>
-            {message.text}
+            {toRenderableText(message.visibleText ?? message.text)}
           </Text>
         </LinearGradient>
       </Animated.View>
@@ -728,10 +970,10 @@ function ChatScreenContent() {
         style={styles.container}
       >
         <View style={styles.content}>
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.header, 
-            { 
+            styles.header,
+            {
               paddingTop: insets.top + 4,
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
@@ -750,7 +992,7 @@ function ChatScreenContent() {
                 <Text style={styles.title}>Coach Alex</Text>
                 <View style={styles.statusIndicator}>
                   <View style={styles.onlineIndicator} />
-                  <Text style={styles.statusText}>Online</Text>
+                  <Text style={styles.statusText}>Online â€¢ v{appVersion}</Text>
                 </View>
               </View>
             </View>
@@ -783,11 +1025,11 @@ function ChatScreenContent() {
           </View>
         </Animated.View>
 
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           style={styles.chatContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView 
+          <ScrollView
             ref={scrollViewRef}
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
@@ -796,9 +1038,9 @@ function ChatScreenContent() {
             {messages.map((message, index) => (
               <MessageBubble key={message.id} message={message} index={index} />
             ))}
-            
+
             {isTyping && (
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.messageBubbleContainer,
                   styles.aiMessageContainer,
@@ -830,7 +1072,7 @@ function ChatScreenContent() {
             )}
 
             {!hasStartedChat && messages.length <= 1 && (
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.suggestionsContainer,
                   {
@@ -849,7 +1091,9 @@ function ChatScreenContent() {
                         styles.suggestionButton,
                         { borderLeftColor: prompt.color }
                       ]}
-                      onPress={() => sendMessage(prompt.text, true)}
+                      onPress={() => {
+                        setInputText(prompt.text);
+                      }}
                     >
                       <View style={[styles.suggestionIcon, { backgroundColor: prompt.color + '20' }]}>
                         <Icon color={prompt.color} size={18} />
@@ -862,7 +1106,7 @@ function ChatScreenContent() {
             )}
           </ScrollView>
 
-          <SettingsModal 
+          <SettingsModal
             visible={showSettings}
             onClose={() => setShowSettings(false)}
             profile={profile}
@@ -894,7 +1138,7 @@ function ChatScreenContent() {
               if (sessionId === currentSessionId) {
                 setCurrentSessionId(null);
                 setHasStartedChat(false);
-                const greeting = profile.name 
+                const greeting = profile.name
                   ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
                   : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
                 setMessages([{
@@ -908,7 +1152,7 @@ function ChatScreenContent() {
             onNewSession={async () => {
               setCurrentSessionId(null);
               setHasStartedChat(false);
-              const greeting = profile.name 
+              const greeting = profile.name
                 ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
                 : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
               setMessages([{
@@ -932,16 +1176,18 @@ function ChatScreenContent() {
                     placeholder="Ask for motivation, advice, or inspiration..."
                     placeholderTextColor={Colors.textSecondary}
                     value={inputText}
-                    onChangeText={(text) => {
-                      setInputText(text);
-                      setAdTyping(text.length > 0);
-                    }}
-                    onFocus={() => setAdTyping(true)}
-                    onBlur={() => setAdTyping(false)}
+                    onChangeText={setInputText}
                     multiline
                     maxLength={500}
                     editable={!isTranscribing}
                   />
+                  <TouchableOpacity
+                    style={styles.collapseButton}
+                    onPress={() => Keyboard.dismiss()}
+                    disabled={isLoading}
+                  >
+                    <ChevronDown color={Colors.textSecondary} size={18} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.micButton}
                     onPress={startRecording}
@@ -961,9 +1207,9 @@ function ChatScreenContent() {
                     onPress={() => sendMessage(inputText)}
                     disabled={!inputText.trim() || isLoading || isTranscribing}
                   >
-                    <Send 
-                      color={(!inputText.trim() || isLoading || isTranscribing) ? Colors.textSecondary : Colors.background} 
-                      size={20} 
+                    <Send
+                      color={(!inputText.trim() || isLoading || isTranscribing) ? Colors.textSecondary : Colors.background}
+                      size={20}
                     />
                   </TouchableOpacity>
                 </>
@@ -1016,7 +1262,6 @@ interface SettingsModalProps {
 const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: SettingsModalProps) => {
   const [tempName, setTempName] = useState(profile.name);
   const [tempVoice, setTempVoice] = useState(profile.preferredVoice);
-  const [tempVoiceEnabled, setTempVoiceEnabled] = useState(profile.voiceEnabled);
 
   const voices = [
     { id: 'alloy', name: 'Alloy (Neutral)' },
@@ -1031,7 +1276,6 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
     updateProfile({
       name: tempName,
       preferredVoice: tempVoice,
-      voiceEnabled: tempVoiceEnabled,
     });
     onClose();
   };
@@ -1059,22 +1303,9 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
           </View>
 
           <View style={styles.settingSection}>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Voice Responses</Text>
-              <TouchableOpacity
-                style={[styles.toggle, tempVoiceEnabled && styles.toggleActive]}
-                onPress={() => setTempVoiceEnabled(!tempVoiceEnabled)}
-              >
-                {tempVoiceEnabled ? (
-                  <Volume2 color={Colors.background} size={16} />
-                ) : (
-                  <VolumeX color={Colors.textSecondary} size={16} />
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
 
-          {tempVoiceEnabled && (
+          {(
             <View style={styles.settingSection}>
               <Text style={styles.settingLabel}>Preferred Voice</Text>
               {voices.map((voice) => (
@@ -1171,7 +1402,7 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
                       {session.title}
                     </Text>
                     <Text style={styles.historyItemDate}>
-                      {formatDate(session.updatedAt)} • {session.messages.length} messages
+                      {formatDate(session.updatedAt)} â€¢ {session.messages.length} messages
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -1184,8 +1415,8 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
                           'Are you sure you want to delete this chat?',
                           [
                             { text: 'Cancel', style: 'cancel' },
-                            { 
-                              text: 'Delete', 
+                            {
+                              text: 'Delete',
                               style: 'destructive',
                               onPress: () => onDeleteSession(session.id)
                             }
@@ -1434,6 +1665,14 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  collapseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   micButton: {
     width: 40,

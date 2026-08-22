@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -94,7 +94,7 @@ const normalizeVisibleText = (value: string): string => {
 const toRenderableText = (value: any): string => {
   const normalized = normalizeVisibleText(typeof value === 'string' ? value : String(value ?? ''));
   if (normalized.length > 0) return normalized;
-  return '…';
+  return 'â€¦';
 };
 
 const extractAssistantText = (rawResult: any): { text: string; source: string } => {
@@ -156,16 +156,16 @@ function ChatScreenContent() {
   const insets = useSafeAreaInsets();
   const { tryShowInterstitialOnTransition } = useAdMob();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
-  const { 
-    sessions, 
-    currentSessionId, 
-    createSession, 
+  const {
+    sessions,
+    currentSessionId,
+    createSession,
     deleteSession,
     addMessageToSession,
     getCurrentSession,
-    setCurrentSessionId 
+    setCurrentSessionId
   } = useChatSessions();
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -176,7 +176,6 @@ function ChatScreenContent() {
   const [hasStartedChat, setHasStartedChat] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
-  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const requestCounterRef = useRef(0);
   const activeRequestIdRef = useRef<number>(0);
   const hasInitializedGreetingRef = useRef(false);
@@ -200,13 +199,12 @@ function ChatScreenContent() {
   }, [messages]);
 
   const playAudio = useCallback(async (messageId: string, audioUrl: string) => {
-    if (isVoiceMuted) return;
     try {
       if (sound) {
         await sound.unloadAsync();
       }
 
-      setMessages(prev => prev.map(msg => 
+      setMessages(prev => prev.map(msg =>
         msg.id === messageId ? { ...msg, isPlaying: true } : { ...msg, isPlaying: false }
       ));
 
@@ -223,9 +221,9 @@ function ChatScreenContent() {
         { uri: audioUrl },
         { shouldPlay: true, volume: 1.0 }
       );
-      
+
       setSound(newSound);
-      
+
       newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
         if (status.isLoaded && status.didJustFinish) {
           setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
@@ -235,48 +233,40 @@ function ChatScreenContent() {
       console.error('Audio playback error:', error);
       setMessages(prev => prev.map(msg => ({ ...msg, isPlaying: false })));
     }
-  }, [sound, isVoiceMuted]);
+  }, [sound]);
 
   const generateVoice = useCallback(async (messageId: string, text: string) => {
-    if (isVoiceMuted) return;
     try {
-      console.log('🎤 Generating voice for message:', messageId);
-      console.log('🎤 Using Vercel backend /api/tts endpoint');
-      
+      console.log('ðŸŽ¤ Generating voice for message:', messageId);
+      console.log('ðŸŽ¤ Using Vercel backend /api/tts endpoint');
+
       const result = await generateTextToSpeech({
         text: text.substring(0, 500),
         voice: (profile.preferredVoice || 'alloy') as any,
       });
-      
-      console.log('✅ TTS response received');
-      
+
+      console.log('âœ… TTS response received');
+
       const audioUrl = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
-      console.log('✅ Audio URL created');
-      
-      setMessages(prev => prev.map(msg => 
+      console.log('âœ… Audio URL created');
+
+      setMessages(prev => prev.map(msg =>
         msg.id === messageId ? { ...msg, audioUrl } : msg
       ));
-      
-      console.log('✅ Voice generated successfully for message:', messageId);
-      
+
+      console.log('âœ… Voice generated successfully for message:', messageId);
+
       setTimeout(() => {
         void playAudio(messageId, audioUrl);
       }, 500);
     } catch (error: any) {
-      console.error('❌ Voice generation error:', error);
+      console.error('âŒ Voice generation error:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error('❌ Error details:', errorMsg);
+      console.error('âŒ Error details:', errorMsg);
     }
-  }, [profile.preferredVoice, playAudio, isVoiceMuted]);
+  }, [profile.preferredVoice, playAudio]);
 
   useEffect(() => {
-    const loadVoiceMute = async () => {
-      try {
-        const saved = await AsyncStorage.getItem('chat_voice_muted_v1');
-        setIsVoiceMuted(saved === '1');
-      } catch {}
-    };
-    void loadVoiceMute();
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -291,17 +281,6 @@ function ChatScreenContent() {
       }),
     ]).start();
   }, [fadeAnim, slideAnim]);
-
-  const toggleVoiceMute = useCallback(async () => {
-    const next = !isVoiceMuted;
-    setIsVoiceMuted(next);
-    try {
-      await AsyncStorage.setItem('chat_voice_muted_v1', next ? '1' : '0');
-    } catch {}
-    if (next) {
-      await stopAudio();
-    }
-  }, [isVoiceMuted, sound]);
 
   useEffect(() => {
     if (isTyping) {
@@ -350,27 +329,19 @@ function ChatScreenContent() {
         loadCurrentSession();
       }
     } else if (messages.length === 0 && !hasInitializedGreetingRef.current && !isLoading) {
-      const greeting = profile.name 
+      const greeting = profile.name
         ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
         : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
-      
+
       const greetingMessage = {
         id: '1',
         text: greeting,
         isUser: false,
         timestamp: new Date(),
       };
-      
+
       setMessages([greetingMessage]);
       hasInitializedGreetingRef.current = true;
-      
-      if (profile.voiceEnabled) {
-        const timeoutId = setTimeout(() => {
-          void generateVoice(greetingMessage.id, greeting);
-        }, 1000);
-        
-        return () => clearTimeout(timeoutId);
-      }
     }
   }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession, isLoading]);
 
@@ -385,7 +356,7 @@ function ChatScreenContent() {
     void tryShowInterstitialOnTransition();
 
     if (!isSuggestion && usageStats.credits <= 0) {
-      console.log('❌ No credits available');
+      console.log('âŒ No credits available');
       if (Platform.OS !== 'web') {
         Alert.alert(
           'No Credits',
@@ -429,7 +400,7 @@ function ChatScreenContent() {
     ];
 
     if (isFirstRealUserTurn) {
-      console.log('🧪 First turn outbound payload:', allMessages.map(m => `${m.role}:${m.content.slice(0, 40)}`));
+      console.log('ðŸ§ª First turn outbound payload:', allMessages.map(m => `${m.role}:${m.content.slice(0, 40)}`));
     }
 
     try {
@@ -442,7 +413,7 @@ function ChatScreenContent() {
       if (!isSuggestion) {
         const creditUsed = await deductCredit();
         if (!creditUsed) {
-          console.log('❌ Failed to deduct credit');
+          console.log('âŒ Failed to deduct credit');
           if (Platform.OS !== 'web') {
             Alert.alert(
               'No Credits',
@@ -457,9 +428,9 @@ function ChatScreenContent() {
           }
           return;
         }
-        console.log('✅ Credit deducted. Remaining credits:', usageStats.credits - 1);
+        console.log('âœ… Credit deducted. Remaining credits:', usageStats.credits - 1);
       } else {
-        console.log('✅ Suggested question - no credit needed');
+        console.log('âœ… Suggested question - no credit needed');
       }
 
       setMessages(prev => ([
@@ -488,7 +459,7 @@ function ChatScreenContent() {
           );
           sessionId = newSession.id;
         } catch (sessionCreateErr) {
-          console.error('⚠️ Session create failed (non-blocking):', sessionCreateErr);
+          console.error('âš ï¸ Session create failed (non-blocking):', sessionCreateErr);
         }
       } else {
         try {
@@ -498,13 +469,13 @@ function ChatScreenContent() {
             timestamp: Date.now(),
           });
         } catch (sessionAddErr) {
-          console.error('⚠️ Session add (user) failed (non-blocking):', sessionAddErr);
+          console.error('âš ï¸ Session add (user) failed (non-blocking):', sessionAddErr);
         }
       }
 
-      console.log('🤖 Sending chat message...');
+      console.log('ðŸ¤– Sending chat message...');
       console.log(
-        '📤 Messages count:',
+        'ðŸ“¤ Messages count:',
         allMessages.length,
         '| isSuggestion:',
         isSuggestion,
@@ -524,14 +495,14 @@ function ChatScreenContent() {
       let completion = normalizeVisibleText(extracted.text);
 
       if (isFirstRealUserTurn && !completion) {
-        console.warn('⚠️ First-turn empty response. Retrying once...');
+        console.warn('âš ï¸ First-turn empty response. Retrying once...');
         rawResult = await sendChatMessage({ messages: sendPayload });
         extracted = extractAssistantText(rawResult);
         completion = normalizeVisibleText(extracted.text);
       }
 
       console.log(
-        '✅ Vercel backend responded, length:',
+        'âœ… Vercel backend responded, length:',
         completion?.length,
         'keys:',
         Object.keys(rawResult || {}),
@@ -540,7 +511,7 @@ function ChatScreenContent() {
       );
 
       if (isFirstRealUserTurn) {
-        console.log('🧪 First-turn parse diagnostics:', {
+        console.log('ðŸ§ª First-turn parse diagnostics:', {
           requestId: currentRequestId,
           source: extracted.source,
           completionLength: completion.length,
@@ -549,12 +520,12 @@ function ChatScreenContent() {
       }
 
       if (currentRequestId !== activeRequestIdRef.current) {
-        console.log('⚠️ Ignoring stale chat response for requestId:', currentRequestId);
+        console.log('âš ï¸ Ignoring stale chat response for requestId:', currentRequestId);
         return;
       }
 
       console.log(
-        '📥 Assistant parse result | completion length:',
+        'ðŸ“¥ Assistant parse result | completion length:',
         completion.length,
         '| usedFallback:',
         completion.length === 0
@@ -595,21 +566,21 @@ function ChatScreenContent() {
             timestamp: Date.now(),
           });
         } catch (sessionAddErr) {
-          console.error('⚠️ Session add (assistant) failed (non-blocking):', sessionAddErr);
+          console.error('âš ï¸ Session add (assistant) failed (non-blocking):', sessionAddErr);
         }
       }
 
-      if (profile.voiceEnabled && !isVoiceMuted && completion) {
+      if (profile.voiceEnabled && completion) {
         if (usageStats.credits > 0) {
           const voiceCreditUsed = await deductCredit();
           if (voiceCreditUsed) {
-            console.log('✅ Voice credit deducted. Remaining credits:', usageStats.credits - 1);
+            console.log('âœ… Voice credit deducted. Remaining credits:', usageStats.credits - 1);
             void generateVoice(aiMessage.id, completion);
           } else {
-            console.log('⚠️ Not enough credits for voice generation');
+            console.log('âš ï¸ Not enough credits for voice generation');
           }
         } else {
-          console.log('⚠️ Not enough credits for voice generation');
+          console.log('âš ï¸ Not enough credits for voice generation');
         }
       }
     } catch (error: any) {
@@ -630,7 +601,7 @@ function ChatScreenContent() {
       });
 
       if (currentRequestId !== activeRequestIdRef.current) {
-        console.log('⚠️ Ignoring stale chat error for requestId:', currentRequestId);
+        console.log('âš ï¸ Ignoring stale chat error for requestId:', currentRequestId);
         return;
       }
 
@@ -682,7 +653,7 @@ function ChatScreenContent() {
       }
       responseCommittedRef.current = false;
     }
-  }, [isLoading, usageStats, deductCredit, profile, updateProfile, currentSessionId, createSession, addMessageToSession, generateVoice, tryShowInterstitialOnTransition, isVoiceMuted]);
+  }, [isLoading, usageStats, deductCredit, profile, updateProfile, currentSessionId, createSession, addMessageToSession, tryShowInterstitialOnTransition]);
 
 
 
@@ -702,9 +673,9 @@ function ChatScreenContent() {
 
   const startRecording = async () => {
     try {
-      console.log('🎤 Requesting microphone permissions...');
+      console.log('ðŸŽ¤ Requesting microphone permissions...');
       const permission = await Audio.requestPermissionsAsync();
-      
+
       if (!permission.granted) {
         if (Platform.OS !== 'web') {
           Alert.alert('Permission Required', 'Please enable microphone access to use voice input.');
@@ -714,7 +685,7 @@ function ChatScreenContent() {
         return;
       }
 
-      console.log('✅ Microphone permission granted');
+      console.log('âœ… Microphone permission granted');
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -723,7 +694,7 @@ function ChatScreenContent() {
         shouldDuckAndroid: true,
       });
 
-      console.log('🎤 Starting recording...');
+      console.log('ðŸŽ¤ Starting recording...');
       const { recording: newRecording } = await Audio.Recording.createAsync({
         android: {
           extension: '.m4a',
@@ -752,7 +723,7 @@ function ChatScreenContent() {
 
       setRecording(newRecording);
       setIsRecording(true);
-      console.log('✅ Recording started');
+      console.log('âœ… Recording started');
 
       Animated.loop(
         Animated.sequence([
@@ -769,7 +740,7 @@ function ChatScreenContent() {
         ])
       ).start();
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
+      console.error('âŒ Failed to start recording:', error);
       if (Platform.OS !== 'web') {
         Alert.alert('Recording Error', 'Failed to start recording. Please try again.');
       }
@@ -778,19 +749,19 @@ function ChatScreenContent() {
 
   const stopRecording = async () => {
     if (!recording) {
-      console.warn('⚠️ No recording to stop');
+      console.warn('âš ï¸ No recording to stop');
       return;
     }
 
     try {
-      console.log('🛑 Stopping recording...');
+      console.log('ðŸ›‘ Stopping recording...');
       setIsRecording(false);
       micAnim.stopAnimation();
       micAnim.setValue(1);
 
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      console.log('✅ Recording stopped, URI:', uri);
+      console.log('âœ… Recording stopped, URI:', uri);
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -804,13 +775,13 @@ function ChatScreenContent() {
       if (uri) {
         await transcribeAudio(uri);
       } else {
-        console.error('❌ No recording URI available');
+        console.error('âŒ No recording URI available');
         if (Platform.OS !== 'web') {
           Alert.alert('Error', 'Failed to save recording');
         }
       }
     } catch (error) {
-      console.error('❌ Failed to stop recording:', error);
+      console.error('âŒ Failed to stop recording:', error);
       setIsRecording(false);
       setRecording(null);
       if (Platform.OS !== 'web') {
@@ -821,14 +792,14 @@ function ChatScreenContent() {
 
   const transcribeAudio = async (uri: string) => {
     try {
-      console.log('🎯 Starting transcription for URI:', uri);
+      console.log('ðŸŽ¯ Starting transcription for URI:', uri);
       setIsTranscribing(true);
 
       const uriParts = uri.split('.');
       const fileType = uriParts[uriParts.length - 1];
 
       const formData = new FormData();
-      
+
       if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const blob = await response.blob();
@@ -842,21 +813,21 @@ function ChatScreenContent() {
         formData.append('audio', audioFile);
       }
 
-      console.log('📤 Sending audio to Vercel transcription service...');
+      console.log('ðŸ“¤ Sending audio to Vercel transcription service...');
       const data = await transcribeAudioApi({ audio: formData });
-      console.log('✅ Transcription response:', data);
+      console.log('âœ… Transcription response:', data);
 
       if (data.text && data.text.trim()) {
         setInputText(data.text.trim());
-        console.log('✅ Transcription successful:', data.text);
+        console.log('âœ… Transcription successful:', data.text);
       } else {
-        console.warn('⚠️ Empty transcription result');
+        console.warn('âš ï¸ Empty transcription result');
         if (Platform.OS !== 'web') {
           Alert.alert('No Speech Detected', 'Please try speaking again.');
         }
       }
     } catch (error) {
-      console.error('❌ Transcription error:', error);
+      console.error('âŒ Transcription error:', error);
       if (Platform.OS !== 'web') {
         Alert.alert('Transcription Error', 'Failed to transcribe audio. Please try again.');
       }
@@ -869,13 +840,13 @@ function ChatScreenContent() {
     return () => {
       void stopAudio();
       if (recording) {
-        console.log('🧹 Cleaning up recording on unmount');
+        console.log('ðŸ§¹ Cleaning up recording on unmount');
         recording.stopAndUnloadAsync().catch((err: unknown) =>
           console.error('Error cleaning up recording:', err)
         );
       }
       if (sound) {
-        console.log('🧹 Cleaning up sound on unmount');
+        console.log('ðŸ§¹ Cleaning up sound on unmount');
         sound.unloadAsync().catch((err: unknown) =>
           console.error('Error cleaning up sound:', err)
         );
@@ -907,7 +878,7 @@ function ChatScreenContent() {
     }, [index, bubbleAnim, scaleAnim]);
 
     return (
-      <Animated.View 
+      <Animated.View
         style={[
           styles.messageBubbleContainer,
           message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
@@ -918,7 +889,7 @@ function ChatScreenContent() {
         ]}
       >
         <LinearGradient
-          colors={message.isUser 
+          colors={message.isUser
             ? [Colors.primary, Colors.secondary]
             : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
           }
@@ -951,24 +922,6 @@ function ChatScreenContent() {
             ]}>
               {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
             </Text>
-            {!message.isUser && message.audioUrl && (
-              <TouchableOpacity
-                style={styles.voiceButton}
-                onPress={() => {
-                  if (message.isPlaying) {
-                    void stopAudio();
-                  } else {
-                    void playAudio(message.id, message.audioUrl!);
-                  }
-                }}
-              >
-                {message.isPlaying ? (
-                  <Pause color={Colors.text} size={14} />
-                ) : (
-                  <Play color={Colors.text} size={14} />
-                )}
-              </TouchableOpacity>
-            )}
           </View>
           <Text style={[
             styles.messageText,
@@ -1017,10 +970,10 @@ function ChatScreenContent() {
         style={styles.container}
       >
         <View style={styles.content}>
-        <Animated.View 
+        <Animated.View
           style={[
-            styles.header, 
-            { 
+            styles.header,
+            {
               paddingTop: insets.top + 4,
               opacity: fadeAnim,
               transform: [{ translateY: slideAnim }],
@@ -1039,7 +992,7 @@ function ChatScreenContent() {
                 <Text style={styles.title}>Coach Alex</Text>
                 <View style={styles.statusIndicator}>
                   <View style={styles.onlineIndicator} />
-                  <Text style={styles.statusText}>Online • v{appVersion}</Text>
+                  <Text style={styles.statusText}>Online â€¢ v{appVersion}</Text>
                 </View>
               </View>
             </View>
@@ -1054,16 +1007,6 @@ function ChatScreenContent() {
                   <Volume2 color={Colors.primary} size={20} />
                 ) : (
                   <VolumeX color={Colors.textSecondary} size={20} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.iconButton, isVoiceMuted && styles.iconButtonActive]}
-                onPress={() => { void toggleVoiceMute(); }}
-              >
-                {isVoiceMuted ? (
-                  <MicOff color={Colors.primary} size={20} />
-                ) : (
-                  <Mic color={Colors.textSecondary} size={20} />
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -1082,11 +1025,11 @@ function ChatScreenContent() {
           </View>
         </Animated.View>
 
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           style={styles.chatContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView 
+          <ScrollView
             ref={scrollViewRef}
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
@@ -1095,9 +1038,9 @@ function ChatScreenContent() {
             {messages.map((message, index) => (
               <MessageBubble key={message.id} message={message} index={index} />
             ))}
-            
+
             {isTyping && (
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.messageBubbleContainer,
                   styles.aiMessageContainer,
@@ -1129,7 +1072,7 @@ function ChatScreenContent() {
             )}
 
             {!hasStartedChat && messages.length <= 1 && (
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.suggestionsContainer,
                   {
@@ -1163,7 +1106,7 @@ function ChatScreenContent() {
             )}
           </ScrollView>
 
-          <SettingsModal 
+          <SettingsModal
             visible={showSettings}
             onClose={() => setShowSettings(false)}
             profile={profile}
@@ -1195,7 +1138,7 @@ function ChatScreenContent() {
               if (sessionId === currentSessionId) {
                 setCurrentSessionId(null);
                 setHasStartedChat(false);
-                const greeting = profile.name 
+                const greeting = profile.name
                   ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
                   : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
                 setMessages([{
@@ -1209,7 +1152,7 @@ function ChatScreenContent() {
             onNewSession={async () => {
               setCurrentSessionId(null);
               setHasStartedChat(false);
-              const greeting = profile.name 
+              const greeting = profile.name
                 ? `Hello ${profile.name}! Ready to unlock your potential? Let's chat about your goals and challenges.`
                 : "Ready to unlock your potential? Let's chat about your goals and challenges. What can I help you today?";
               setMessages([{
@@ -1264,9 +1207,9 @@ function ChatScreenContent() {
                     onPress={() => sendMessage(inputText)}
                     disabled={!inputText.trim() || isLoading || isTranscribing}
                   >
-                    <Send 
-                      color={(!inputText.trim() || isLoading || isTranscribing) ? Colors.textSecondary : Colors.background} 
-                      size={20} 
+                    <Send
+                      color={(!inputText.trim() || isLoading || isTranscribing) ? Colors.textSecondary : Colors.background}
+                      size={20}
                     />
                   </TouchableOpacity>
                 </>
@@ -1319,7 +1262,6 @@ interface SettingsModalProps {
 const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: SettingsModalProps) => {
   const [tempName, setTempName] = useState(profile.name);
   const [tempVoice, setTempVoice] = useState(profile.preferredVoice);
-  const [tempVoiceEnabled, setTempVoiceEnabled] = useState(profile.voiceEnabled);
 
   const voices = [
     { id: 'alloy', name: 'Alloy (Neutral)' },
@@ -1334,7 +1276,6 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
     updateProfile({
       name: tempName,
       preferredVoice: tempVoice,
-      voiceEnabled: tempVoiceEnabled,
     });
     onClose();
   };
@@ -1362,22 +1303,9 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
           </View>
 
           <View style={styles.settingSection}>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Voice Responses</Text>
-              <TouchableOpacity
-                style={[styles.toggle, tempVoiceEnabled && styles.toggleActive]}
-                onPress={() => setTempVoiceEnabled(!tempVoiceEnabled)}
-              >
-                {tempVoiceEnabled ? (
-                  <Volume2 color={Colors.background} size={16} />
-                ) : (
-                  <VolumeX color={Colors.textSecondary} size={16} />
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
 
-          {tempVoiceEnabled && (
+          {(
             <View style={styles.settingSection}>
               <Text style={styles.settingLabel}>Preferred Voice</Text>
               {voices.map((voice) => (
@@ -1474,7 +1402,7 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
                       {session.title}
                     </Text>
                     <Text style={styles.historyItemDate}>
-                      {formatDate(session.updatedAt)} • {session.messages.length} messages
+                      {formatDate(session.updatedAt)} â€¢ {session.messages.length} messages
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -1487,8 +1415,8 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
                           'Are you sure you want to delete this chat?',
                           [
                             { text: 'Cancel', style: 'cancel' },
-                            { 
-                              text: 'Delete', 
+                            {
+                              text: 'Delete',
                               style: 'destructive',
                               onPress: () => onDeleteSession(session.id)
                             }

@@ -1,4 +1,4 @@
-import createContextHook from '@nkzw/create-context-hook';
+﻿import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './auth-context';
@@ -21,7 +21,7 @@ interface UserProfile {
 const defaultProfile: UserProfile = {
   name: '',
   preferredVoice: 'alloy',
-  voiceEnabled: true,
+  voiceEnabled: false,
   includeChurchMotivation: false,
 };
 
@@ -37,20 +37,20 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       try {
         const timeoutPromise = new Promise<null>((resolve) => {
           setTimeout(() => {
-            console.warn('⚠️ Profile loading timeout');
+            console.warn('âš ï¸ Profile loading timeout');
             resolve(null);
           }, 1000);
         });
-        
+
         const loadPromise = AsyncStorage.getItem(storageKey);
         const stored = await Promise.race([loadPromise, timeoutPromise]);
-        
+
         if (stored && typeof stored === 'string') {
           try {
             const parsedProfile = JSON.parse(stored);
             setProfile({ ...defaultProfile, ...parsedProfile });
           } catch (parseError) {
-            console.error('❌ Error parsing user profile:', parseError);
+            console.error('âŒ Error parsing user profile:', parseError);
             setProfile(defaultProfile);
           }
         }
@@ -71,7 +71,7 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
       setProfile((prev) => {
         const next = { ...prev, ...updates };
         void AsyncStorage.setItem(storageKey, JSON.stringify(next))
-          .then(() => console.log('✅ User profile updated:', next))
+          .then(() => console.log('âœ… User profile updated:', next))
           .catch((error) => console.error('Error saving user profile:', error));
         return next;
       });
