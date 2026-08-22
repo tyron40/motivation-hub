@@ -271,14 +271,7 @@ function ProfileContent() {
             <View style={styles.menuSection}>
               <Text style={styles.sectionTitle}>Coach</Text>
               <View style={styles.menuGroup}>
-                <MenuItem 
-                  icon={Sparkles} 
-                  iconColor={colors.categories.confidence} 
-                  label="Choose Coach Character"
-                  onPress={() => router.push('/coach-character')}
-                  colors={colors}
-                />
-                <View style={styles.menuDivider} />
+
                 <MenuItem 
                   icon={MessageCircle} 
                   iconColor={colors.primary} 

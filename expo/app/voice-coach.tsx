@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,17 +32,63 @@ interface Message {
 }
 
 const voiceCharacters = [
-  { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced voice' },
-  { id: 'echo', name: 'Echo', description: 'Warm and engaging male voice' },
-  { id: 'fable', name: 'Fable', description: 'Expressive British accent' },
-  { id: 'onyx', name: 'Onyx', description: 'Deep and authoritative male voice' },
-  { id: 'nova', name: 'Nova', description: 'Energetic female voice' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Soft and gentle female voice' },
+  {
+    id: 'alloy',
+    name: 'Jordan',
+    voiceName: 'Alloy',
+    gender: 'male',
+    description: 'Calm, balanced, and encouraging.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+  },
+  {
+    id: 'echo',
+    name: 'Daniel',
+    voiceName: 'Echo',
+    gender: 'male',
+    description: 'Warm, confident, and conversational.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/46.jpg',
+  },
+  {
+    id: 'fable',
+    name: 'Oliver',
+    voiceName: 'Fable',
+    gender: 'male',
+    description: 'Expressive, thoughtful, and energetic.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/75.jpg',
+  },
+  {
+    id: 'onyx',
+    name: 'Marcus',
+    voiceName: 'Onyx',
+    gender: 'male',
+    description: 'Deep, focused, powerful, and motivational.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/22.jpg',
+  },
+  {
+    id: 'nova',
+    name: 'Maya',
+    voiceName: 'Nova',
+    gender: 'female',
+    description: 'Energetic, upbeat, and supportive.',
+    imageUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+  },
+  {
+    id: 'shimmer',
+    name: 'Sofia',
+    voiceName: 'Shimmer',
+    gender: 'female',
+    description: 'Gentle, patient, and reassuring.',
+    imageUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
+  },
 ] as const;
 
 function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
+
+  const selectedCoach =
+    voiceCharacters.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
+    voiceCharacters[0];
   const { isAuthenticated } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
@@ -82,7 +128,7 @@ function VoiceCoachContent() {
 
   const speakMessage = useCallback(async (text: string) => {
     try {
-      console.log('🔊 Speaking message:', text.substring(0, 50) + '...');
+      console.log('ðŸ”Š Speaking message:', text.substring(0, 50) + '...');
       
       // Check credits before TTS
       if (usageStats.credits <= 0) {
@@ -104,14 +150,14 @@ function VoiceCoachContent() {
           await sound.unloadAsync();
           setSound(null);
         } catch (e) {
-          console.log('⚠️ Error stopping previous sound:', e);
+          console.log('âš ï¸ Error stopping previous sound:', e);
         }
       }
       
       const preferredVoice = profile.preferredVoice || 'alloy';
-      console.log('🎵 Selected voice:', preferredVoice);
+      console.log('ðŸŽµ Selected voice:', preferredVoice);
       
-      console.log('📤 Calling TTS via Rork backend (optimized for speed)...');
+      console.log('ðŸ“¤ Calling TTS via Rork backend (optimized for speed)...');
       const ttsStartTime = Date.now();
       
       try {
@@ -121,14 +167,14 @@ function VoiceCoachContent() {
         });
         
         const ttsElapsed = Date.now() - ttsStartTime;
-        console.log(`✅ TTS audio received in ${ttsElapsed}ms`);
+        console.log(`âœ… TTS audio received in ${ttsElapsed}ms`);
         
         // Deduct 1 credit for TTS
         const creditUsed = await iapContext.useCredit();
         if (creditUsed) {
-          console.log('💳 1 credit used for TTS (Voice Generation). Remaining:', iapContext.usageStats.credits - 1);
+          console.log('ðŸ’³ 1 credit used for TTS (Voice Generation). Remaining:', iapContext.usageStats.credits - 1);
         } else {
-          console.warn('⚠️ Failed to deduct credit for TTS');
+          console.warn('âš ï¸ Failed to deduct credit for TTS');
         }
         
         const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
@@ -138,7 +184,7 @@ function VoiceCoachContent() {
           { shouldPlay: true },
           (status: AVPlaybackStatus) => {
             if (status.isLoaded && status.didJustFinish) {
-              console.log('✅ TTS playback finished');
+              console.log('âœ… TTS playback finished');
               setIsPlaying(false);
               setCurrentStatus('Ready to listen');
             }
@@ -146,9 +192,9 @@ function VoiceCoachContent() {
         );
         
         setSound(newSound);
-        console.log('🔊 TTS playback started');
+        console.log('ðŸ”Š TTS playback started');
       } catch (ttsError: any) {
-        console.error('❌ TTS generation failed:', ttsError);
+        console.error('âŒ TTS generation failed:', ttsError);
         
         let errorTitle = 'Voice Not Available';
         let errorMessage = 'Text-to-speech is currently unavailable. You can continue using the voice coach in text mode.';
@@ -168,9 +214,9 @@ function VoiceCoachContent() {
         setCurrentStatus('Ready to listen (text mode)');
       }
     } catch (error) {
-      console.error('❌ Error speaking message:', error);
-      console.error('❌ Error type:', error?.constructor?.name);
-      console.error('❌ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      console.error('âŒ Error speaking message:', error);
+      console.error('âŒ Error type:', error?.constructor?.name);
+      console.error('âŒ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       
       const errorMessage = error instanceof Error ? error.message : String(error);
       
@@ -196,14 +242,14 @@ function VoiceCoachContent() {
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreeted) {
-      console.log('⚠️ Already greeted, skipping');
+      console.log('âš ï¸ Already greeted, skipping');
       return;
     }
     
     setHasGreeted(true);
     
     const userName = profile.name || 'friend';
-    const coachName = profile.coachCharacter?.name || 'Coach Alex';
+    const coachName = selectedCoach.name;
     const timeOfDay = new Date().getHours();
     let greeting = 'Hello';
     if (timeOfDay < 12) greeting = 'Good morning';
@@ -216,50 +262,50 @@ function VoiceCoachContent() {
       timestamp: Date.now(),
     };
     
-    console.log('👋 Setting initial greeting message for:', userName);
+    console.log('ðŸ‘‹ Setting initial greeting message for:', userName);
     updateMessages([greetingMessage]);
     setCurrentStatus('Coach is greeting you...');
     
-    console.log('🔊 Speaking initial greeting...');
-    console.log('🔊 Voice enabled:', profile.voiceEnabled !== false);
-    console.log('🔊 Selected voice:', profile.preferredVoice || 'alloy');
+    console.log('ðŸ”Š Speaking initial greeting...');
+    console.log('ðŸ”Š Voice enabled:', profile.voiceEnabled !== false);
+    console.log('ðŸ”Š Selected voice:', profile.preferredVoice || 'alloy');
     
     await new Promise(resolve => setTimeout(resolve, 200));
     
     try {
-      console.log('🎯 About to speak greeting message...');
+      console.log('ðŸŽ¯ About to speak greeting message...');
       await speakMessage(greetingMessage.content);
-      console.log('✅ Initial greeting spoken successfully');
+      console.log('âœ… Initial greeting spoken successfully');
     } catch (error) {
-      console.error('❌ Failed to speak greeting:', error);
+      console.error('âŒ Failed to speak greeting:', error);
       setCurrentStatus('Ready to listen');
     }
-  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, profile.coachCharacter, speakMessage, hasGreeted]);
+  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, speakMessage, hasGreeted]);
 
   useEffect(() => {
     let isMounted = true;
     
     const initializeVoiceCoach = async () => {
       if (isInitializedRef.current) {
-        console.log('⚠️ Already initialized, skipping');
+        console.log('âš ï¸ Already initialized, skipping');
         return;
       }
       
       isInitializedRef.current = true;
       
       try {
-        console.log('🔍 Checking backend health...');
-        console.log('✅ Using direct API calls, no backend health check needed');
+        console.log('ðŸ” Checking backend health...');
+        console.log('âœ… Using direct API calls, no backend health check needed');
         
-        console.log('🔐 Requesting microphone permissions on startup...');
+        console.log('ðŸ” Requesting microphone permissions on startup...');
         const permissionResponse = await Audio.requestPermissionsAsync();
-        console.log('🔐 Permission response:', JSON.stringify(permissionResponse));
+        console.log('ðŸ” Permission response:', JSON.stringify(permissionResponse));
         
         if (permissionResponse.status === 'granted') {
-          console.log('✅ Microphone permission granted');
+          console.log('âœ… Microphone permission granted');
           setHasPermission(true);
         } else {
-          console.log('⚠️ Microphone permission not granted');
+          console.log('âš ï¸ Microphone permission not granted');
           setHasPermission(false);
         }
         
@@ -269,7 +315,7 @@ function VoiceCoachContent() {
           staysActiveInBackground: false,
           shouldDuckAndroid: true,
         });
-        console.log('✅ Audio mode initialized');
+        console.log('âœ… Audio mode initialized');
         
         await new Promise(resolve => setTimeout(resolve, 300));
         setCurrentStatus('Ready to listen');
@@ -285,16 +331,16 @@ function VoiceCoachContent() {
       isMounted = false;
       
       const cleanup = async () => {
-        console.log('🧹 Cleaning up audio resources...');
+        console.log('ðŸ§¹ Cleaning up audio resources...');
         
         try {
           if (sound) {
             await sound.stopAsync();
             await sound.unloadAsync();
-            console.log('✅ Sound cleaned up');
+            console.log('âœ… Sound cleaned up');
           }
         } catch (e) {
-          console.log('⚠️ Sound cleanup error:', e);
+          console.log('âš ï¸ Sound cleanup error:', e);
         }
         
         try {
@@ -304,10 +350,10 @@ function VoiceCoachContent() {
               await recordingRef.current.stopAndUnloadAsync();
             }
             recordingRef.current = null;
-            console.log('✅ Recording cleaned up');
+            console.log('âœ… Recording cleaned up');
           }
         } catch (e) {
-          console.log('⚠️ Recording cleanup error:', e);
+          console.log('âš ï¸ Recording cleanup error:', e);
         }
         
         try {
@@ -317,9 +363,9 @@ function VoiceCoachContent() {
             staysActiveInBackground: false,
             shouldDuckAndroid: true,
           });
-          console.log('✅ Audio mode reset on cleanup');
+          console.log('âœ… Audio mode reset on cleanup');
         } catch (e) {
-          console.log('⚠️ Audio mode reset error:', e);
+          console.log('âš ï¸ Audio mode reset error:', e);
         }
       };
       
@@ -402,17 +448,17 @@ function VoiceCoachContent() {
 
   const startRecording = async () => {
     try {
-      console.log('🎤 Starting recording...');
+      console.log('ðŸŽ¤ Starting recording...');
       
       if (isRecording || isProcessing || isStartingRef.current || isStoppingRef.current) {
-        console.log('⚠️ Cannot start recording - already busy');
+        console.log('âš ï¸ Cannot start recording - already busy');
         return;
       }
       
       isStartingRef.current = true;
       
       if (sound || isPlaying) {
-        console.log('🔇 Stopping any existing playback...');
+        console.log('ðŸ”‡ Stopping any existing playback...');
         try {
           if (sound) {
             await sound.stopAsync();
@@ -421,21 +467,21 @@ function VoiceCoachContent() {
           }
           setIsPlaying(false);
         } catch (e) {
-          console.log('⚠️ Error stopping playback:', e);
+          console.log('âš ï¸ Error stopping playback:', e);
         }
         await new Promise(resolve => setTimeout(resolve, 300));
       }
       
       if (recordingRef.current) {
         try {
-          console.log('🧹 Cleaning up existing recording...');
+          console.log('ðŸ§¹ Cleaning up existing recording...');
           const status = await recordingRef.current.getStatusAsync();
           if (status.canRecord || status.isRecording) {
             await recordingRef.current.stopAndUnloadAsync();
           }
-          console.log('✅ Existing recording cleaned up');
+          console.log('âœ… Existing recording cleaned up');
         } catch (e) {
-          console.log('⚠️ Error cleaning up existing recording:', e);
+          console.log('âš ï¸ Error cleaning up existing recording:', e);
         }
         recordingRef.current = null;
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -443,13 +489,13 @@ function VoiceCoachContent() {
       
       if (Platform.OS === 'web') {
         try {
-          console.log('🌐 Starting web recording via MediaRecorder');
+          console.log('ðŸŒ Starting web recording via MediaRecorder');
           
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error('Your browser does not support audio recording. Please use a modern browser like Chrome, Firefox, or Safari.');
           }
           
-          console.log('🔐 Requesting microphone access from browser...');
+          console.log('ðŸ” Requesting microphone access from browser...');
           const stream = await navigator.mediaDevices.getUserMedia({ 
             audio: {
               echoCancellation: true,
@@ -457,8 +503,8 @@ function VoiceCoachContent() {
               autoGainControl: true,
             } 
           });
-          console.log('✅ Microphone access granted');
-          console.log('🎤 Audio tracks:', stream.getAudioTracks().length);
+          console.log('âœ… Microphone access granted');
+          console.log('ðŸŽ¤ Audio tracks:', stream.getAudioTracks().length);
           
           webStreamRef.current = stream;
 
@@ -468,28 +514,28 @@ function VoiceCoachContent() {
           }
           
           const mimeType = 'audio/webm;codecs=opus';
-          console.log('🎵 Creating MediaRecorder with mimeType:', mimeType);
+          console.log('ðŸŽµ Creating MediaRecorder with mimeType:', mimeType);
           const mr = new MrCtor(stream, { mimeType });
           webChunksRef.current = [];
 
           mr.onstart = () => {
-            console.log('✅ Web MediaRecorder started');
-            console.log('🎤 Recording state:', mr.state);
+            console.log('âœ… Web MediaRecorder started');
+            console.log('ðŸŽ¤ Recording state:', mr.state);
           };
           mr.ondataavailable = (e: any) => {
-            console.log('📦 Data available, size:', e.data?.size || 0);
+            console.log('ðŸ“¦ Data available, size:', e.data?.size || 0);
             if (e.data && e.data.size > 0) {
               webChunksRef.current.push(e.data);
             }
           };
           mr.onerror = (e: any) => {
-            console.error('❌ MediaRecorder error:', e);
+            console.error('âŒ MediaRecorder error:', e);
             Alert.alert('Recording Error', 'An error occurred while recording. Please try again.');
           };
 
           webRecorderRef.current = mr;
           mr.start();
-          console.log('▶️ MediaRecorder.start() called');
+          console.log('â–¶ï¸ MediaRecorder.start() called');
 
           setIsRecording(true);
           setCurrentStatus('Listening... Speak now!');
@@ -497,9 +543,9 @@ function VoiceCoachContent() {
           isStartingRef.current = false;
           return;
         } catch (webErr: any) {
-          console.error('❌ Web recording error:', webErr);
-          console.error('❌ Error name:', webErr?.name);
-          console.error('❌ Error message:', webErr?.message);
+          console.error('âŒ Web recording error:', webErr);
+          console.error('âŒ Error name:', webErr?.name);
+          console.error('âŒ Error message:', webErr?.message);
           isStartingRef.current = false;
           
           let errorMessage = 'Unable to access your microphone.';
@@ -520,17 +566,17 @@ function VoiceCoachContent() {
         }
       }
 
-      console.log('🔐 Checking microphone permissions...');
+      console.log('ðŸ” Checking microphone permissions...');
       let permissionResponse = await Audio.getPermissionsAsync();
-      console.log('🔐 Current permission status:', JSON.stringify(permissionResponse));
+      console.log('ðŸ” Current permission status:', JSON.stringify(permissionResponse));
       
       if (permissionResponse.status !== 'granted') {
-        console.log('🔐 Permission not granted, requesting...');
+        console.log('ðŸ” Permission not granted, requesting...');
         permissionResponse = await Audio.requestPermissionsAsync();
-        console.log('🔐 Permission request result:', JSON.stringify(permissionResponse));
+        console.log('ðŸ” Permission request result:', JSON.stringify(permissionResponse));
         
         if (permissionResponse.status !== 'granted') {
-          console.error('❌ Microphone permission denied');
+          console.error('âŒ Microphone permission denied');
           isStartingRef.current = false;
           recordingStartTimeRef.current = null;
           setHasPermission(false);
@@ -550,11 +596,11 @@ function VoiceCoachContent() {
         setHasPermission(true);
       }
       
-      console.log('✅ Microphone permission granted');
+      console.log('âœ… Microphone permission granted');
       
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      console.log('🔧 Setting up audio mode for recording...');
+      console.log('ðŸ”§ Setting up audio mode for recording...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -563,13 +609,13 @@ function VoiceCoachContent() {
         playThroughEarpieceAndroid: false,
       });
       
-      console.log('✅ Audio mode configured for recording');
+      console.log('âœ… Audio mode configured for recording');
       await new Promise(resolve => setTimeout(resolve, 150));
 
-      console.log('🆕 Creating new recording instance...');
+      console.log('ðŸ†• Creating new recording instance...');
       const recordingInstance = new Audio.Recording();
       
-      console.log('🔧 Preparing recording...');
+      console.log('ðŸ”§ Preparing recording...');
       
       const recordingOptions = {
         android: {
@@ -598,24 +644,24 @@ function VoiceCoachContent() {
       };
       
       await recordingInstance.prepareToRecordAsync(recordingOptions);
-      console.log('✅ Recording prepared successfully');
+      console.log('âœ… Recording prepared successfully');
 
-      console.log('▶️ Starting recording...');
+      console.log('â–¶ï¸ Starting recording...');
       
       recordingStartTimeRef.current = Date.now();
-      console.log('⏱️ Recording start time set:', recordingStartTimeRef.current);
+      console.log('â±ï¸ Recording start time set:', recordingStartTimeRef.current);
       
       await recordingInstance.startAsync();
-      console.log('✅ Recording.startAsync() completed');
+      console.log('âœ… Recording.startAsync() completed');
       
       await new Promise(resolve => setTimeout(resolve, 150));
       const recordingStatus = await recordingInstance.getStatusAsync();
-      console.log('📊 Recording status after start:', JSON.stringify(recordingStatus));
-      console.log('📊 Is recording:', recordingStatus.isRecording);
-      console.log('📊 Duration so far:', recordingStatus.durationMillis, 'ms');
+      console.log('ðŸ“Š Recording status after start:', JSON.stringify(recordingStatus));
+      console.log('ðŸ“Š Is recording:', recordingStatus.isRecording);
+      console.log('ðŸ“Š Duration so far:', recordingStatus.durationMillis, 'ms');
       
       if (!recordingStatus.isRecording) {
-        console.error('❌ Recording failed to start properly');
+        console.error('âŒ Recording failed to start properly');
         recordingStartTimeRef.current = null;
         await recordingInstance.stopAndUnloadAsync();
         throw new Error('Recording did not start. Please check microphone permissions and try again.');
@@ -626,9 +672,9 @@ function VoiceCoachContent() {
       setCurrentStatus('Listening... Speak now!');
       isStartingRef.current = false;
       
-      console.log('✅ Recording started successfully and verified');
+      console.log('âœ… Recording started successfully and verified');
     } catch (error) {
-      console.error('❌ Error starting recording:', error);
+      console.error('âŒ Error starting recording:', error);
       
       recordingRef.current = null;
       setIsRecording(false);
@@ -657,17 +703,17 @@ function VoiceCoachContent() {
 
   const stopRecording = async () => {
     try {
-      console.log('🛑 Stopping recording...');
+      console.log('ðŸ›‘ Stopping recording...');
       
       if (isStoppingRef.current) {
-        console.log('⚠️ Already stopping recording');
+        console.log('âš ï¸ Already stopping recording');
         return;
       }
       
       isStoppingRef.current = true;
       
       if (isStartingRef.current) {
-        console.log('⏳ Waiting for recording to initialize before stopping...');
+        console.log('â³ Waiting for recording to initialize before stopping...');
         let waited = 0;
         while (isStartingRef.current && waited < 800) {
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -683,7 +729,7 @@ function VoiceCoachContent() {
           const mr: any = webRecorderRef.current;
           const stream: any = webStreamRef.current;
           if (!mr) {
-            console.log('⚠️ No web MediaRecorder instance');
+            console.log('âš ï¸ No web MediaRecorder instance');
             setCurrentStatus('Ready to listen');
             isStoppingRef.current = false;
             return;
@@ -691,7 +737,7 @@ function VoiceCoachContent() {
           const getBlob = new Promise<Blob>((resolve) => {
             mr.onstop = () => {
               const blob = new Blob(webChunksRef.current, { type: 'audio/webm' });
-              console.log('📦 Web recording blob size:', blob.size);
+              console.log('ðŸ“¦ Web recording blob size:', blob.size);
               resolve(blob);
             };
           });
@@ -705,7 +751,7 @@ function VoiceCoachContent() {
           await processWebTranscription(blob);
           return;
         } catch (e) {
-          console.error('❌ Error stopping web recording:', e);
+          console.error('âŒ Error stopping web recording:', e);
           Alert.alert('Recording Error', 'Failed to capture audio from the browser.');
           setCurrentStatus('Ready to listen');
           isStoppingRef.current = false;
@@ -714,7 +760,7 @@ function VoiceCoachContent() {
       }
 
       if (!recordingRef.current) {
-        console.log('⚠️ No recording instance found');
+        console.log('âš ï¸ No recording instance found');
         setIsRecording(false);
         isStoppingRef.current = false;
         return;
@@ -734,33 +780,33 @@ function VoiceCoachContent() {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         status = await recordingToProcess.getStatusAsync();
-        console.log('📊 Recording status:', JSON.stringify(status, null, 2));
-        console.log('📊 Duration:', status.durationMillis, 'ms');
-        console.log('📊 Is recording:', status.isRecording);
-        console.log('📊 Can record:', status.canRecord);
+        console.log('ðŸ“Š Recording status:', JSON.stringify(status, null, 2));
+        console.log('ðŸ“Š Duration:', status.durationMillis, 'ms');
+        console.log('ðŸ“Š Is recording:', status.isRecording);
+        console.log('ðŸ“Š Can record:', status.canRecord);
         
         if (status.canRecord || status.isRecording) {
           uri = recordingToProcess.getURI();
-          console.log('📁 Recording URI:', uri);
+          console.log('ðŸ“ Recording URI:', uri);
           
           await recordingToProcess.stopAndUnloadAsync();
-          console.log('✅ Recording stopped and unloaded');
+          console.log('âœ… Recording stopped and unloaded');
         } else {
-          console.log('⚠️ Recording was not active, trying to get URI anyway');
+          console.log('âš ï¸ Recording was not active, trying to get URI anyway');
           try {
             uri = recordingToProcess.getURI();
             await recordingToProcess.stopAndUnloadAsync();
           } catch (e) {
-            console.log('⚠️ Could not get URI from inactive recording:', e);
+            console.log('âš ï¸ Could not get URI from inactive recording:', e);
           }
         }
       } catch (error) {
-        console.error('❌ Error stopping recording:', error);
+        console.error('âŒ Error stopping recording:', error);
         try {
           uri = recordingToProcess.getURI();
-          console.log('📁 Got URI despite stop error:', uri);
+          console.log('ðŸ“ Got URI despite stop error:', uri);
         } catch (uriError) {
-          console.error('❌ Could not get URI:', uriError);
+          console.error('âŒ Could not get URI:', uriError);
         }
       } finally {
         recordingRef.current = null;
@@ -773,27 +819,27 @@ function VoiceCoachContent() {
           staysActiveInBackground: false,
           shouldDuckAndroid: true,
         });
-        console.log('✅ Audio mode reset');
+        console.log('âœ… Audio mode reset');
       } catch (error) {
-        console.error('❌ Error resetting audio mode:', error);
+        console.error('âŒ Error resetting audio mode:', error);
       }
       
       if (uri) {
-        console.log('🎵 Processing recording with URI:', uri);
+        console.log('ðŸŽµ Processing recording with URI:', uri);
         
         const elapsedMs = startedAt ? Date.now() - startedAt : null;
         const MIN_DURATION_MS = 300;
         
         const nativeDurationMs = status?.durationMillis ?? null;
         
-        console.log(`⏱️ Elapsed time (our timer): ${elapsedMs}ms`);
-        console.log(`⏱️ Native duration: ${nativeDurationMs}ms`);
+        console.log(`â±ï¸ Elapsed time (our timer): ${elapsedMs}ms`);
+        console.log(`â±ï¸ Native duration: ${nativeDurationMs}ms`);
         
         const actualDuration = Math.max(elapsedMs ?? 0, nativeDurationMs ?? 0);
-        console.log(`⏱️ Actual duration used: ${actualDuration}ms (${(actualDuration / 1000).toFixed(2)}s)`);
+        console.log(`â±ï¸ Actual duration used: ${actualDuration}ms (${(actualDuration / 1000).toFixed(2)}s)`);
         
         if (actualDuration < MIN_DURATION_MS) {
-          console.log(`⚠️ Recording too short: ${actualDuration}ms (minimum: ${MIN_DURATION_MS}ms)`);
+          console.log(`âš ï¸ Recording too short: ${actualDuration}ms (minimum: ${MIN_DURATION_MS}ms)`);
           Alert.alert(
             'Recording Too Short',
             `Recording was only ${(actualDuration / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`,
@@ -806,12 +852,12 @@ function VoiceCoachContent() {
         
         await processAudioTranscription(uri);
       } else {
-        console.log('❌ No recording URI available');
+        console.log('âŒ No recording URI available');
         Alert.alert('Recording Error', 'No audio was recorded. Please hold the button while speaking.');
         setCurrentStatus('Ready to listen');
       }
     } catch (error) {
-      console.error('❌ Error stopping recording:', error);
+      console.error('âŒ Error stopping recording:', error);
       recordingRef.current = null;
       setIsRecording(false);
       recordingStartTimeRef.current = null;
@@ -824,28 +870,28 @@ function VoiceCoachContent() {
   const processAudioTranscription = async (audioUri: string) => {
     try {
       setIsProcessing(true);
-      console.log('🔄 Processing audio transcription...');
-      console.log('📁 Audio URI:', audioUri);
+      console.log('ðŸ”„ Processing audio transcription...');
+      console.log('ðŸ“ Audio URI:', audioUri);
       
       if (!audioUri || audioUri.trim().length === 0) {
         throw new Error('Invalid audio URI - recording may have failed');
       }
       
-      console.log('🚀 Sending transcription request to backend STT...');
+      console.log('ðŸš€ Sending transcription request to backend STT...');
 
       const transcribedText = await transcribeAudioViaBackend(audioUri);
       const text = transcribedText;
-      console.log('🎯 Transcribed text:', JSON.stringify(text), '| length:', text.length);
+      console.log('ðŸŽ¯ Transcribed text:', JSON.stringify(text), '| length:', text.length);
       
       if (text && typeof text === 'string' && text.trim().length > 0) {
         const cleanedText = text.trim();
-        console.log('✅ Valid transcribed text:', cleanedText);
-        console.log('📏 Cleaned text length:', cleanedText.length);
+        console.log('âœ… Valid transcribed text:', cleanedText);
+        console.log('ðŸ“ Cleaned text length:', cleanedText.length);
         
         const noisePatterns = ['.', '...', '', ' '];
         
         if (noisePatterns.includes(cleanedText) || cleanedText.length < 1) {
-          console.log('⚠️ Likely transcription error or noise:', cleanedText);
+          console.log('âš ï¸ Likely transcription error or noise:', cleanedText);
           Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
           setCurrentStatus('Ready to listen');
           return;
@@ -857,14 +903,14 @@ function VoiceCoachContent() {
           timestamp: Date.now(),
         };
         
-        console.log('💬 Adding user message:', userMessage);
+        console.log('ðŸ’¬ Adding user message:', userMessage);
         
         const updatedMessages = [...messagesRef.current, userMessage];
         updateMessages(updatedMessages);
-        console.log('📝 Updated messages count:', updatedMessages.length);
+        console.log('ðŸ“ Updated messages count:', updatedMessages.length);
         void getAIResponse(updatedMessages);
       } else {
-        console.log('⚠️ Empty or invalid transcription received:', {
+        console.log('âš ï¸ Empty or invalid transcription received:', {
           text,
           typeOfText: typeof text,
           trimmed: text?.trim ? text.trim() : 'N/A',
@@ -877,13 +923,13 @@ function VoiceCoachContent() {
         );
       }
     } catch (error) {
-      console.error('❌ Error processing transcription:', error);
-      console.error('❌ Error type:', error?.constructor?.name);
-      console.error('❌ Error message:', (error as Error)?.message);
-      console.error('❌ Error stack:', (error as Error)?.stack);
+      console.error('âŒ Error processing transcription:', error);
+      console.error('âŒ Error type:', error?.constructor?.name);
+      console.error('âŒ Error message:', (error as Error)?.message);
+      console.error('âŒ Error stack:', (error as Error)?.stack);
       
       if ((error as Error).name === 'AbortError') {
-        console.error('❌ Request timed out after 30 seconds');
+        console.error('âŒ Request timed out after 30 seconds');
         Alert.alert(
           'Timeout Error', 
           'Speech processing took too long. This could mean:\n\n1. Poor internet connection\n2. Audio file too large\n3. Service temporarily unavailable\n\nPlease try again with a shorter message.',
@@ -891,7 +937,7 @@ function VoiceCoachContent() {
         );
       } else if ((error as Error).message?.includes('Network request failed') || 
                  (error as Error).message?.includes('Failed to fetch')) {
-        console.error('❌ Network error - cannot reach STT service');
+        console.error('âŒ Network error - cannot reach STT service');
         Alert.alert(
           'Connection Error', 
           'Cannot reach the speech-to-text service. Please check your internet connection and try again.',
@@ -916,13 +962,13 @@ function VoiceCoachContent() {
   const processWebTranscription = async (blob: Blob) => {
     try {
       setIsProcessing(true);
-      console.log('🔄 Processing web audio transcription...');
-      console.log('📦 Blob size:', blob.size);
+      console.log('ðŸ”„ Processing web audio transcription...');
+      console.log('ðŸ“¦ Blob size:', blob.size);
 
       const formData = new FormData();
       formData.append('audio', blob as any, 'recording.webm');
 
-      console.log('🌐 Calling backend STT endpoint (web):', API_ENDPOINTS.stt);
+      console.log('ðŸŒ Calling backend STT endpoint (web):', API_ENDPOINTS.stt);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -933,11 +979,11 @@ function VoiceCoachContent() {
       });
 
       clearTimeout(timeoutId);
-      console.log('📡 Transcription response status:', transcriptionResponse.status);
+      console.log('ðŸ“¡ Transcription response status:', transcriptionResponse.status);
 
       if (!transcriptionResponse.ok) {
         const errorText = await transcriptionResponse.text();
-        console.error('❌ Transcription error response:', errorText.substring(0, 200));
+        console.error('âŒ Transcription error response:', errorText.substring(0, 200));
 
         if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
           throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
@@ -948,7 +994,7 @@ function VoiceCoachContent() {
 
       const data = await transcriptionResponse.json();
       const text: string | undefined = data?.text;
-      console.log('🎯 Extracted text:', text);
+      console.log('ðŸŽ¯ Extracted text:', text);
 
       if (!text || text.trim().length === 0) {
         Alert.alert('No Speech Detected', 'Please try again and speak clearly.');
@@ -961,7 +1007,7 @@ function VoiceCoachContent() {
       updateMessages(updated);
       void getAIResponse(updated);
     } catch (error) {
-      console.error('❌ Web transcription error:', error);
+      console.error('âŒ Web transcription error:', error);
       Alert.alert('Processing Error', (error as Error).message);
     } finally {
       setIsProcessing(false);
@@ -971,8 +1017,8 @@ function VoiceCoachContent() {
 
   const getAIResponse = async (conversationMessages: Message[]) => {
     try {
-      console.log('🤖 Getting AI response...');
-      console.log('📝 Conversation messages:', conversationMessages.length);
+      console.log('ðŸ¤– Getting AI response...');
+      console.log('ðŸ“ Conversation messages:', conversationMessages.length);
       
       // Check credits before making AI request
       if (usageStats.credits <= 0) {
@@ -994,8 +1040,8 @@ function VoiceCoachContent() {
       setCurrentStatus('Coach is thinking...');
       
       const userName = profile.name || 'friend';
-      const coachName = profile.coachCharacter?.name || 'Coach Alex';
-      const coachDescription = profile.coachCharacter?.description || 'Energetic and motivating, perfect for daily inspiration';
+      const coachName = selectedCoach.name;
+      const coachDescription = selectedCoach.description;
       const systemPrompt = `You are an AI motivation coach named "${coachName}". ${coachDescription}. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
 
 Key traits:
@@ -1009,7 +1055,7 @@ Key traits:
 
 IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow. Always end with encouragement.`;
 
-      console.log('📤 Calling chat via Rork backend...');
+      console.log('ðŸ“¤ Calling chat via Rork backend...');
       
       const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
         { role: 'system' as const, content: systemPrompt },
@@ -1029,9 +1075,9 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       // Deduct 1 credit for chat message
       const creditUsed = await iapContext.useCredit();
       if (creditUsed) {
-        console.log('💳 1 credit used for AI Chat Message. Remaining:', iapContext.usageStats.credits - 1);
+        console.log('ðŸ’³ 1 credit used for AI Chat Message. Remaining:', iapContext.usageStats.credits - 1);
       } else {
-        console.warn('⚠️ Failed to deduct credit for chat');
+        console.warn('âš ï¸ Failed to deduct credit for chat');
       }
       
       const assistantMessage: Message = {
@@ -1040,25 +1086,25 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         timestamp: Date.now(),
       };
       
-      console.log('✅ AI response received, starting TTS immediately...');
+      console.log('âœ… AI response received, starting TTS immediately...');
       updateMessages(prev => [...prev, assistantMessage]);
       
       if (profile.voiceEnabled !== false) {
-        console.log('🔊 Starting TTS generation immediately (parallel)...');
+        console.log('ðŸ”Š Starting TTS generation immediately (parallel)...');
         setCurrentStatus('Coach is speaking...');
         
         speakMessage(completion).catch(error => {
-          console.error('❌ Failed to speak AI response:', error);
+          console.error('âŒ Failed to speak AI response:', error);
           setCurrentStatus('Ready to listen');
         });
       } else {
-        console.log('🔇 Voice disabled, skipping speech');
+        console.log('ðŸ”‡ Voice disabled, skipping speech');
         setCurrentStatus('Ready to listen');
       }
     } catch (error) {
-      console.error('❌ Error getting AI response:', error);
-      console.error('❌ Error type:', error?.constructor?.name);
-      console.error('❌ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      console.error('âŒ Error getting AI response:', error);
+      console.error('âŒ Error type:', error?.constructor?.name);
+      console.error('âŒ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
       
       const fallbackMessage: Message = {
         role: 'assistant',
@@ -1085,7 +1131,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
           await Speech.stop();
         } else {
           if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
-            console.log('🔇 Canceling Web Speech synthesis...');
+            console.log('ðŸ”‡ Canceling Web Speech synthesis...');
             window.speechSynthesis.cancel();
           }
         }
@@ -1099,7 +1145,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
         setIsPlaying(false);
         setCurrentStatus('Ready to listen');
       } catch (e) {
-        console.log('⚠️ Error stopping speech:', e);
+        console.log('âš ï¸ Error stopping speech:', e);
         setIsPlaying(false);
         setCurrentStatus('Ready to listen');
       }
@@ -1110,7 +1156,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
   useFocusEffect(
     React.useCallback(() => {
       return () => {
-        console.log('🧹 Voice coach lost focus — stopping TTS, recording, and resetting state');
+        console.log('ðŸ§¹ Voice coach lost focus â€” stopping TTS, recording, and resetting state');
         // Stop TTS playback
         if (sound) {
           sound.stopAsync().catch(() => {});
@@ -1233,30 +1279,23 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
               { transform: [{ scale: avatarScale }] }
             ]}
           >
-            {profile.coachCharacter?.imageUrl ? (
-              <Image 
-                source={{ uri: profile.coachCharacter.imageUrl }} 
-                style={styles.avatarImage}
-              />
-            ) : (
-              <User size={80} color={colors.primary} />
-            )}
+            <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
           </Animated.View>
           
           <View style={styles.coachInfo}>
-            <Text style={[styles.coachName, { color: colors.text }]}>{profile.coachCharacter?.name || 'Coach Alex'}</Text>
+            <Text style={[styles.coachName, { color: colors.text }]}>{selectedCoach.name}</Text>
             <TouchableOpacity 
               style={styles.changeCoachButton}
-              onPress={() => router.push('/coach-character')}
+              onPress={() => setShowVoiceModal(true)}
             >
               <Sparkles size={14} color={colors.primary} />
               <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Coach</Text>
             </TouchableOpacity>
           </View>
           
-          <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>{profile.coachCharacter?.description || 'Your Personal Motivation Coach'}</Text>
+          <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>{selectedCoach.description}</Text>
           <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Speaking as: {voiceCharacters.find(v => v.id === profile.preferredVoice)?.name || 'Alloy'}
+            Speaking as: {selectedCoach.name} - {selectedCoach.voiceName}
           </Text>
         </View>
 
@@ -1329,8 +1368,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
             onPress={() => setShowVoiceModal(true)}
           >
             <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {voiceCharacters.find(v => v.id === profile.preferredVoice)?.name || 'Alloy'}
-            </Text>
+              Voice: {selectedCoach.name} - {selectedCoach.voiceName}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1343,7 +1381,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice Character</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Your Voice Coach</Text>
             <ScrollView style={styles.voiceList}>
               {voiceCharacters.map((voice) => (
                 <TouchableOpacity
@@ -1354,19 +1392,23 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
                     profile.preferredVoice === voice.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                   ]}
                   onPress={async () => {
-                    console.log('🎤 Selecting voice:', voice.id);
+                    console.log('ðŸŽ¤ Selecting voice:', voice.id);
                     await updateProfile({ preferredVoice: voice.id as any });
-                    console.log('✅ Voice updated to:', voice.id);
-                    Alert.alert('Voice Updated', `Voice changed to ${voice.name}`);
+                    console.log('âœ… Voice updated to:', voice.id);
+                    Alert.alert('Voice Updated', `Voice changed to ${voice.name} - ${voice.voiceName}`);
                     setShowVoiceModal(false);
                   }}
                 >
+                  <Image
+                    source={{ uri: voice.imageUrl }}
+                    style={styles.voicePortrait}
+                  />
                   <View style={styles.voiceInfo}>
                     <Text style={[
                       styles.voiceName,
                       { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
                     ]}>
-                      {voice.name}
+                      {voice.name} - {voice.voiceName}
                     </Text>
                     <Text style={[styles.voiceDescription, { color: colors.textSecondary }]}>{voice.description}</Text>
                   </View>
@@ -1597,7 +1639,14 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  voiceInfo: {
+  voicePortrait: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      marginRight: 12,
+      backgroundColor: colors.card,
+    },
+    voiceInfo: {
     flex: 1,
   },
   voiceName: {

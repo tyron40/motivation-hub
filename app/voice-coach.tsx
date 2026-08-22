@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,17 +28,63 @@ type Message = { role: Role; content: string };
 type Phase = 'idle' | 'greeting' | 'recording' | 'processing' | 'speaking';
 
 const voiceCharacters = [
-  { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced voice' },
-  { id: 'echo', name: 'Echo', description: 'Warm and engaging male voice' },
-  { id: 'fable', name: 'Fable', description: 'Expressive British accent' },
-  { id: 'onyx', name: 'Onyx', description: 'Deep and authoritative male voice' },
-  { id: 'nova', name: 'Nova', description: 'Energetic female voice' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Soft and gentle female voice' },
+  {
+    id: 'alloy',
+    name: 'Jordan',
+    voiceName: 'Alloy',
+    gender: 'male',
+    description: 'Calm, balanced, and encouraging.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+  },
+  {
+    id: 'echo',
+    name: 'Daniel',
+    voiceName: 'Echo',
+    gender: 'male',
+    description: 'Warm, confident, and conversational.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/46.jpg',
+  },
+  {
+    id: 'fable',
+    name: 'Oliver',
+    voiceName: 'Fable',
+    gender: 'male',
+    description: 'Expressive, thoughtful, and energetic.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/75.jpg',
+  },
+  {
+    id: 'onyx',
+    name: 'Marcus',
+    voiceName: 'Onyx',
+    gender: 'male',
+    description: 'Deep, focused, powerful, and motivational.',
+    imageUrl: 'https://randomuser.me/api/portraits/men/22.jpg',
+  },
+  {
+    id: 'nova',
+    name: 'Maya',
+    voiceName: 'Nova',
+    gender: 'female',
+    description: 'Energetic, upbeat, and supportive.',
+    imageUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+  },
+  {
+    id: 'shimmer',
+    name: 'Sofia',
+    voiceName: 'Shimmer',
+    gender: 'female',
+    description: 'Gentle, patient, and reassuring.',
+    imageUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
+  },
 ] as const;
 
 function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
+
+  const selectedCoach =
+    voiceCharacters.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
+    voiceCharacters[0];
   const { isAuthenticated } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
@@ -128,7 +174,7 @@ function VoiceCoachContent() {
         );
         soundRef.current = sound;
       } catch (err: any) {
-        console.error('❌ TTS error:', err);
+        console.error('âŒ TTS error:', err);
         setPhase('idle');
         setCurrentStatus('Ready to listen');
         Alert.alert('Voice Error', err?.message || 'Unable to play coach voice right now.');
@@ -157,9 +203,9 @@ function VoiceCoachContent() {
 
       try {
         const userName = profile.name || 'friend';
-        const coachName = profile.coachCharacter?.name || 'Coach Alex';
+        const coachName = selectedCoach.name;
         const coachDescription =
-          profile.coachCharacter?.description || 'Energetic and motivating, perfect for daily inspiration';
+          selectedCoach.description;
 
         const systemPrompt = `You are an AI motivation coach named "${coachName}". ${coachDescription}.
 Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}" when natural.`;
@@ -194,7 +240,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         await speakText(reply);
       } catch (err) {
-        console.error('❌ coach reply error:', err);
+        console.error('âŒ coach reply error:', err);
         const fallback = "I'm still here with you. Let's try that again.";
         conversationRef.current = trimConversation([
           ...conversationRef.current,
@@ -203,7 +249,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         await speakText(fallback);
       }
     },
-    [usageStats.credits, profile.name, profile.coachCharacter, profile.voiceEnabled, trimConversation, iapContext, speakText]
+    [usageStats.credits, profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, iapContext, speakText]
   );
 
   const startRecording = useCallback(async () => {
@@ -284,7 +330,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       recordingRef.current = recording;
       setPhase('recording');
     } catch (err: any) {
-      console.error('❌ startRecording:', err);
+      console.error('âŒ startRecording:', err);
       setPhase('idle');
       setCurrentStatus('Ready to listen');
       Alert.alert('Recording Error', err?.message || 'Failed to start recording');
@@ -348,7 +394,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       await getCoachReply(userText);
     } catch (err: any) {
-      console.error('❌ stopRecording:', err);
+      console.error('âŒ stopRecording:', err);
       setPhase('idle');
       setCurrentStatus('Ready to listen');
       Alert.alert('Processing Error', err?.message || 'Failed to process speech');
@@ -369,7 +415,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     setHasGreeted(true);
 
     const userName = profile.name || 'friend';
-    const coachName = profile.coachCharacter?.name || 'Coach Alex';
+    const coachName = selectedCoach.name;
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
     const greetingText = `${greeting}, ${userName}! I'm ${coachName}. I'm ready to help you win today. What's on your mind?`;
@@ -389,7 +435,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     }
 
     await speakText(greetingText);
-  }, [profile.name, profile.coachCharacter, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
+  }, [profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
 
   useEffect(() => {
     const init = async () => {
@@ -537,26 +583,22 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       <View style={styles.content}>
         <View style={styles.avatarSection}>
           <Animated.View style={[styles.avatar, { transform: [{ scale: avatarScale }] }]}>
-            {profile.coachCharacter?.imageUrl ? (
-              <Image source={{ uri: profile.coachCharacter.imageUrl }} style={styles.avatarImage} />
-            ) : (
-              <User size={80} color={colors.primary} />
-            )}
+            <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
           </Animated.View>
 
           <View style={styles.coachInfo}>
-            <Text style={[styles.coachName, { color: colors.text }]}>{profile.coachCharacter?.name || 'Coach Alex'}</Text>
-            <TouchableOpacity style={styles.changeCoachButton} onPress={() => router.push('/coach-character')}>
+            <Text style={[styles.coachName, { color: colors.text }]}>{selectedCoach.name}</Text>
+            <TouchableOpacity style={styles.changeCoachButton} onPress={() => setShowVoiceModal(true)}>
               <Sparkles size={14} color={colors.primary} />
               <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Coach</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>
-            {profile.coachCharacter?.description || 'Your Personal Motivation Coach'}
+            {selectedCoach.description}
           </Text>
           <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Speaking as: {voiceCharacters.find((v) => v.id === profile.preferredVoice)?.name || 'Alloy'}
+            Speaking as: {selectedCoach.name} - {selectedCoach.voiceName}
           </Text>
         </View>
 
@@ -608,8 +650,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           {!hasPermission && <Text style={styles.warningText}>Grant microphone access to use voice features</Text>}
           <TouchableOpacity testID="voice-settings-button" style={styles.voiceSettingsButton} onPress={() => setShowVoiceModal(true)}>
             <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {voiceCharacters.find((v) => v.id === profile.preferredVoice)?.name || 'Alloy'}
-            </Text>
+              Voice: {selectedCoach.name} - {selectedCoach.voiceName}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -617,7 +658,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       <Modal visible={showVoiceModal} animationType="slide" transparent onRequestClose={() => setShowVoiceModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice Character</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Your Voice Coach</Text>
             <ScrollView style={styles.voiceList}>
               {voiceCharacters.map((voice) => (
                 <TouchableOpacity
@@ -629,10 +670,14 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
                   ]}
                   onPress={async () => {
                     await updateProfile({ preferredVoice: voice.id as any });
-                    Alert.alert('Voice Updated', `Voice changed to ${voice.name}`);
+                    Alert.alert('Voice Updated', `Voice changed to ${voice.name} - ${voice.voiceName}`);
                     setShowVoiceModal(false);
                   }}
                 >
+                  <Image
+                    source={{ uri: voice.imageUrl }}
+                    style={styles.voicePortrait}
+                  />
                   <View style={styles.voiceInfo}>
                     <Text
                       style={[
@@ -640,7 +685,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
                         { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
                       ]}
                     >
-                      {voice.name}
+                      {voice.name} - {voice.voiceName}
                     </Text>
                     <Text style={[styles.voiceDescription, { color: colors.textSecondary }]}>{voice.description}</Text>
                   </View>
@@ -866,6 +911,13 @@ const createStyles = (colors: any) =>
       marginBottom: 12,
       borderWidth: 2,
       borderColor: 'transparent',
+    },
+    voicePortrait: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      marginRight: 12,
+      backgroundColor: colors.card,
     },
     voiceInfo: {
       flex: 1,

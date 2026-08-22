@@ -222,14 +222,6 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
-          name="coach-character" 
-          options={{ 
-            title: 'Choose Your Coach',
-            presentation: 'modal',
-            headerShown: true,
-          }} 
-        />
-        <Stack.Screen 
           name="church-motivation" 
           options={{ 
             title: 'Church Motivation',
