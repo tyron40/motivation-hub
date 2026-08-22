@@ -9,6 +9,17 @@ const INTERACTIONS_BETWEEN_ADS = 2;
 const AD_CLOSE_TIMEOUT_MS = 120000;
 
 /**
+ * Development-only ad diagnostics.
+ * Enabled automatically in dev builds; in release builds set
+ * EXPO_PUBLIC_APPODEAL_DEBUG=1 in the EAS build environment.
+ */
+export const ADS_DEBUG = __DEV__ || process.env.EXPO_PUBLIC_APPODEAL_DEBUG === '1';
+
+const debugLog = (message: string) => {
+  if (ADS_DEBUG) console.log(message);
+};
+
+/**
  * Appodeal mediation layer.
  *
  * Initialized only when EXPO_PUBLIC_APPODEAL_APP_KEY is set and the native
@@ -23,6 +34,7 @@ let AdType: any = null;
 let SdkEvents: any = null;
 let InterstitialEvents: any = null;
 let RewardedEvents: any = null;
+let BannerEvents: any = null;
 let moduleLoaded = false;
 
 if (Platform.OS !== 'web' && APPODEAL_APP_KEY) {
@@ -34,6 +46,7 @@ if (Platform.OS !== 'web' && APPODEAL_APP_KEY) {
     SdkEvents = appodealModule.AppodealSdkEvents;
     InterstitialEvents = appodealModule.AppodealInterstitialEvents;
     RewardedEvents = appodealModule.AppodealRewardedEvents;
+    BannerEvents = appodealModule.AppodealBannerEvents;
     moduleLoaded = Boolean(Appodeal && AdType);
     console.log('✅ [AppodealManager] Appodeal SDK loaded (mediation layer)');
   } catch {
@@ -98,6 +111,7 @@ class AppodealManager {
     if (this.premiumDisabled === value) return;
     this.premiumDisabled = value;
     if (value) this.hideAll();
+    debugLog(`[Appodeal] active: ${this.active}`);
   }
 
   private log(event: string, data?: any) {
@@ -112,13 +126,25 @@ class AppodealManager {
 
   /** One-time SDK init for interstitial, banner and rewarded video. */
   initialize(): void {
-    if (this.initialized || !this.available) return;
+    if (this.initialized) return;
+    if (!this.available) {
+      debugLog(
+        `[Appodeal] unavailable (${
+          moduleLoaded ? 'app key missing from build environment' : 'native module not present'
+        }) — AdMob serves directly`
+      );
+      return;
+    }
     this.initialized = true;
 
     try {
       this.wireEvents();
       const adTypes = AdType.INTERSTITIAL | AdType.BANNER | AdType.REWARDED_VIDEO;
       Appodeal.initialize(APPODEAL_APP_KEY, adTypes);
+      debugLog(`[Appodeal] initializing (app key present, never logged) | test mode: setTesting() never called → off`);
+      try {
+        debugLog(`[Appodeal] SDK version: ${Appodeal.getVersion?.() ?? 'unknown'}`);
+      } catch {}
       this.log('Initializing Appodeal SDK (interstitial, banner, rewarded)...');
     } catch (error) {
       this.initialized = false;
@@ -128,6 +154,7 @@ class AppodealManager {
 
   private wireEvents() {
     const add = (event: string, handler: (...args: any[]) => void) => {
+      if (!event) return;
       try {
         const subscription = Appodeal.addEventListener(event, handler);
         if (subscription && typeof subscription.remove === 'function') {
@@ -138,10 +165,15 @@ class AppodealManager {
       }
     };
 
-    add(SdkEvents.INITIALIZED, () => this.log('SDK initialized'));
+    add(SdkEvents.INITIALIZED, () => {
+      debugLog('[Appodeal] SDK initialized');
+      debugLog(`[Appodeal] active: ${this.active}`);
+      this.log('SDK initialized');
+    });
 
     add(InterstitialEvents.LOADED, () => {
       this.interstitialReady = true;
+      debugLog('[Appodeal] interstitial loaded');
       this.log('Interstitial loaded ✅');
     });
     add(InterstitialEvents.FAILED_TO_LOAD, (error: any) => {
@@ -150,6 +182,7 @@ class AppodealManager {
     });
     add(InterstitialEvents.SHOWN, () => {
       this.lastInterstitialShownAt = Date.now();
+      debugLog('[Appodeal] interstitial shown');
       this.log('Interstitial shown');
     });
     add(InterstitialEvents.FAILED_TO_SHOW, () => {
@@ -162,15 +195,23 @@ class AppodealManager {
       this.resolveInterstitialClose(true);
     });
 
+    // Banner lifecycle (loaded/shown fire from the native SDK, not from UI)
+    add(BannerEvents?.LOADED, () => debugLog('[Appodeal] banner loaded'));
+    add(BannerEvents?.SHOWN, () => debugLog('[Appodeal] banner shown'));
+
     add(RewardedEvents.LOADED, () => {
       this.rewardedReady = true;
+      debugLog('[Appodeal] rewarded loaded');
       this.log('Rewarded video loaded ✅');
     });
     add(RewardedEvents.FAILED_TO_LOAD, (error: any) => {
       this.rewardedReady = false;
       this.log('Rewarded video failed to load ❌', error);
     });
+    add(RewardedEvents.SHOWN, () => debugLog('[Appodeal] rewarded shown'));
+
     add(RewardedEvents.REWARD, (reward: any) => {
+      debugLog('[Appodeal] rewarded finished');
       this.log('Reward earned 🎁', reward);
       this.onRewardEarned?.(reward);
     });

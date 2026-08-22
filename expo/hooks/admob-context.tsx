@@ -4,9 +4,14 @@ import { Alert, Platform } from 'react-native';
 import { useIAP } from './iap-context';
 import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
-import AppodealManager from '@/lib/AppodealManager';
+import AppodealManager, { ADS_DEBUG } from '@/lib/AppodealManager';
 
 const { REWARD_AMOUNT } = AD_CONFIG;
+
+/** Development-only: which ad source actually serves the displayed ad. */
+const logProvider = (provider: 'APPODEAL' | 'ADMOB FALLBACK') => {
+  if (ADS_DEBUG) console.log(`[Ads] serving provider: ${provider}`);
+};
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const { addCredits, usageStats } = useIAP();
@@ -58,6 +63,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     const init = async () => {
       await manager.initialize();
       appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
+      if (ADS_DEBUG) console.log(`[Appodeal] active: ${appodeal.active}`);
       setIsInitialized(true);
       reportAdState();
     };
@@ -100,6 +106,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     // Appodeal mediation takes priority when active; otherwise AdMob serves.
     if (appodeal.active && appodeal.rewardedLoaded) {
       try {
+        logProvider('APPODEAL');
         setIsShowingAd(true);
         const shown = await appodeal.showRewarded();
         setIsShowingAd(false);
@@ -122,6 +129,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     }
 
     try {
+      logProvider('ADMOB FALLBACK');
       setIsShowingAd(true);
       const shown = await manager.showRewarded();
       setIsShowingAd(false);
@@ -152,6 +160,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
         return false;
       }
       try {
+        logProvider('APPODEAL');
         setIsShowingAd(true);
         const shown = await appodeal.showInterstitial();
         setIsShowingAd(false);
@@ -169,6 +178,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     }
 
     try {
+      logProvider('ADMOB FALLBACK');
       setIsShowingAd(true);
       const shown = await manager.showInterstitial();
       setIsShowingAd(false);
@@ -192,6 +202,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       const shouldShow = appodeal.recordInteraction();
       if (shouldShow && appodeal.canShowInterstitial()) {
         try {
+          logProvider('APPODEAL');
           setIsShowingAd(true);
           const shown = await appodeal.showInterstitial();
           setIsShowingAd(false);
@@ -207,6 +218,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     const shouldShow = manager.recordInteraction();
     if (shouldShow && manager.canShowInterstitial()) {
       try {
+        logProvider('ADMOB FALLBACK');
         setIsShowingAd(true);
         const shown = await manager.showInterstitial();
         setIsShowingAd(false);
