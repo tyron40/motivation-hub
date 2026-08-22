@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
   ScrollView,
   TouchableOpacity,
   Image,
@@ -18,24 +18,110 @@ import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory, athleteCategory, christianSpeeches, athleteSpeeches } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
+import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
+  const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
+    motivation: [
+      'motivational speech inspiration discipline perseverance',
+      'powerful motivation speech never give up',
+    ],
+    success: [
+      'success motivational speech entrepreneurship achievement goals',
+      'business success leadership ambition motivational speech',
+    ],
+    mindset: [
+      'mindset motivational speech mental toughness focus habits',
+      'growth mindset discipline confidence motivational speech',
+    ],
+    fitness: [
+      'fitness motivation gym workout training strength speech',
+      'workout motivation bodybuilding fitness discipline speech',
+    ],
+    study: [
+      'study motivation productivity focus student education speech',
+      'exam study motivation concentration discipline students',
+    ],
+    church: [
+      'Christian motivational sermon faith Jesus God Bible',
+      'Christian motivation church sermon inspirational message',
+      'faith motivation Jesus scripture sermon',
+    ],
+    athlete: [
+      'athlete motivation sports pregame pump up speech',
+      'sports motivational speech championship training athlete',
+    ],
+  };
+
+  const CATEGORY_KEYWORDS: Record<string, string[]> = {
+    motivation: [
+      'motivation', 'motivational', 'inspiration', 'inspirational',
+      'discipline', 'perseverance', 'never give up',
+    ],
+    success: [
+      'success', 'successful', 'achievement', 'goals', 'entrepreneur',
+      'business', 'leadership', 'wealth', 'ambition',
+    ],
+    mindset: [
+      'mindset', 'mental toughness', 'growth mindset', 'focus',
+      'confidence', 'habits', 'psychology', 'self belief',
+    ],
+    fitness: [
+      'fitness', 'gym', 'workout', 'training', 'bodybuilding',
+      'strength', 'exercise', 'muscle',
+    ],
+    study: [
+      'study', 'student', 'school', 'exam', 'education',
+      'productivity', 'concentration', 'learning',
+    ],
+    church: [
+      'christian', 'church', 'jesus', 'christ', 'god', 'lord',
+      'faith', 'bible', 'scripture', 'gospel', 'prayer',
+      'worship', 'sermon', 'pastor', 'holy spirit',
+    ],
+    athlete: [
+      'athlete', 'athletic', 'sports', 'pregame', 'game day',
+      'championship', 'football', 'basketball', 'soccer',
+      'training', 'competition',
+    ],
+  };
+
+  const getCategorySearchKey = (id: string, name: string) => {
+    const normalizedId = id.trim().toLowerCase();
+    const normalizedName = name.trim().toLowerCase();
+
+    if (normalizedId === 'church' || normalizedName.includes('christian')) return 'church';
+    if (normalizedId === 'athlete' || normalizedName.includes('athlete')) return 'athlete';
+    if (normalizedName.includes('success')) return 'success';
+    if (normalizedName.includes('mindset')) return 'mindset';
+    if (normalizedName.includes('fitness')) return 'fitness';
+    if (normalizedName.includes('study')) return 'study';
+
+    return 'motivation';
+  };
+const motivationHeroImage = require('@/assets/images/run club.jpeg');
 
 export default function CategoryScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
+
+  const rawId = Array.isArray(id) ? id[0] : id;
+  const categoryId = String(rawId ?? '');
+
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
-  const [isLoadingOnline, setIsLoadingOnline] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
+  const { profile } = useUserProfile();
   const styles = getStyles(colors);
 
   const [showEditBanner, setShowEditBanner] = useState(false);
@@ -43,6 +129,8 @@ export default function CategoryScreen() {
   const [editAuthor, setEditAuthor] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const [bannerImageUri, setBannerImageUri] = useState<string>('');
+  const [useLocalMotivationHero, setUseLocalMotivationHero] = useState(false);
 
   const pickBannerImage = useCallback(async () => {
     try {
@@ -94,60 +182,226 @@ export default function CategoryScreen() {
       setIsPickingImage(false);
     }
   }, []);
-  
+
   const allCategories = [...categories, churchCategory, athleteCategory];
-  const category = allCategories.find(c => c.id === id);
+  const category = allCategories.find(c => c.id === categoryId);
+  const contextSpeeches = useMemo(
+    () => (category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : []),
+    [category, getSpeechesByCategory]
+  );
+  const TARGET_CATEGORY_COUNT = 40;
+  const isChristianOnlyMode = !!profile.includeChurchMotivation;
 
-  // Build fallback speeches: local context speeches + category-specific mock fallbacks.
-  // This ensures every category always shows a list even if the YouTube API fails.
-  const contextSpeeches = category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : [];
-  const fallbackSpeeches: Speech[] =
-    category?.name === 'Christian Motivation' ? christianSpeeches :
-    category?.name === 'Athlete Pump Up' ? athleteSpeeches :
-    [];
-  const categorySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches : [...contextSpeeches, ...fallbackSpeeches];
+  const isChristianCategory =
+    category?.id === 'church' ||
+    ['christian motivation', 'christian', 'church']
+      .includes((category?.name || '').trim().toLowerCase());
 
-  const banner: CategoryBanner | null = category ? getBannerForCategory(String(id), category.name) : null;
+  const requireChristianContent = isChristianCategory || isChristianOnlyMode;
+
+  const isChristianContent = (speech: Speech) => {
+    const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+    const christianKeywords = [
+      'christian', 'church', 'jesus', 'christ', 'god', 'lord', 'faith',
+      'bible', 'scripture', 'gospel', 'prayer', 'worship', 'sermon',
+      'pastor', 'holy spirit', 'christian motivation', 'biblical',
+      'ministry', 'preaching',
+    ];
+    return christianKeywords.some(k => haystack.includes(k));
+  };
+
+  const categorySpeeches = useMemo(() => {
+    const base = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
+    const unique: Speech[] = [];
+    const seen = new Set<string>();
+
+    for (const s of [...base, ...contextSpeeches]) {
+      if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
+      if (requireChristianContent && !isChristianContent(s)) continue;
+
+      seen.add(s.id);
+      unique.push(s);
+      if (unique.length >= TARGET_CATEGORY_COUNT) break;
+    }
+    return unique;
+  }, [youtubeSpeeches, contextSpeeches, requireChristianContent]);
+
+  const banner: CategoryBanner | null = category ? getBannerForCategory(categoryId, category.name) : null;
+
+  const isMotivationCategory = (category?.name || '').toLowerCase() === 'motivation';
+
+  useEffect(() => {
+    console.log('[Category] route id:', categoryId);
+    console.log('[Category] resolved category:', category?.name);
+
+    if (isChristianOnlyMode && category && !isChristianCategory && categoryId !== 'church') {
+      router.replace('/category/church');
+      return;
+    }
+
+    if (isMotivationCategory) {
+      setUseLocalMotivationHero(true);
+      setBannerImageUri('');
+      return;
+    }
+    const fallback = 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80';
+    const next = banner?.imageUrl?.trim() ? banner.imageUrl.trim() : fallback;
+    setUseLocalMotivationHero(false);
+    setBannerImageUri(next);
+  }, [banner?.imageUrl, isMotivationCategory, isChristianOnlyMode, isChristianCategory, category, categoryId]);
+
+  // Reset online-sourced data whenever the category (route id) changes
+  useEffect(() => {
+    setHasLoadedOnline(false);
+    setYoutubeSpeeches([]);
+    setCategoryError(null);
+  }, [categoryId]);
+
+  const handleRetry = useCallback(() => {
+    setHasLoadedOnline(false);
+    setYoutubeSpeeches([]);
+    setCategoryError(null);
+  }, []);
 
   useEffect(() => {
     const handleLoadOnlineSpeeches = async () => {
       if (!category || hasLoadedOnline) return;
-      
-      setIsLoadingOnline(true);
+
+      setCategoryLoading(true);
+      setCategoryError(null);
+
+      const searchKey = getCategorySearchKey(categoryId, category.name);
+      const searchQueries = CATEGORY_SEARCH_QUERIES[searchKey] ?? CATEGORY_SEARCH_QUERIES.motivation;
+      const requiredKeywords = CATEGORY_KEYWORDS[searchKey] ?? CATEGORY_KEYWORDS.motivation;
+
+      console.log('[Category] search key:', searchKey);
+      console.log('[Category] queries:', searchQueries);
+
       try {
-        console.log(`Loading content for ${category.name}...`);
-        
-        // Fetch only category-specific content — no trending cross-pollination.
-        // This ensures every video on the page is relevant to the category title
-        // and all categories consume the same YouTube API quota (3 queries each).
-        const categoryVideos = await getVideosByCategory(category.name, 30);
+        const settled = await Promise.allSettled(
+          searchQueries.map(query =>
+            getVideosByCategory(query, TARGET_CATEGORY_COUNT)
+          )
+        );
 
-        const catSpeeches: Speech[] = categoryVideos.map(video => convertVideoToSpeech(video));
+        const rawVideos = settled.flatMap(result =>
+          result.status === 'fulfilled' && Array.isArray(result.value)
+            ? result.value
+            : []
+        );
 
+        const scoreSpeechRelevance = (speech: Speech) => {
+          const haystack =
+            `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+
+          let score = 0;
+
+          for (const keyword of requiredKeywords) {
+            if (haystack.includes(keyword)) {
+              score += keyword.includes(' ') ? 3 : 2;
+            }
+          }
+
+          const assigned = classifyVideoToCategory(
+            speech.title,
+            speech.description
+          );
+
+          if (
+            assigned &&
+            assigned.toLowerCase() === category.name.toLowerCase()
+          ) {
+            score += 4;
+          }
+
+          return score;
+        };
+
+        const strictThreshold =
+          searchKey === 'church' ? 2 :
+          searchKey === 'motivation' ? 2 :
+          3;
+
+        const onlineSpeeches = rawVideos
+          .map(video => convertVideoToSpeech(video))
+          .filter(
+            speech =>
+              speech &&
+              speech.id &&
+              speech.duration > 60
+          )
+          .map(speech => ({
+            speech,
+            score: scoreSpeechRelevance(speech),
+          }))
+          .filter(item => item.score >= strictThreshold)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+        const unique: Speech[] = [];
         const seenIds = new Set<string>();
-        const merged: Speech[] = [];
-        for (const s of catSpeeches) {
-          if (!seenIds.has(s.id) && s.duration > 60) {
-            seenIds.add(s.id);
-            merged.push(s);
+
+        for (const speech of onlineSpeeches) {
+          if (seenIds.has(speech.id)) continue;
+
+          if (searchKey === 'church' && !isChristianContent(speech)) {
+            continue;
+          }
+
+          seenIds.add(speech.id);
+          unique.push(speech);
+
+          if (unique.length >= TARGET_CATEGORY_COUNT) break;
+        }
+
+        if (unique.length < TARGET_CATEGORY_COUNT) {
+          for (const speech of contextSpeeches) {
+            if (!speech?.id || seenIds.has(speech.id)) continue;
+
+            const score = scoreSpeechRelevance(speech);
+
+            if (searchKey === 'church' && !isChristianContent(speech)) {
+              continue;
+            }
+
+            if (score < strictThreshold) continue;
+
+            seenIds.add(speech.id);
+            unique.push(speech);
+
+            if (unique.length >= TARGET_CATEGORY_COUNT) break;
           }
         }
-        
-        console.log(`Loaded ${merged.length} videos for ${category.name}`);
-        if (merged.length > 0) {
-          setYoutubeSpeeches(merged);
+
+        console.log(
+          '[Category] strict matched count:',
+          unique.length,
+          'for',
+          category.name
+        );
+
+        if (unique.length > 0) {
+          setYoutubeSpeeches(unique);
+          setCategoryError(null);
+        } else {
+          setYoutubeSpeeches([]);
+          setCategoryError(
+            `No relevant ${category.name} content found. Please try again.`
+          );
         }
+
         setHasLoadedOnline(true);
       } catch (error) {
-        console.error(`Failed to load speeches for ${category?.name}:`, error);
+        console.error('[Category] load error:', error);
+        setCategoryError('Failed to load content for this category.');
       } finally {
-        setIsLoadingOnline(false);
+        setCategoryLoading(false);
       }
     };
 
-    console.log(`Category page loaded: ${category?.name}`);
+    console.log('[Category] page loaded, category:', category?.name);
     void handleLoadOnlineSpeeches();
-  }, [category, hasLoadedOnline]);
+  }, [category, categoryId, hasLoadedOnline, contextSpeeches, isChristianCategory, requireChristianContent]);
 
   const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);
@@ -164,13 +418,7 @@ export default function CategoryScreen() {
     if (!banner) return;
     setEditQuote(banner.quote);
     setEditAuthor(banner.author);
-    // Extract URL string from ImageSourcePropType for editing.
-    // Local require() assets (numbers) can't be edited as text — leave blank.
-    const src = banner.imageUrl;
-    const urlStr = typeof src === 'string'
-      ? src
-      : (typeof src === 'object' && src !== null && 'uri' in src ? (src as { uri: string }).uri : '');
-    setEditImageUrl(urlStr);
+    setEditImageUrl(banner.imageUrl);
     setShowEditBanner(true);
   }, [banner]);
 
@@ -184,7 +432,7 @@ export default function CategoryScreen() {
       ...banner,
       quote: editQuote.trim(),
       author: editAuthor.trim(),
-      imageUrl: editImageUrl.trim() ? { uri: editImageUrl.trim() } : banner.imageUrl,
+      imageUrl: editImageUrl.trim() || banner.imageUrl,
     });
     setShowEditBanner(false);
     if (Platform.OS !== 'web') {
@@ -206,10 +454,10 @@ export default function CategoryScreen() {
 
   return (
     <>
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           headerShown: false,
-        }} 
+        }}
       />
       <LinearGradient
         colors={[colors.background, colors.card]}
@@ -223,30 +471,28 @@ export default function CategoryScreen() {
             <Text style={styles.headerTitle}>{category.name}</Text>
             <View style={styles.backButton} />
           </View>
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {banner && (
             <View style={styles.bannerContainer}>
               <Image
-                source={banner.imageUrl}
+                source={useLocalMotivationHero ? motivationHeroImage : { uri: bannerImageUri }}
                 style={styles.bannerImage}
+                onError={() => {
+                  if (useLocalMotivationHero) {
+                    setUseLocalMotivationHero(false);
+                    setBannerImageUri('https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80');
+                    return;
+                  }
+                  setBannerImageUri('https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1400&q=80');
+                }}
               />
               <LinearGradient
-                colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.9)']}
+                colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.45)']}
                 style={styles.bannerGradient}
               >
-                <View style={styles.bannerContent}>
-                  <View style={styles.bannerQuoteIcon}>
-                    <Quote size={18} color={category.color} fill={category.color} />
-                  </View>
-                  <Text style={styles.bannerQuote} numberOfLines={3}>
-                    "{banner.quote}"
-                  </Text>
-                  <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
-                  <Text style={styles.bannerAuthor}>— {banner.author}</Text>
-                </View>
                 {isAdmin && (
                   <TouchableOpacity
                     style={styles.editBannerBtn}
@@ -261,34 +507,52 @@ export default function CategoryScreen() {
             </View>
           )}
 
+          {banner && (
+            <View style={styles.bannerQuoteCard}>
+              <View style={styles.bannerContent}>
+                <View style={styles.bannerQuoteIcon}>
+                  <Quote size={18} color={category.color} fill={category.color} />
+                </View>
+                <Text style={styles.bannerQuote} numberOfLines={3}>
+                  {'"'}{banner.quote}{'"'}
+                </Text>
+                <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
+                <Text style={styles.bannerAuthor}>— {banner.author}</Text>
+              </View>
+            </View>
+          )}
+
           <View style={[styles.header, { backgroundColor: category.color + '20' }]}>
             <Text style={styles.title}>{category.name}</Text>
           </View>
 
           <View style={styles.speechList}>
-            {isLoadingOnline && categorySpeeches.length === 0 && (
+            {categoryLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
+                <ActivityIndicator size="large" color={category.color} />
                 <Text style={styles.loadingText}>Loading {category.name} content...</Text>
               </View>
-            )}
-            {!isLoadingOnline && categorySpeeches.length === 0 && (
+            ) : categorySpeeches.length === 0 ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.emptyText}>No videos found for {category.name} right now.</Text>
-                <Text style={styles.emptySubtext}>Check back later or try another category.</Text>
+                <Text style={styles.emptyText}>
+                  {categoryError || 'No content found for this category.'}
+                </Text>
+                <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.8}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
+              categorySpeeches
+                .filter(speech => speech && typeof speech === 'object' && speech.id && speech.title)
+                .map((speech, index) => (
+                  <SpeechCard
+                    key={`category-speech-${speech.id}-${index}`}
+                    speech={speech}
+                    onPress={() => handleSpeechPress(speech)}
+                    onFavorite={() => toggleFavorite(speech.id)}
+                  />
+                ))
             )}
-            {categorySpeeches
-              .filter(speech => speech && typeof speech === 'object' && speech.id && speech.title)
-              .map((speech, index) => (
-                <SpeechCard
-                  key={`category-speech-${speech.id}-${index}`}
-                  speech={speech}
-                  onPress={() => handleSpeechPress(speech)}
-                  onFavorite={() => toggleFavorite(speech.id)}
-                />
-              ))
-            }
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -409,6 +673,15 @@ const getStyles = (colors: any) => StyleSheet.create({
     padding: 20,
     position: 'relative',
   },
+  bannerQuoteCard: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    marginHorizontal: 16,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   bannerContent: {
     gap: 6,
   },
@@ -416,7 +689,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     marginBottom: 4,
   },
   bannerQuote: {
-    color: '#FFFFFF',
+    color: 'rgba(255,255,255,0.95)',
     fontSize: 18,
     fontWeight: '600',
     lineHeight: 26,
@@ -468,6 +741,29 @@ const getStyles = (colors: any) => StyleSheet.create({
   speechList: {
     paddingTop: 8,
   },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: colors.primary || '#3B82F6',
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700' as const,
+  },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -476,22 +772,6 @@ const getStyles = (colors: any) => StyleSheet.create({
   emptyText: {
     color: colors.text,
     fontSize: 18,
-  },
-  emptySubtext: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: 8,
-  },
-  loadingContainer: {
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    paddingTop: 60,
-    gap: 16,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: '600' as const,
   },
   headerBar: {
     flexDirection: 'row',

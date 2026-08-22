@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
+import {
+  StyleSheet,
+  Text,
+  View,
   ScrollView,
   TouchableOpacity,
   Image,
@@ -21,22 +21,100 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
+  const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
+    motivation: [
+      'motivational speech inspiration discipline perseverance',
+      'powerful motivation speech never give up',
+    ],
+    success: [
+      'success motivational speech entrepreneurship achievement goals',
+      'business success leadership ambition motivational speech',
+    ],
+    mindset: [
+      'mindset motivational speech mental toughness focus habits',
+      'growth mindset discipline confidence motivational speech',
+    ],
+    fitness: [
+      'fitness motivation gym workout training strength speech',
+      'workout motivation bodybuilding fitness discipline speech',
+    ],
+    study: [
+      'study motivation productivity focus student education speech',
+      'exam study motivation concentration discipline students',
+    ],
+    church: [
+      'Christian motivational sermon faith Jesus God Bible',
+      'Christian motivation church sermon inspirational message',
+      'faith motivation Jesus scripture sermon',
+    ],
+    athlete: [
+      'athlete motivation sports pregame pump up speech',
+      'sports motivational speech championship training athlete',
+    ],
+  };
+
+  const CATEGORY_KEYWORDS: Record<string, string[]> = {
+    motivation: [
+      'motivation', 'motivational', 'inspiration', 'inspirational',
+      'discipline', 'perseverance', 'never give up',
+    ],
+    success: [
+      'success', 'successful', 'achievement', 'goals', 'entrepreneur',
+      'business', 'leadership', 'wealth', 'ambition',
+    ],
+    mindset: [
+      'mindset', 'mental toughness', 'growth mindset', 'focus',
+      'confidence', 'habits', 'psychology', 'self belief',
+    ],
+    fitness: [
+      'fitness', 'gym', 'workout', 'training', 'bodybuilding',
+      'strength', 'exercise', 'muscle',
+    ],
+    study: [
+      'study', 'student', 'school', 'exam', 'education',
+      'productivity', 'concentration', 'learning',
+    ],
+    church: [
+      'christian', 'church', 'jesus', 'christ', 'god', 'lord',
+      'faith', 'bible', 'scripture', 'gospel', 'prayer',
+      'worship', 'sermon', 'pastor', 'holy spirit',
+    ],
+    athlete: [
+      'athlete', 'athletic', 'sports', 'pregame', 'game day',
+      'championship', 'football', 'basketball', 'soccer',
+      'training', 'competition',
+    ],
+  };
+
+  const getCategorySearchKey = (id: string, name: string) => {
+    const normalizedId = id.trim().toLowerCase();
+    const normalizedName = name.trim().toLowerCase();
+
+    if (normalizedId === 'church' || normalizedName.includes('christian')) return 'church';
+    if (normalizedId === 'athlete' || normalizedName.includes('athlete')) return 'athlete';
+    if (normalizedName.includes('success')) return 'success';
+    if (normalizedName.includes('mindset')) return 'mindset';
+    if (normalizedName.includes('fitness')) return 'fitness';
+    if (normalizedName.includes('study')) return 'study';
+
+    return 'motivation';
+  };
 const motivationHeroImage = require('@/assets/images/run club.jpeg');
 
 export default function CategoryScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
-  
+
   const rawId = Array.isArray(id) ? id[0] : id;
   const categoryId = String(rawId ?? '');
-  
+
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
@@ -104,7 +182,7 @@ export default function CategoryScreen() {
       setIsPickingImage(false);
     }
   }, []);
-  
+
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === categoryId);
   const contextSpeeches = useMemo(
@@ -155,7 +233,7 @@ export default function CategoryScreen() {
   useEffect(() => {
     console.log('[Category] route id:', categoryId);
     console.log('[Category] resolved category:', category?.name);
-    
+
     if (isChristianOnlyMode && category && !isChristianCategory && categoryId !== 'church') {
       router.replace('/category/church');
       return;
@@ -192,126 +270,124 @@ export default function CategoryScreen() {
       setCategoryLoading(true);
       setCategoryError(null);
 
-      const christianQueries = [
-        'Christian motivational sermon faith Jesus God church inspirational speech',
-        'Christian motivational sermon',
-        'faith motivation Jesus sermon',
-        'church motivational message',
-      ];
+      const searchKey = getCategorySearchKey(categoryId, category.name);
+      const searchQueries = CATEGORY_SEARCH_QUERIES[searchKey] ?? CATEGORY_SEARCH_QUERIES.motivation;
+      const requiredKeywords = CATEGORY_KEYWORDS[searchKey] ?? CATEGORY_KEYWORDS.motivation;
 
-      const query = isChristianCategory ? christianQueries[0] : category.name;
-      console.log('[Category] query:', query);
+      console.log('[Category] search key:', searchKey);
+      console.log('[Category] queries:', searchQueries);
 
       try {
-        const results = await Promise.allSettled([
-          isChristianCategory
-            ? Promise.all(christianQueries.map(q => getVideosByCategory(q, TARGET_CATEGORY_COUNT)))
-            : getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
-          getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
-          isChristianCategory
-            ? Promise.resolve([])
-            : getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
-        ]);
+        const settled = await Promise.allSettled(
+          searchQueries.map(query =>
+            getVideosByCategory(query, TARGET_CATEGORY_COUNT)
+          )
+        );
 
-        const primaryRaw = results[0].status === 'fulfilled' ? results[0].value : [];
-        const trendingRaw = results[1].status === 'fulfilled' ? results[1].value : [];
-        const fallbackRaw = results[2].status === 'fulfilled' ? results[2].value : [];
-
-        if (results[0].status === 'rejected') console.log('[Category] error source: primary', results[0].reason);
-        if (results[1].status === 'rejected') console.log('[Category] error source: trending', results[1].reason);
-        if (results[2].status === 'rejected') console.log('[Category] error source: fallback', results[2].reason);
-
-        const categoryNameLower = category.name.toLowerCase();
-        const categoryWords = categoryNameLower
-          .split(/[^a-z0-9]+/i)
-          .map(w => w.trim())
-          .filter(Boolean);
+        const rawVideos = settled.flatMap(result =>
+          result.status === 'fulfilled' && Array.isArray(result.value)
+            ? result.value
+            : []
+        );
 
         const scoreSpeechRelevance = (speech: Speech) => {
-          const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+          const haystack =
+            `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+
           let score = 0;
-          if (haystack.includes(categoryNameLower)) score += 4;
-          for (const word of categoryWords) {
-            if (word.length > 2 && haystack.includes(word)) score += 1;
+
+          for (const keyword of requiredKeywords) {
+            if (haystack.includes(keyword)) {
+              score += keyword.includes(' ') ? 3 : 2;
+            }
           }
-          const assigned = classifyVideoToCategory(speech.title, speech.description);
-          if (assigned === category.name) score += 3;
+
+          const assigned = classifyVideoToCategory(
+            speech.title,
+            speech.description
+          );
+
+          if (
+            assigned &&
+            assigned.toLowerCase() === category.name.toLowerCase()
+          ) {
+            score += 4;
+          }
+
           return score;
         };
 
-        const primaryArr = Array.isArray(primaryRaw) ? primaryRaw : [];
-        const primarySpeeches: Speech[] = primaryArr
-          .flatMap(video => (Array.isArray(video) ? video : [video]))
+        const strictThreshold =
+          searchKey === 'church' ? 2 :
+          searchKey === 'motivation' ? 2 :
+          3;
+
+        const onlineSpeeches = rawVideos
           .map(video => convertVideoToSpeech(video))
-          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
+          .filter(
+            speech =>
+              speech &&
+              speech.id &&
+              speech.duration > 60
+          )
+          .map(speech => ({
+            speech,
+            score: scoreSpeechRelevance(speech),
+          }))
+          .filter(item => item.score >= strictThreshold)
           .sort((a, b) => b.score - a.score)
           .map(item => item.speech);
 
-        const channelSpeeches: Speech[] = (Array.isArray(trendingRaw) ? trendingRaw : [])
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
-          .filter(item => item.score >= 3)
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
-
-        const fallbackSpeeches: Speech[] = (Array.isArray(fallbackRaw) ? fallbackRaw : [])
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({ speech, score: scoreSpeechRelevance(speech) }))
-          .filter(item => item.score >= 1)
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
-
-        console.log('[Category] primary count:', primarySpeeches.length);
-        console.log('[Category] trending count:', channelSpeeches.length);
-        console.log('[Category] fallback count:', fallbackSpeeches.length);
-
+        const unique: Speech[] = [];
         const seenIds = new Set<string>();
-        const merged: Speech[] = [];
-        const pushUnique = (arr: Speech[]) => {
-          for (const s of arr) {
-            if (!s || !s.id || seenIds.has(s.id)) continue;
-            seenIds.add(s.id);
-            merged.push(s);
-            if (merged.length >= TARGET_CATEGORY_COUNT) return;
+
+        for (const speech of onlineSpeeches) {
+          if (seenIds.has(speech.id)) continue;
+
+          if (searchKey === 'church' && !isChristianContent(speech)) {
+            continue;
           }
-        };
 
-        // Progressive fallback:
-        // 1. highly relevant >60s category videos
-        // 2. relevant >60s category/search videos
-        // 3. relevant valid videos regardless of duration if list is too small
-        // 4. context/local speeches for that exact category
-        const passChristian = (s: Speech) => !requireChristianContent || isChristianContent(s);
+          seenIds.add(speech.id);
+          unique.push(speech);
 
-        const preferred = [...primarySpeeches, ...channelSpeeches, ...fallbackSpeeches]
-          .filter(passChristian)
-          .filter(s => s.duration > 60);
-        pushUnique(preferred);
-
-        if (merged.length < TARGET_CATEGORY_COUNT) {
-          const anyDuration = [...primarySpeeches, ...channelSpeeches, ...fallbackSpeeches]
-            .filter(passChristian)
-            .filter(s => !seenIds.has(s.id));
-          pushUnique(anyDuration);
+          if (unique.length >= TARGET_CATEGORY_COUNT) break;
         }
 
-        if (merged.length < TARGET_CATEGORY_COUNT) {
-          const localPass = contextSpeeches.filter(passChristian);
-          pushUnique(localPass);
+        if (unique.length < TARGET_CATEGORY_COUNT) {
+          for (const speech of contextSpeeches) {
+            if (!speech?.id || seenIds.has(speech.id)) continue;
+
+            const score = scoreSpeechRelevance(speech);
+
+            if (searchKey === 'church' && !isChristianContent(speech)) {
+              continue;
+            }
+
+            if (score < strictThreshold) continue;
+
+            seenIds.add(speech.id);
+            unique.push(speech);
+
+            if (unique.length >= TARGET_CATEGORY_COUNT) break;
+          }
         }
 
-        console.log('[Category] merged count:', merged.length);
-        console.log('[Category] Christian filter count:', requireChristianContent ? merged.filter(s => passChristian(s)).length : 0);
+        console.log(
+          '[Category] strict matched count:',
+          unique.length,
+          'for',
+          category.name
+        );
 
-        if (merged.length > 0) {
-          setYoutubeSpeeches(merged);
+        if (unique.length > 0) {
+          setYoutubeSpeeches(unique);
           setCategoryError(null);
-        } else if (contextSpeeches.length > 0) {
-          setYoutubeSpeeches([]);
-          setCategoryError('No online content found, showing local speeches.');
         } else {
           setYoutubeSpeeches([]);
-          setCategoryError('No content found for this category. Please try again.');
+          setCategoryError(
+            `No relevant ${category.name} content found. Please try again.`
+          );
         }
 
         setHasLoadedOnline(true);
@@ -378,10 +454,10 @@ export default function CategoryScreen() {
 
   return (
     <>
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           headerShown: false,
-        }} 
+        }}
       />
       <LinearGradient
         colors={[colors.background, colors.card]}
@@ -395,7 +471,7 @@ export default function CategoryScreen() {
             <Text style={styles.headerTitle}>{category.name}</Text>
             <View style={styles.backButton} />
           </View>
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -430,7 +506,7 @@ export default function CategoryScreen() {
               </LinearGradient>
             </View>
           )}
-          
+
           {banner && (
             <View style={styles.bannerQuoteCard}>
               <View style={styles.bannerContent}>
