@@ -19,6 +19,23 @@ const debugLog = (message: string) => {
   if (ADS_DEBUG) console.log(message);
 };
 
+const consentStatusName = (status: number): string => {
+  switch (status) {
+    case 1: return 'REQUIRED';
+    case 2: return 'NOT_REQUIRED';
+    case 3: return 'OBTAINED';
+    default: return 'UNKNOWN';
+  }
+};
+
+const privacyStatusName = (status: number): string => {
+  switch (status) {
+    case 1: return 'REQUIRED';
+    case 2: return 'NOT_REQUIRED';
+    default: return 'UNKNOWN';
+  }
+};
+
 /**
  * Appodeal mediation layer.
  *
@@ -35,6 +52,8 @@ let SdkEvents: any = null;
 let InterstitialEvents: any = null;
 let RewardedEvents: any = null;
 let BannerEvents: any = null;
+let ConsentStatus: any = null;
+let AdsConsent: any = null;
 let moduleLoaded = false;
 
 if (Platform.OS !== 'web' && APPODEAL_APP_KEY) {
@@ -47,10 +66,21 @@ if (Platform.OS !== 'web' && APPODEAL_APP_KEY) {
     InterstitialEvents = appodealModule.AppodealInterstitialEvents;
     RewardedEvents = appodealModule.AppodealRewardedEvents;
     BannerEvents = appodealModule.AppodealBannerEvents;
+    ConsentStatus = appodealModule.AppodealConsentStatus;
     moduleLoaded = Boolean(Appodeal && AdType);
     console.log('✅ [AppodealManager] Appodeal SDK loaded (mediation layer)');
   } catch {
     console.log('📡 [AppodealManager] Appodeal SDK not available - mediation disabled');
+  }
+
+  // Google UMP (via react-native-google-mobile-ads) — used only to check whether
+  // an IAB TCF consent string exists. Never reads/logs the string value itself.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const admobModule = require('react-native-google-mobile-ads');
+    AdsConsent = admobModule.AdsConsent ?? null;
+  } catch {
+    AdsConsent = null;
   }
 }
 
@@ -146,6 +176,10 @@ class AppodealManager {
         debugLog(`[Appodeal] SDK version: ${Appodeal.getVersion?.() ?? 'unknown'}`);
       } catch {}
       this.log('Initializing Appodeal SDK (interstitial, banner, rewarded)...');
+      // Appodeal 4.2.0 requests consent automatically during initialization
+      // (Stack Consent Manager / Google UMP included by default). The explicit
+      // re-sync below makes the flow deterministic and observable in debug logs.
+      void this.syncConsent();
     } catch (error) {
       this.initialized = false;
       this.log('Failed to initialize Appodeal SDK', error);
@@ -224,6 +258,73 @@ class AppodealManager {
       this.log('Rewarded video dismissed');
       this.resolveRewardedClose(true);
     });
+  }
+
+  // ─── Consent (Stack Consent Manager / Google UMP) ─────────────
+
+  /**
+   * Appodeal 4.2.0 CMP flow: request consent info, present the native UMP
+   * consent form when required, and log every step (debug builds only).
+   */
+  private async syncConsent(): Promise<void> {
+    try {
+      const status = await Appodeal.requestConsentInfoUpdate(APPODEAL_APP_KEY);
+      debugLog(`[Appodeal CMP] consent info update completed: ${consentStatusName(status)}`);
+      const required = status === (ConsentStatus?.REQUIRED ?? 1);
+      debugLog(`[Appodeal CMP] consent form required: ${required}`);
+      debugLog(
+        `[Appodeal CMP] privacy options requirement status: ${privacyStatusName(
+          this.privacyOptionsRequirementStatus()
+        )}`
+      );
+      if (required) {
+        debugLog('[Appodeal CMP] consent form presented');
+        const finalStatus = await Appodeal.showConsentFormIfNeeded();
+        debugLog(`[Appodeal CMP] consent form dismissed: ${consentStatusName(finalStatus)}`);
+      }
+      this.logTCStringPresence();
+    } catch (error: any) {
+      debugLog(`[Appodeal CMP] consent sync error: ${error?.message ?? 'unknown'}`);
+    }
+  }
+
+  /** Logs only whether an IAB TCF consent string exists — never the string itself. */
+  private logTCStringPresence(): void {
+    if (!AdsConsent?.getTCString) return;
+    try {
+      Promise.resolve(AdsConsent.getTCString())
+        .then((tcString: string | null) => {
+          debugLog(`[Appodeal CMP] IAB TCF consent string exists: ${Boolean(tcString && tcString.length > 0)}`);
+        })
+        .catch(() => debugLog('[Appodeal CMP] IAB TCF consent string exists: false (read failed)'));
+    } catch {
+      // TCF presence check is best-effort
+    }
+  }
+
+  /** Appodeal 4.2.0 Privacy Entry Point: whether a Privacy Options entry must be surfaced. */
+  privacyOptionsRequirementStatus(): number {
+    if (!this.available) return 0;
+    try {
+      return Appodeal.privacyOptionsRequirementStatus() ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Presents the native UMP Privacy Options form (no custom UI). */
+  async showPrivacyOptionsForm(): Promise<boolean> {
+    if (!this.available) return false;
+    try {
+      debugLog('[Appodeal CMP] privacy options form presented');
+      await Appodeal.showPrivacyOptionsForm();
+      debugLog('[Appodeal CMP] privacy options form dismissed');
+      this.logTCStringPresence();
+      return true;
+    } catch (error: any) {
+      debugLog(`[Appodeal CMP] privacy options form error: ${error?.message ?? 'unknown'}`);
+      return false;
+    }
   }
 
   // ─── Frequency (identical caps to AdManager) ──────────────────

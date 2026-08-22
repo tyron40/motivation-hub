@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { ArrowLeft, User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Palette, DollarSign, Church } from 'lucide-react-native';
+import { ArrowLeft, User, Volume2, Bell, Moon, Info, ChevronRight, Check, X, LogOut, Trash2, Palette, DollarSign, Church, Shield } from 'lucide-react-native';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
 import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { useIAP } from '@/hooks/iap-context';
 import { CreditsInfoModal } from '@/components/CreditsInfoModal';
 import PaywallModal from '@/components/PaywallModal';
+import AppodealManager from '@/lib/AppodealManager';
 
 const voiceCharacters = [
   { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced voice' },
@@ -44,6 +45,24 @@ export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Appodeal 4.2.0 Privacy Entry Point (native UMP form — no custom popup).
+  const appodeal = AppodealManager.getInstance();
+  const [privacyRequired, setPrivacyRequired] = useState(false);
+
+  useEffect(() => {
+    if (appodeal.available) {
+      setPrivacyRequired(appodeal.privacyOptionsRequirementStatus() === 1);
+    }
+  }, [appodeal]);
+
+  const handleShowPrivacyOptions = async () => {
+    const shown = await appodeal.showPrivacyOptionsForm();
+    if (!shown) {
+      Alert.alert('Privacy Options', 'Privacy options are not available right now. Please try again later.');
+    }
+    setPrivacyRequired(appodeal.privacyOptionsRequirementStatus() === 1);
+  };
 
   const handleSaveName = async () => {
     if (tempName.trim()) {
@@ -215,6 +234,24 @@ export default function SettingsScreen() {
               thumbColor={'white'}
             />
           </View>
+
+          {appodeal.available && (
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleShowPrivacyOptions}
+            >
+              <View style={styles.settingLeft}>
+                <Shield size={20} color={colors.primary} />
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Privacy Settings</Text>
+                  <Text style={styles.settingValue}>
+                    {privacyRequired ? 'Your privacy choices need review' : 'Manage ad privacy choices'}
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
