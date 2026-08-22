@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.rork.motivational-speech-app",
-      "buildNumber": "351",
+      "buildNumber": "352",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
