@@ -20,6 +20,7 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { getBackendUrl } from '@/lib/config';
 
 let YoutubePlayer: any = null;
 if (Platform.OS !== 'web') {
@@ -374,63 +375,83 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       setError(null);
 
       try {
-        const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-        if (!apiKey) {
-          throw new Error('YouTube API key not configured');
-        }
+        const backendUrl = getBackendUrl().replace(/\/$/, '');
 
-        const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-        detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
-        detailsUrl.searchParams.set('id', videoId);
-        detailsUrl.searchParams.set('key', apiKey);
-
-        const response = await fetch(detailsUrl.toString());
-
-        if (!response.ok) {
-          throw new Error(`YouTube API error: ${response.status}`);
-        }
+        const response = await fetch(
+          `${backendUrl}/api/youtube/video/${encodeURIComponent(videoId)}`
+        );
 
         const data = await response.json();
 
-        if (!data.items || data.items.length === 0) {
-          throw new Error('Video not found');
+        if (!response.ok) {
+          throw new Error(
+            data?.details ||
+            data?.error ||
+            `Video metadata error: ${response.status}`
+          );
         }
 
-        const video = data.items[0];
+        const video = data?.video;
+
+        if (!video) {
+          throw new Error('Video metadata missing');
+        }
 
         const parseDuration = (dur: string): number => {
-          const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+          const match =
+            dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+
           if (!match) return 0;
+
           const hours = parseInt(match[1] || '0');
           const minutes = parseInt(match[2] || '0');
           const seconds = parseInt(match[3] || '0');
+
           return hours * 3600 + minutes * 60 + seconds;
         };
 
-        const videoDuration = parseDuration(video.contentDetails.duration);
+        const videoDuration =
+          parseDuration(video.duration || 'PT0S');
+
         setDuration(videoDuration);
 
         if (mountedRef.current) {
           setMetadata({
             id: video.id,
-            title: video.snippet.title,
-            description: video.snippet.description || '',
-            thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
-            channelTitle: video.snippet.channelTitle,
+            title: video.title || '',
+            description: video.description || '',
+            thumbnail: video.thumbnail || thumbnail || '',
+            channelTitle: video.channelTitle || '',
             duration: videoDuration,
-            viewCount: parseInt(video.statistics.viewCount || '0'),
-            publishedAt: video.snippet.publishedAt,
+            viewCount: Number(video.viewCount || 0),
+            publishedAt: video.publishedAt || '',
           });
         }
 
-        console.log('Video metadata fetched:', video.snippet.title);
+        console.log(
+          'Video metadata fetched through backend:',
+          video.title
+        );
+
         setIsLoading(false);
       } catch (err: any) {
-        console.error('Error fetching video metadata:', err);
+        console.error(
+          'Error fetching video metadata:',
+          err
+        );
+
         if (mountedRef.current) {
-          setError(err.message || 'Failed to fetch video data');
+          setError(
+            err.message ||
+            'Failed to fetch video data'
+          );
+
           setIsLoading(false);
-          onErrorRef.current?.(err.message || 'Failed to fetch video data');
+
+          onErrorRef.current?.(
+            err.message ||
+            'Failed to fetch video data'
+          );
         }
       }
     };

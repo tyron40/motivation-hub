@@ -7,6 +7,7 @@ import { Category } from '@/types/speech';
 interface CategoryCardProps {
   category: Category;
   onPress: () => void;
+  size?: 'default' | 'large';
 }
 
 const iconMap: { [key: string]: any } = {
@@ -21,7 +22,11 @@ const iconMap: { [key: string]: any } = {
   church: Church,
 };
 
-export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress }) => {
+export const CategoryCard: React.FC<CategoryCardProps> = ({
+  category,
+  onPress,
+  size = 'default',
+}) => {
   const { colors } = useTheme();
   
   if (!category || typeof category !== 'object' || !category.name) {
@@ -35,11 +40,31 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({ category, onPress })
   
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-      <View style={[styles.card, { backgroundColor: categoryColor + '20' }]}>
-        <View style={[styles.iconContainer, { backgroundColor: categoryColor }]}>
-          <Icon color={colors.text} size={21} />
+      <View
+        style={[
+          styles.card,
+          size === 'large' && styles.cardLarge,
+          { backgroundColor: categoryColor + '20' },
+        ]}
+      >
+        <View
+          style={[
+            styles.iconContainer,
+            size === 'large' && styles.iconContainerLarge,
+            { backgroundColor: categoryColor },
+          ]}
+        >
+          <Icon color={colors.text} size={size === 'large' ? 26 : 21} />
         </View>
-        <Text style={styles.name} numberOfLines={2}>{String(category.name)}</Text>
+        <Text
+          style={[
+            styles.name,
+            size === 'large' && styles.nameLarge,
+          ]}
+          numberOfLines={2}
+        >
+          {String(category.name)}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -68,5 +93,20 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     textAlign: 'center' as const,
+  },
+  cardLarge: {
+    width: 110,
+    height: 110,
+    borderRadius: 17,
+    padding: 12,
+  },
+  iconContainerLarge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginBottom: 8,
+  },
+  nameLarge: {
+    fontSize: 13,
   },
 });

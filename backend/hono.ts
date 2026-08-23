@@ -196,7 +196,7 @@ const handleSTT = async (c: Context) => {
   try {
     console.log("[Hono] STT request received");
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = await getOpenAIKey();
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
       return c.json({ error: "OpenAI API key not configured" }, 500);
@@ -204,66 +204,128 @@ const handleSTT = async (c: Context) => {
 
     const contentType = c.req.header('content-type') || '';
     if (!contentType.toLowerCase().includes('multipart/form-data')) {
-      return c.json({ error: "Content-Type must be multipart/form-data" }, 400);
+      return c.json({
+        error: "Content-Type must be multipart/form-data"
+      }, 400);
     }
 
     const formData = await c.req.formData();
     const audioPart = formData.get('audio');
 
     if (!audioPart) {
-      return c.json({ error: "Audio file is required in 'audio' field" }, 400);
+      return c.json({
+        error: "Audio file is required in 'audio' field"
+      }, 400);
     }
 
-    let audioFile: File;
-    if (audioPart instanceof File) {
-      audioFile = audioPart;
-    } else {
-      // Accept string blobs defensively
-      audioFile = new File([String(audioPart)], 'recording.wav', { type: 'audio/wav' });
+    if (!(audioPart instanceof File)) {
+      console.error(
+        "[Hono] STT audio field was not a File:",
+        typeof audioPart
+      );
+
+      return c.json({
+        error: "Invalid audio upload",
+        details: "The 'audio' multipart field must contain a file."
+      }, 400);
     }
 
-    if (!audioFile.size) {
-      return c.json({ error: "Audio file is empty" }, 400);
+    if (audioPart.size <= 0) {
+      return c.json({
+        error: "Audio file is empty"
+      }, 400);
     }
 
-    const mimeType = audioFile.type || 'audio/wav';
-    const fileExt = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('mpeg') ? 'mp3' : mimeType.includes('webm') ? 'webm' : 'wav';
-    const safeName = audioFile.name && audioFile.name.includes('.') ? audioFile.name : `recording.${fileExt}`;
+    const mimeType = audioPart.type || 'application/octet-stream';
 
-    console.log("[Hono] STT audio file received:", safeName, "size:", audioFile.size, "type:", mimeType);
+    const fileExt =
+      mimeType.includes('mp4') || mimeType.includes('m4a')
+        ? 'm4a'
+        : mimeType.includes('mpeg') || mimeType.includes('mp3')
+          ? 'mp3'
+          : mimeType.includes('webm')
+            ? 'webm'
+            : mimeType.includes('wav')
+              ? 'wav'
+              : 'm4a';
 
-    const openaiFormData = new FormData();
-    openaiFormData.append('file', audioFile, safeName);
-    openaiFormData.append('model', 'whisper-1');
-    openaiFormData.append('language', 'en');
-    openaiFormData.append('response_format', 'json');
+    const safeName =
+      audioPart.name && audioPart.name.includes('.')
+        ? audioPart.name
+        : `recording.${fileExt}`;
 
-    console.log("[Hono] Sending to OpenAI Whisper API...");
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: openaiFormData,
+    // Recreate the File only when a usable filename is missing.
+    const audioFile =
+      safeName === audioPart.name
+        ? audioPart
+        : new File(
+            [await audioPart.arrayBuffer()],
+            safeName,
+            { type: mimeType }
+          );
+
+    console.log(
+      "[Hono] STT audio received:",
+      safeName,
+      "size:",
+      audioFile.size,
+      "type:",
+      mimeType
+    );
+
+    const openai = new OpenAI({ apiKey });
+
+    console.log("[Hono] Sending audio to OpenAI transcription API...");
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "en",
+      response_format: "json",
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Hono] OpenAI Whisper error:", response.status, errorText);
-      return c.json({ error: "Transcription failed", details: errorText.substring(0, 400) }, 500);
+    const text =
+      typeof transcription?.text === 'string'
+        ? transcription.text.trim()
+        : '';
+
+    if (!text) {
+      console.warn("[Hono] STT completed but returned empty text");
+
+      return c.json({
+        text: ""
+      });
     }
 
-    const data = await response.json();
-    const text = typeof data?.text === 'string' ? data.text.trim() : '';
-    console.log("[Hono] STT transcription received, text length:", text.length);
+    console.log(
+      "[Hono] STT transcription received, text length:",
+      text.length
+    );
 
     return c.json({ text });
-  } catch (error) {
-    console.error("[Hono] STT error:", error);
+  } catch (error: any) {
+    const status =
+      typeof error?.status === 'number'
+        ? error.status
+        : 500;
+
+    const message =
+      error?.error?.message ||
+      error?.message ||
+      String(error);
+
+    console.error(
+      "[Hono] STT error:",
+      "status:",
+      status,
+      "message:",
+      message
+    );
+
     return c.json({
       error: "STT transcription failed",
-      details: error instanceof Error ? error.message : String(error)
-    }, 500);
+      details: String(message).substring(0, 400)
+    }, status >= 400 && status < 600 ? status : 500);
   }
 };
 
@@ -387,6 +449,7 @@ const ADMIN_DATA_STORE: Record<string, any> = {
 
 import { supabaseBackend } from './lib/supabase';
 
+import { getOpenAIKey } from './lib/supabase';
 const ADMIN_SUPABASE_TABLE = 'admin_content';
 
 async function loadAdminDataFromSupabase(): Promise<void> {
@@ -817,6 +880,132 @@ const handleYouTubeSearch = async (c: Context) => {
     }, 500);
   }
 };
+
+
+const handleYouTubeVideoDetails = async (c: Context) => {
+  const videoId = c.req.param('videoId')?.trim();
+
+  if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) {
+    return c.json({ error: 'Valid YouTube videoId is required' }, 400);
+  }
+
+  if (YOUTUBE_API_KEYS.length === 0) {
+    return c.json({ error: 'YouTube API key not configured' }, 500);
+  }
+
+  let lastError = 'Video metadata request failed';
+
+  for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
+    const apiKey =
+      getYouTubeKeyByIndex(attempt) ||
+      getNextYouTubeKey(attempt);
+
+    if (!apiKey) {
+      continue;
+    }
+
+    try {
+      const detailsUrl =
+        new URL('https://www.googleapis.com/youtube/v3/videos');
+
+      detailsUrl.searchParams.set(
+        'part',
+        'snippet,contentDetails,statistics,status'
+      );
+      detailsUrl.searchParams.set('id', videoId);
+      detailsUrl.searchParams.set('key', apiKey);
+
+      const response = await fetch(detailsUrl.toString());
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        lastError = responseText || `YouTube API error ${response.status}`;
+
+        if (isQuotaError(response.status, responseText)) {
+          markYouTubeKeyIssue(apiKey, true);
+        } else {
+          markYouTubeKeyIssue(apiKey, false);
+        }
+
+        console.warn(
+          '[YouTube] Video metadata key attempt failed:',
+          attempt + 1,
+          'status:',
+          response.status
+        );
+
+        continue;
+      }
+
+      let data: any;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        lastError = 'Invalid response from YouTube';
+        continue;
+      }
+
+      const video = data?.items?.[0];
+
+      if (!video) {
+        return c.json({ error: 'Video not found' }, 404);
+      }
+
+      const embeddable = video.status?.embeddable !== false;
+
+      if (!embeddable) {
+        return c.json({
+          error: 'Video is not embeddable'
+        }, 409);
+      }
+
+      return c.json({
+        video: {
+          id: video.id,
+          title: video.snippet?.title || '',
+          description: video.snippet?.description || '',
+          thumbnail:
+            video.snippet?.thumbnails?.high?.url ||
+            video.snippet?.thumbnails?.medium?.url ||
+            video.snippet?.thumbnails?.default?.url ||
+            '',
+          channelTitle: video.snippet?.channelTitle || '',
+          duration: video.contentDetails?.duration || 'PT0S',
+          viewCount: Number(video.statistics?.viewCount || 0),
+          publishedAt: video.snippet?.publishedAt || '',
+          embeddable,
+        }
+      });
+    } catch (error) {
+      lastError =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      console.warn(
+        '[YouTube] Video metadata request attempt failed:',
+        attempt + 1,
+        lastError
+      );
+    }
+  }
+
+  console.error(
+    '[YouTube] All metadata key attempts failed:',
+    lastError
+  );
+
+  return c.json({
+    error: 'Failed to fetch YouTube video metadata',
+    details: lastError
+  }, 502);
+};
+
+app.get(
+  "/api/youtube/video/:videoId",
+  handleYouTubeVideoDetails
+);
 
 const handleYouTubeTrending = async (c: Context) => {
   try {

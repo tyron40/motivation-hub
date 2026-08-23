@@ -188,7 +188,7 @@ export function DiagnosticInfo() {
           This keeps your API key secure and works on all platforms.{'\n\n'}
           ⚠️ All features require the backend: YouTube videos, AI Chat, Voice Coach, and TTS.{'\n\n'}
           🔧 Troubleshooting:{'\n'}
-          1. If YouTube API fails: Check EXPO_PUBLIC_YOUTUBE_API_KEY in environment variables{'\n'}
+          1. If YouTube API fails: Check the backend YouTube API key configuration and quota status{'\n'}
           2. If backend fails: Check Rork backend deployment{'\n'}
           3. Test connectivity: Run diagnostics above
         </Text>

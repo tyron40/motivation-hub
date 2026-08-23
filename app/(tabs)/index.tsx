@@ -442,6 +442,7 @@ export default function HomeScreen() {
                   <CategoryCard
                     category={item}
                     onPress={() => handleCategoryPress(item.id)}
+                    size="large"
                   />
                 );
               }}
@@ -576,8 +577,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     gap: 10,
   },
   flyerPoster: {
-    width: 160,
-    height: 225,
+    width: 185,
+    height: 260,
     borderRadius: 16,
     overflow: 'hidden' as const,
     elevation: 5,
@@ -654,8 +655,8 @@ const getStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600' as const,
   },
   clipPoster: {
-    width: 165,
-    height: 110,
+    width: 200,
+    height: 132,
     borderRadius: 12,
     overflow: 'hidden' as const,
     elevation: 4,

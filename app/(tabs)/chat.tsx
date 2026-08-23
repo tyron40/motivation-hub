@@ -342,6 +342,16 @@ function ChatScreenContent() {
 
       setMessages([greetingMessage]);
       hasInitializedGreetingRef.current = true;
+
+      // Speak the opening greeting automatically when voice is enabled.
+      // This is a local greeting and does not consume an AI chat credit.
+      if (profile.voiceEnabled) {
+        const greetingTimer = setTimeout(() => {
+          void generateVoice(greetingMessage.id, greeting);
+        }, 500);
+
+        return () => clearTimeout(greetingTimer);
+      }
     }
   }, [profile.name, profile.voiceEnabled, messages.length, generateVoice, currentSessionId, getCurrentSession, isLoading]);
 
