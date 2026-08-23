@@ -301,11 +301,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       void requestPlayState(false);
     },
     resumeAfterAd: () => {
+      const shouldResume = wasPlayingBeforeAdRef.current === true;
+
+      // Consume the captured pre-ad state once. A stale desired-play
+      // request must never restart content after an ad.
+      wasPlayingBeforeAdRef.current = false;
+
       if (!playerReadyRef.current || playerErrorRef.current) return;
       if (manualPauseRef.current) return;
-      const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
+
       if (shouldResume) {
-        requestPlayState(true);
+        void requestPlayState(true);
       }
     },
   }), [requestPlayState, stopProgressTracking]);

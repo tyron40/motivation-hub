@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Multi-YouTube-API-key rotation utility.
  *
  * Supports comma-separated keys in YOUTUBE_API_KEY or EXPO_PUBLIC_YOUTUBE_API_KEY.
@@ -47,6 +47,36 @@ export function getNextYouTubeKey(preferredIndex?: number): string | null {
 
   // All keys appear exhausted; fall back to the first one and let it try again
   return YOUTUBE_API_KEYS[0];
+}
+
+/**
+ * Return the requested key index when it is healthy.
+ *
+ * Unlike getNextYouTubeKey(), this does NOT use or mutate the shared
+ * round-robin cursor. This lets parallel content searches intentionally
+ * use separate quota pools at the same time.
+ */
+export function getYouTubeKeyByIndex(index: number): string | null {
+  if (YOUTUBE_API_KEYS.length === 0) return null;
+
+  const normalizedIndex =
+    ((index % YOUTUBE_API_KEYS.length) + YOUTUBE_API_KEYS.length) %
+    YOUTUBE_API_KEYS.length;
+
+  const key = YOUTUBE_API_KEYS[normalizedIndex];
+  const now = Date.now();
+  const state = keyState.get(key);
+
+  if (state && state.exhaustedUntil >= now) {
+    return null;
+  }
+
+  keyState.set(key, {
+    ...(state || { failCount: 0, exhaustedUntil: 0 }),
+    lastUsed: now,
+  });
+
+  return key;
 }
 
 export function markYouTubeKeyIssue(key: string, isQuota = false): void {

@@ -372,7 +372,7 @@ const handleChat = async (c: Context) => {
 app.post("/api/chat", handleChat);
 app.post("/chat", handleChat);
 
-import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from './lib/youtube-keys';
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, getYouTubeKeyByIndex, markYouTubeKeyIssue, isQuotaError } from './lib/youtube-keys';
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 60 * 12;
@@ -692,8 +692,19 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10, prefer
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
-    const key = getNextYouTubeKey(startIndex);
-    if (!key) break;
+    const requestedIndex =
+      (startIndex + attempt) % YOUTUBE_API_KEYS.length;
+
+    // Assign parallel searches to a specific independent quota pool first.
+    // If that pool is unavailable, later attempts can use another key.
+    const key =
+      preferKeyIndex !== undefined
+        ? getYouTubeKeyByIndex(requestedIndex)
+        : getNextYouTubeKey(requestedIndex);
+
+    if (!key) {
+      continue;
+    }
 
     try {
       const { videos } = await fetchYouTubeVideosWithKey(query, maxResults, key);
@@ -711,7 +722,6 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10, prefer
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.warn(`[YouTube] ⚠️ Attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
-      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
     }
   }
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { publicProcedure } from '../../create-context';
 import { supabaseBackend } from '../../../lib/supabase';
-import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from '../../../lib/youtube-keys';
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, getYouTubeKeyByIndex, markYouTubeKeyIssue, isQuotaError } from '../../../lib/youtube-keys';
 
 interface YouTubeVideo {
   id: string;
@@ -163,8 +163,19 @@ async function fetchYouTubeVideos(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
-    const key = getNextYouTubeKey(startIndex);
-    if (!key) break;
+    const requestedIndex =
+      (startIndex + attempt) % YOUTUBE_API_KEYS.length;
+
+    // Assign parallel searches to a specific independent quota pool first.
+    // If that pool is unavailable, later attempts can use another key.
+    const key =
+      preferKeyIndex !== undefined
+        ? getYouTubeKeyByIndex(requestedIndex)
+        : getNextYouTubeKey(requestedIndex);
+
+    if (!key) {
+      continue;
+    }
 
     try {
       const videos = await fetchYouTubeVideosWithKey(query, maxResults, key);
@@ -172,7 +183,6 @@ async function fetchYouTubeVideos(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.warn(`⚠️ YouTube attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
-      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
     }
   }
 
