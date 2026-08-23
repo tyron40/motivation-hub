@@ -453,6 +453,13 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       } catch {}
 
       setCurrentStatus('Ready to listen');
+
+      // Automatically greet the user after Voice Coach initializes.
+      // Calling this here is reliable because changing initDoneRef
+      // does not itself trigger a React render.
+      setTimeout(() => {
+        void doGreeting();
+      }, 220);
     };
 
     init();
@@ -469,15 +476,8 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       webStreamRef.current = null;
       webRecorderRef.current = null;
     };
-  }, [setPlaybackMode, stopAndUnloadSound]);
+  }, [setPlaybackMode, stopAndUnloadSound, doGreeting]);
 
-  useEffect(() => {
-    if (!initDoneRef.current || hasGreeted) return;
-    const timer = setTimeout(() => {
-      doGreeting();
-    }, 220);
-    return () => clearTimeout(timer);
-  }, [hasGreeted, doGreeting]);
 
   useEffect(() => {
     if (!isRecording) {

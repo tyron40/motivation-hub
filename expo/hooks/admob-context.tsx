@@ -26,14 +26,17 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
   useEffect(() => {
     const reportAdState = () => {
-      if (appodeal.active) {
-        setIsRewardedAdLoaded(appodeal.rewardedLoaded);
-        setIsInterstitialAdLoaded(appodeal.interstitialLoaded);
-      } else {
-        const state = manager.getState();
-        setIsRewardedAdLoaded(state.isRewardedReady);
-        setIsInterstitialAdLoaded(state.isInterstitialReady);
-      }
+      const admobState = manager.getState();
+
+      setIsRewardedAdLoaded(
+        (appodeal.active && appodeal.rewardedLoaded) ||
+        admobState.isRewardedReady
+      );
+
+      setIsInterstitialAdLoaded(
+        (appodeal.active && appodeal.interstitialLoaded) ||
+        admobState.isInterstitialReady
+      );
     };
 
     manager.setRewardCallback(async (reward: any) => {
@@ -153,39 +156,43 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Appodeal mediation takes priority when active; otherwise AdMob serves.
-    if (appodeal.active) {
-      if (!appodeal.canShowInterstitial()) {
-        console.log('📡 [Appodeal] Interstitial not available or cooldown active');
-        return false;
-      }
+    // Appodeal gets first opportunity, but must never block AdMob.
+    if (appodeal.active && appodeal.canShowInterstitial()) {
       try {
         logProvider('APPODEAL');
         setIsShowingAd(true);
-        const shown = await appodeal.showInterstitial();
-        setIsShowingAd(false);
-        return shown;
-      } catch (error: any) {
-        console.error('❌ Error showing Appodeal interstitial:', error);
-        setIsShowingAd(false);
-        return false;
-      }
-    }
 
-    if (!manager.canShowInterstitial()) {
-      console.log('📺 Interstitial not available or cooldown active');
-      return false;
+        const shown = await appodeal.showInterstitial();
+
+        setIsShowingAd(false);
+
+        if (shown) {
+          return true;
+        }
+
+        console.log('[Ads] Appodeal did not show - trying AdMob fallback');
+      } catch (error: any) {
+        setIsShowingAd(false);
+        console.warn(
+          '[Ads] Appodeal interstitial failed - trying AdMob fallback',
+          error
+        );
+      }
+    } else if (appodeal.active) {
+      console.log('[Ads] Appodeal not ready - trying AdMob fallback');
     }
 
     try {
       logProvider('ADMOB FALLBACK');
       setIsShowingAd(true);
+
       const shown = await manager.showInterstitial();
+
       setIsShowingAd(false);
       return shown;
     } catch (error: any) {
-      console.error('❌ Error showing interstitial ad:', error);
       setIsShowingAd(false);
+      console.error('❌ Error showing interstitial ad:', error);
       return false;
     }
   }, [canShowAds, isShowingAd, manager, appodeal]);
@@ -197,38 +204,62 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const tryShowInterstitialOnTransition = useCallback(async () => {
     if (!canShowAds || isShowingAd) return false;
 
-    // Appodeal mediation takes priority when active; otherwise AdMob serves.
-    if (appodeal.active) {
-      const shouldShow = appodeal.recordInteraction();
-      if (shouldShow && appodeal.canShowInterstitial()) {
-        try {
-          logProvider('APPODEAL');
-          setIsShowingAd(true);
-          const shown = await appodeal.showInterstitial();
-          setIsShowingAd(false);
-          return shown;
-        } catch {
-          setIsShowingAd(false);
-          return false;
-        }
-      }
+    // One interaction counter regardless of which provider serves the ad.
+    const shouldShow = manager.recordInteraction();
+
+    if (!shouldShow) {
       return false;
     }
 
-    const shouldShow = manager.recordInteraction();
-    if (shouldShow && manager.canShowInterstitial()) {
+    // Appodeal gets first opportunity when it is genuinely ready.
+    if (appodeal.active && appodeal.canShowInterstitial()) {
       try {
-        logProvider('ADMOB FALLBACK');
+        logProvider('APPODEAL');
         setIsShowingAd(true);
-        const shown = await manager.showInterstitial();
+
+        const shown = await appodeal.showInterstitial();
+
         setIsShowingAd(false);
-        return shown;
-      } catch {
+
+        if (shown) {
+          // AdManager owns transition frequency, even when Appodeal serves.
+          manager.resetInteractionCount();
+          return true;
+        }
+
+        console.log('[Ads] Appodeal did not show - trying AdMob fallback');
+      } catch (error: any) {
         setIsShowingAd(false);
-        return false;
+        console.warn(
+          '[Ads] Appodeal transition ad failed - trying AdMob fallback',
+          error
+        );
       }
+    } else if (appodeal.active) {
+      console.log(
+        '[Ads] Appodeal transition ad not ready - trying AdMob fallback'
+      );
     }
-    return false;
+
+    // Active-but-empty Appodeal must never block AdMob.
+    if (!manager.canShowInterstitial()) {
+      console.log('[Ads] AdMob fallback interstitial not ready');
+      return false;
+    }
+
+    try {
+      logProvider('ADMOB FALLBACK');
+      setIsShowingAd(true);
+
+      const shown = await manager.showInterstitial();
+
+      setIsShowingAd(false);
+      return shown;
+    } catch (error: any) {
+      setIsShowingAd(false);
+      console.error('[Ads] AdMob transition fallback failed', error);
+      return false;
+    }
   }, [canShowAds, isShowingAd, manager, appodeal]);
 
   return useMemo(

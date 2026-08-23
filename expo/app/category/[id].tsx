@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -190,14 +190,12 @@ export default function CategoryScreen() {
     [category, getSpeechesByCategory]
   );
   const TARGET_CATEGORY_COUNT = 40;
-  const isChristianOnlyMode = !!profile.includeChurchMotivation;
-
   const isChristianCategory =
     category?.id === 'church' ||
     ['christian motivation', 'christian', 'church']
       .includes((category?.name || '').trim().toLowerCase());
 
-  const requireChristianContent = isChristianCategory || isChristianOnlyMode;
+  const requireChristianContent = isChristianCategory;
 
   const isChristianContent = (speech: Speech) => {
     const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
@@ -233,13 +231,7 @@ export default function CategoryScreen() {
   useEffect(() => {
     console.log('[Category] route id:', categoryId);
     console.log('[Category] resolved category:', category?.name);
-
-    if (isChristianOnlyMode && category && !isChristianCategory && categoryId !== 'church') {
-      router.replace('/category/church');
-      return;
-    }
-
-    if (isMotivationCategory) {
+if (isMotivationCategory) {
       setUseLocalMotivationHero(true);
       setBannerImageUri('');
       return;
@@ -248,7 +240,7 @@ export default function CategoryScreen() {
     const next = banner?.imageUrl?.trim() ? banner.imageUrl.trim() : fallback;
     setUseLocalMotivationHero(false);
     setBannerImageUri(next);
-  }, [banner?.imageUrl, isMotivationCategory, isChristianOnlyMode, isChristianCategory, category, categoryId]);
+  }, [banner?.imageUrl, isMotivationCategory, isChristianCategory, category, categoryId]);
 
   // Reset online-sourced data whenever the category (route id) changes
   useEffect(() => {
@@ -517,7 +509,7 @@ export default function CategoryScreen() {
                   {'"'}{banner.quote}{'"'}
                 </Text>
                 <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
-                <Text style={styles.bannerAuthor}>— {banner.author}</Text>
+                <Text style={styles.bannerAuthor}>â€” {banner.author}</Text>
               </View>
             </View>
           )}

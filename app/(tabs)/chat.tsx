@@ -855,37 +855,14 @@ function ChatScreenContent() {
   }, [recording, sound, stopAudio]);
 
   const MessageBubble = ({ message, index }: { message: Message; index: number }) => {
-    const bubbleAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
-    useEffect(() => {
-      Animated.sequence([
-        Animated.delay(index * 150),
-        Animated.parallel([
-          Animated.timing(bubbleAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.spring(scaleAnim, {
-            toValue: 1,
-            tension: 100,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }, [index, bubbleAnim, scaleAnim]);
+
 
     return (
       <Animated.View
         style={[
           styles.messageBubbleContainer,
-          message.isUser ? styles.userMessageContainer : styles.aiMessageContainer,
-          {
-            opacity: bubbleAnim,
-            transform: [{ scale: scaleAnim }],
-          }
+          message.isUser ? styles.userMessageContainer : styles.aiMessageContainer
         ]}
       >
         <LinearGradient
