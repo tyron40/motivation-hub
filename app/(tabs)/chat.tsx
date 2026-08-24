@@ -17,8 +17,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Bot, User, Sparkles, Volume2, VolumeX, Settings, Play, Pause, MessageCircle, Zap, Brain, Mic, MicOff, History, Trash2, MessageSquarePlus, ChevronDown } from 'lucide-react-native';
 import { Stack, router } from 'expo-router';
-import Constants from 'expo-constants';
-import * as Application from 'expo-application';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import Colors from '@/constants/colors';
@@ -182,9 +180,6 @@ function ChatScreenContent() {
   const responseCommittedRef = useRef(false);
   const messagesRef = useRef<Message[]>([]);
   const skipNextSessionReloadRef = useRef(false);
-  const runtimeVersion = Application.nativeApplicationVersion || Constants.expoConfig?.version || 'dev';
-  const runtimeBuild = Application.nativeBuildVersion || Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode || 'local';
-  const appVersion = `${runtimeVersion} (${runtimeBuild})`;
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -979,7 +974,7 @@ function ChatScreenContent() {
                 <Text style={styles.title}>Coach Alex</Text>
                 <View style={styles.statusIndicator}>
                   <View style={styles.onlineIndicator} />
-                  <Text style={styles.statusText}>Online â€¢ v{appVersion}</Text>
+                  <Text style={styles.statusText}>Online</Text>
                 </View>
               </View>
             </View>

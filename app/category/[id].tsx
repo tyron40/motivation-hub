@@ -348,6 +348,43 @@ if (isMotivationCategory) {
           if (unique.length >= TARGET_CATEGORY_COUNT) break;
         }
 
+        // Strict matches always stay first. If a category still has fewer
+        // results than the common target, backfill from the remaining online
+        // results with a lower relevance threshold. Church content keeps its
+        // explicit Christian-content requirement.
+        if (unique.length < TARGET_CATEGORY_COUNT) {
+          const relaxedOnline = rawVideos
+            .map(video => convertVideoToSpeech(video))
+            .filter(
+              speech =>
+                speech &&
+                speech.id &&
+                speech.duration > 60 &&
+                !seenIds.has(speech.id)
+            )
+            .map(speech => ({
+              speech,
+              score: scoreSpeechRelevance(speech),
+            }))
+            .filter(item => item.score > 0)
+            .sort((a, b) => b.score - a.score);
+
+          for (const item of relaxedOnline) {
+            const speech = item.speech;
+
+            if (seenIds.has(speech.id)) continue;
+
+            if (searchKey === 'church' && !isChristianContent(speech)) {
+              continue;
+            }
+
+            seenIds.add(speech.id);
+            unique.push(speech);
+
+            if (unique.length >= TARGET_CATEGORY_COUNT) break;
+          }
+        }
+
         if (unique.length < TARGET_CATEGORY_COUNT) {
           for (const speech of contextSpeeches) {
             if (!speech?.id || seenIds.has(speech.id)) continue;

@@ -22,6 +22,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import { getBackendUrl } from '@/lib/config';
 
+import { playbackAdCoordinator } from '@/services/PlaybackAdCoordinator';
 let YoutubePlayer: any = null;
 if (Platform.OS !== 'web') {
   try {
@@ -251,7 +252,47 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
-  useImperativeHandle(ref, () => ({
+    useEffect(() => {
+    const unregisterAdPlayback = playbackAdCoordinator.register({
+      pauseForAd: () => {
+        // Capture whether playback was intended before the ad.
+        // Do not treat this forced ad pause as a manual user pause.
+        wasPlayingBeforeAdRef.current =
+          isPlayingRef.current || desiredPlayRef.current;
+
+        manualPauseRef.current = false;
+
+        // Cancel any autoplay bootstrap still trying to manipulate playback.
+        bootstrapIntentRef.current++;
+        autoplayBootstrapRunningRef.current = false;
+
+        void requestPlayState(false);
+      },
+
+      resumeAfterAd: () => {
+        const shouldResume =
+          wasPlayingBeforeAdRef.current === true;
+
+        // Consume the saved intent exactly once.
+        wasPlayingBeforeAdRef.current = false;
+
+        if (!shouldResume) {
+          return;
+        }
+
+        // A genuine user pause after/between ad events must win.
+        if (manualPauseRef.current) {
+          return;
+        }
+
+        void requestPlayState(true);
+      },
+    });
+
+    return unregisterAdPlayback;
+  }, [requestPlayState]);
+
+useImperativeHandle(ref, () => ({
     togglePlay: () => {
       if (!playerReadyRef.current || playerErrorRef.current) {
         console.log('Player not ready for toggle');

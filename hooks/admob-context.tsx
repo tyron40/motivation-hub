@@ -6,6 +6,7 @@ import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
 import AppodealManager, { ADS_DEBUG } from '@/lib/AppodealManager';
 
+import { playbackAdCoordinator } from '@/services/PlaybackAdCoordinator';
 const { REWARD_AMOUNT } = AD_CONFIG;
 
 /** Development-only: which ad source actually serves the displayed ad. */
@@ -23,6 +24,16 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
   const manager = useMemo(() => AdManager.getInstance(), []);
   const appodeal = useMemo(() => AppodealManager.getInstance(), []);
+
+  const beginAdDisplay = useCallback(() => {
+    playbackAdCoordinator.beginAd();
+    setIsShowingAd(true);
+  }, []);
+
+  const endAdDisplay = useCallback(() => {
+    setIsShowingAd(false);
+    playbackAdCoordinator.endAd();
+  }, []);
 
   useEffect(() => {
     const reportAdState = () => {
@@ -110,13 +121,13 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     if (appodeal.active && appodeal.rewardedLoaded) {
       try {
         logProvider('APPODEAL');
-        setIsShowingAd(true);
+        beginAdDisplay();
         const shown = await appodeal.showRewarded();
-        setIsShowingAd(false);
+        endAdDisplay();
         return shown;
       } catch (error: any) {
         console.error('❌ Error showing Appodeal rewarded ad:', error);
-        setIsShowingAd(false);
+        endAdDisplay();
         return false;
       }
     }
@@ -133,17 +144,17 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
     try {
       logProvider('ADMOB FALLBACK');
-      setIsShowingAd(true);
+      beginAdDisplay();
       const shown = await manager.showRewarded();
-      setIsShowingAd(false);
+      endAdDisplay();
       return shown;
     } catch (error: any) {
       console.error('❌ Error showing rewarded ad:', error);
-      setIsShowingAd(false);
+      endAdDisplay();
       Alert.alert('Error', 'Unable to show ad. Please try again later.');
       return false;
     }
-  }, [canShowAds, isShowingAd, manager, appodeal]);
+  }, [canShowAds, isShowingAd, manager, appodeal, beginAdDisplay, endAdDisplay]);
 
   const showInterstitialAd = useCallback(async () => {
     if (!canShowAds) {
@@ -160,11 +171,11 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     if (appodeal.active && appodeal.canShowInterstitial()) {
       try {
         logProvider('APPODEAL');
-        setIsShowingAd(true);
+        beginAdDisplay();
 
         const shown = await appodeal.showInterstitial();
 
-        setIsShowingAd(false);
+        endAdDisplay();
 
         if (shown) {
           return true;
@@ -172,7 +183,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
         console.log('[Ads] Appodeal did not show - trying AdMob fallback');
       } catch (error: any) {
-        setIsShowingAd(false);
+        endAdDisplay();
         console.warn(
           '[Ads] Appodeal interstitial failed - trying AdMob fallback',
           error
@@ -184,18 +195,18 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
     try {
       logProvider('ADMOB FALLBACK');
-      setIsShowingAd(true);
+      beginAdDisplay();
 
       const shown = await manager.showInterstitial();
 
-      setIsShowingAd(false);
+      endAdDisplay();
       return shown;
     } catch (error: any) {
-      setIsShowingAd(false);
+      endAdDisplay();
       console.error('❌ Error showing interstitial ad:', error);
       return false;
     }
-  }, [canShowAds, isShowingAd, manager, appodeal]);
+  }, [canShowAds, isShowingAd, manager, appodeal, beginAdDisplay, endAdDisplay]);
 
   const recordInteraction = useCallback(() => {
     return manager.recordInteraction();
@@ -215,11 +226,11 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     if (appodeal.active && appodeal.canShowInterstitial()) {
       try {
         logProvider('APPODEAL');
-        setIsShowingAd(true);
+        beginAdDisplay();
 
         const shown = await appodeal.showInterstitial();
 
-        setIsShowingAd(false);
+        endAdDisplay();
 
         if (shown) {
           // AdManager owns transition frequency, even when Appodeal serves.
@@ -229,7 +240,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
         console.log('[Ads] Appodeal did not show - trying AdMob fallback');
       } catch (error: any) {
-        setIsShowingAd(false);
+        endAdDisplay();
         console.warn(
           '[Ads] Appodeal transition ad failed - trying AdMob fallback',
           error
@@ -249,18 +260,18 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
     try {
       logProvider('ADMOB FALLBACK');
-      setIsShowingAd(true);
+      beginAdDisplay();
 
       const shown = await manager.showInterstitial();
 
-      setIsShowingAd(false);
+      endAdDisplay();
       return shown;
     } catch (error: any) {
-      setIsShowingAd(false);
+      endAdDisplay();
       console.error('[Ads] AdMob transition fallback failed', error);
       return false;
     }
-  }, [canShowAds, isShowingAd, manager, appodeal]);
+  }, [canShowAds, isShowingAd, manager, appodeal, beginAdDisplay, endAdDisplay]);
 
   return useMemo(
     () => ({

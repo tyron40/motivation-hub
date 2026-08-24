@@ -208,7 +208,7 @@ export const fetchContentProcedure = publicProcedure
   .input(
     z.object({
       category: z.string(),
-      limit: z.number().min(1).max(50).default(10),
+      limit: z.number().min(1).max(100).default(10),
       refresh: z.boolean().default(false),
     })
   )
@@ -220,8 +220,29 @@ export const fetchContentProcedure = publicProcedure
     const categoryKey = category.toLowerCase();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
 
-    const queriesToRun = searchQueries.slice(0, Math.max(1, YOUTUBE_API_KEYS.length || 1));
-    const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
+    // Run enough distinct searches to fill the requested category inventory.
+    // Keys choose independent quota pools, but query count is not limited to
+    // key count: requests rotate across the available pools.
+    const minimumQueryCount = Math.max(
+      1,
+      Math.ceil(limit / 50)
+    );
+
+    const queryCount = Math.min(
+      searchQueries.length,
+      Math.max(
+        minimumQueryCount,
+        YOUTUBE_API_KEYS.length || 1
+      )
+    );
+
+    const queriesToRun = searchQueries.slice(0, queryCount);
+
+    // YouTube search.list maxResults cannot exceed 50.
+    const perQueryLimit = Math.min(
+      50,
+      Math.max(5, Math.ceil(limit / queriesToRun.length))
+    );
 
     console.log(`🔍 Running ${queriesToRun.length} queries with ${YOUTUBE_API_KEYS.length} key(s), per-query limit: ${perQueryLimit}`);
 

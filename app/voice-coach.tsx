@@ -10,7 +10,6 @@ import {
   Modal,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
@@ -34,7 +33,6 @@ const voiceCharacters = [
     voiceName: 'Alloy',
     gender: 'male',
     description: 'Calm, balanced, and encouraging.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
   },
   {
     id: 'echo',
@@ -42,7 +40,6 @@ const voiceCharacters = [
     voiceName: 'Echo',
     gender: 'male',
     description: 'Warm, confident, and conversational.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/46.jpg',
   },
   {
     id: 'fable',
@@ -50,7 +47,6 @@ const voiceCharacters = [
     voiceName: 'Fable',
     gender: 'male',
     description: 'Expressive, thoughtful, and energetic.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/75.jpg',
   },
   {
     id: 'onyx',
@@ -58,7 +54,6 @@ const voiceCharacters = [
     voiceName: 'Onyx',
     gender: 'male',
     description: 'Deep, focused, powerful, and motivational.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/22.jpg',
   },
   {
     id: 'nova',
@@ -66,7 +61,6 @@ const voiceCharacters = [
     voiceName: 'Nova',
     gender: 'female',
     description: 'Energetic, upbeat, and supportive.',
-    imageUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
   },
   {
     id: 'shimmer',
@@ -74,7 +68,6 @@ const voiceCharacters = [
     voiceName: 'Shimmer',
     gender: 'female',
     description: 'Gentle, patient, and reassuring.',
-    imageUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
   },
 ] as const;
 
@@ -104,6 +97,13 @@ function VoiceCoachContent() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  // Native recording lifecycle must not depend on React render timing.
+  // A user can release the hold button while prepare/start is still awaiting.
+  const recordingStartingRef = useRef(false);
+  const recordingActiveRef = useRef(false);
+  const recordingStopRequestedRef = useRef(false);
+  const recordingStoppingRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
   const soundRef = useRef<Audio.Sound | null>(null);
   const webRecorderRef = useRef<any | null>(null);
@@ -253,9 +253,16 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     [usageStats.credits, profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, iapContext, speakText]
   );
 
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+
   const startRecording = useCallback(async () => {
     if (phase !== 'idle') return;
+    if (recordingStartingRef.current || recordingActiveRef.current) return;
     if (!lock()) return;
+
+    recordingStartingRef.current = true;
+    recordingStopRequestedRef.current = false;
+    recordingStoppingRef.current = false;
 
     try {
       await stopAndUnloadSound();
@@ -275,9 +282,20 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         webRecorderRef.current = mediaRecorder;
         mediaRecorder.start();
         recordingStartedAtRef.current = Date.now();
+        recordingStartingRef.current = false;
+        recordingActiveRef.current = true;
 
         setHasPermission(true);
         setPhase('recording');
+
+        // If the user already released while startup was awaiting,
+        // stop immediately now that a real recorder exists.
+        if (recordingStopRequestedRef.current) {
+          setTimeout(() => {
+            void stopRecordingRef.current?.();
+          }, 0);
+        }
+
         return;
       }
 
@@ -331,21 +349,52 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       await recording.startAsync();
       recordingStartedAtRef.current = Date.now();
       recordingRef.current = recording;
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = true;
       setPhase('recording');
+
+      // onPressOut can occur before startAsync() resolves.
+      // Honor that release after the recorder is genuinely active.
+      if (recordingStopRequestedRef.current) {
+        setTimeout(() => {
+          void stopRecordingRef.current?.();
+        }, 0);
+      }
     } catch (err: any) {
       console.error('âŒ startRecording:', err);
       setPhase('idle');
       setCurrentStatus('Ready to listen');
       Alert.alert('Recording Error', err?.message || 'Failed to start recording');
     } finally {
+      recordingStartingRef.current = false;
+      if (!recordingRef.current && !webRecorderRef.current) {
+        recordingActiveRef.current = false;
+      }
       unlock();
     }
   }, [phase, lock, unlock, stopAndUnloadSound]);
 
   const stopRecording = useCallback(async () => {
-    // OpenAI rejects recordings below ~100ms. More importantly, an
-    // immediate press/release on iOS can produce a valid URI with 0ms
-    // of audio. Give the recorder enough real capture time before stop.
+    // onPressOut may fire before native/web recorder startup has finished.
+    // Record the user's release immediately and let startup complete.
+    recordingStopRequestedRef.current = true;
+
+    if (recordingStartingRef.current && !recordingActiveRef.current) {
+      return;
+    }
+
+    if (!recordingActiveRef.current) {
+      return;
+    }
+
+    if (recordingStoppingRef.current) {
+      return;
+    }
+
+    recordingStoppingRef.current = true;
+
+    // OpenAI rejects extremely short recordings. Ensure the active recorder
+    // captures enough real audio before it is unloaded.
     const elapsedRecordingMs =
       recordingStartedAtRef.current > 0
         ? Date.now() - recordingStartedAtRef.current
@@ -359,9 +408,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       );
     }
 
-
-    if (phase !== 'recording') return;
-    if (!lock()) return;
+    if (!lock()) {
+      recordingStoppingRef.current = false;
+      return;
+    }
 
     try {
       setPhase('processing');
@@ -382,6 +432,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         webRecorderRef.current = null;
         webStreamRef.current = null;
+        recordingActiveRef.current = false;
 
         const formData = new FormData();
         formData.append('audio', blob as any, 'recording.webm');
@@ -398,11 +449,22 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       }
 
       const recording = recordingRef.current;
-      if (!recording) throw new Error('No active recording');
+
+      // Consume the active recorder before awaiting stop so no second
+      // release/event can attempt to unload the same Audio.Recording.
+      recordingRef.current = null;
+      recordingActiveRef.current = false;
+
+      if (!recording) {
+        // Startup/cleanup already consumed it. This is not a user-facing
+        // processing failure.
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        return;
+      }
 
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      recordingRef.current = null;
       await setPlaybackMode();
 
       if (!uri) throw new Error('No audio captured');
@@ -419,9 +481,16 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       setCurrentStatus('Ready to listen');
       Alert.alert('Processing Error', err?.message || 'Failed to process speech');
     } finally {
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = false;
+      recordingStopRequestedRef.current = false;
+      recordingStoppingRef.current = false;
+      recordingStartedAtRef.current = 0;
       unlock();
     }
-  }, [phase, lock, unlock, setPlaybackMode, getCoachReply]);
+  }, [lock, unlock, setPlaybackMode, getCoachReply]);
+
+  stopRecordingRef.current = stopRecording;
 
   const stopSpeaking = useCallback(async () => {
     await stopAndUnloadSound();
@@ -491,6 +560,12 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         rec.stopAndUnloadAsync().catch(() => {});
         recordingRef.current = null;
       }
+
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = false;
+      recordingStopRequestedRef.current = false;
+      recordingStoppingRef.current = false;
+      recordingStartedAtRef.current = 0;
       const stream = webStreamRef.current;
       stream?.getTracks?.().forEach((t: any) => t.stop());
       webStreamRef.current = null;
@@ -602,15 +677,43 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       <View style={styles.content}>
         <View style={styles.avatarSection}>
-          <Animated.View style={[styles.avatar, { transform: [{ scale: avatarScale }] }]}>
-            <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
+          <Animated.View
+            style={[
+              styles.avatar,
+              {
+                transform: [{ scale: avatarScale }],
+                shadowColor: colors.primary,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.magicOrbOuter,
+                {
+                  borderColor: colors.primary + '70',
+                  backgroundColor: colors.primary + '18',
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.magicOrbInner,
+                  {
+                    backgroundColor: colors.primary + '28',
+                    borderColor: colors.primary,
+                  },
+                ]}
+              >
+                <Sparkles size={48} color={colors.primary} />
+              </View>
+            </View>
           </Animated.View>
 
           <View style={styles.coachInfo}>
-            <Text style={[styles.coachName, { color: colors.text }]}>{selectedCoach.name}</Text>
+            <Text style={[styles.coachName, { color: colors.text }]}>AI Voice Coach</Text>
             <TouchableOpacity style={styles.changeCoachButton} onPress={() => setShowVoiceModal(true)}>
               <Sparkles size={14} color={colors.primary} />
-              <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Coach</Text>
+              <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Voice</Text>
             </TouchableOpacity>
           </View>
 
@@ -618,7 +721,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
             {selectedCoach.description}
           </Text>
           <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Speaking as: {selectedCoach.name} - {selectedCoach.voiceName}
+            Voice: {selectedCoach.voiceName}
           </Text>
         </View>
 
@@ -670,7 +773,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           {!hasPermission && <Text style={styles.warningText}>Grant microphone access to use voice features</Text>}
           <TouchableOpacity testID="voice-settings-button" style={styles.voiceSettingsButton} onPress={() => setShowVoiceModal(true)}>
             <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {selectedCoach.name} - {selectedCoach.voiceName}</Text>
+              Voice: {selectedCoach.voiceName}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -678,7 +781,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       <Modal visible={showVoiceModal} animationType="slide" transparent onRequestClose={() => setShowVoiceModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Your Voice Coach</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice</Text>
             <ScrollView style={styles.voiceList}>
               {voiceCharacters.map((voice) => (
                 <TouchableOpacity
@@ -690,14 +793,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
                   ]}
                   onPress={async () => {
                     await updateProfile({ preferredVoice: voice.id as any });
-                    Alert.alert('Voice Updated', `Voice changed to ${voice.name} - ${voice.voiceName}`);
+                    Alert.alert('Voice Updated', `Voice changed to ${voice.voiceName}`);
                     setShowVoiceModal(false);
                   }}
                 >
-                  <Image
-                    source={{ uri: voice.imageUrl }}
-                    style={styles.voicePortrait}
-                  />
                   <View style={styles.voiceInfo}>
                     <Text
                       style={[
@@ -705,7 +804,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
                         { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
                       ]}
                     >
-                      {voice.name} - {voice.voiceName}
+                      {voice.voiceName}
                     </Text>
                     <Text style={[styles.voiceDescription, { color: colors.textSecondary }]}>{voice.description}</Text>
                   </View>
@@ -752,11 +851,27 @@ const createStyles = (colors: any) =>
       marginBottom: 16,
       borderWidth: 3,
       borderColor: colors.primary,
-      overflow: 'hidden',
+      overflow: 'visible',
+      shadowOpacity: 0.35,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 8,
     },
-    avatarImage: {
+    magicOrbOuter: {
       width: '100%',
       height: '100%',
+      borderRadius: 60,
+      borderWidth: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    magicOrbInner: {
+      width: 82,
+      height: 82,
+      borderRadius: 41,
+      borderWidth: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     coachInfo: {
       flexDirection: 'row',
@@ -931,13 +1046,6 @@ const createStyles = (colors: any) =>
       marginBottom: 12,
       borderWidth: 2,
       borderColor: 'transparent',
-    },
-    voicePortrait: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      marginRight: 12,
-      backgroundColor: colors.card,
     },
     voiceInfo: {
       flex: 1,
