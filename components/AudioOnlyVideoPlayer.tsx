@@ -126,6 +126,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // isPlayingRef: confirmed YouTube state (onStateChange + state sync).
   const desiredPlayRef = useRef(false);
   const wasPlayingBeforeAdRef = useRef(false);
+  const temporarilyPausedForAdRef = useRef(false);
+
   const manualPauseRef = useRef(false);
   const lastRequestedStateRef = useRef<boolean | null>(null);
   const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -255,42 +257,56 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     useEffect(() => {
     const unregisterAdPlayback = playbackAdCoordinator.register({
       pauseForAd: () => {
-        // Capture whether playback was intended before the ad.
-        // Do not treat this forced ad pause as a manual user pause.
+        // Ad interruption is temporary and separate from user intent.
         wasPlayingBeforeAdRef.current =
           isPlayingRef.current || desiredPlayRef.current;
 
-        manualPauseRef.current = false;
+        temporarilyPausedForAdRef.current = true;
 
-        // Cancel any autoplay bootstrap still trying to manipulate playback.
+        // Never convert an ad pause into a user's manual pause.
+        manualPauseRef.current = false;
+    temporarilyPausedForAdRef.current = false;
+    wasPlayingBeforeAdRef.current = false;
+
         bootstrapIntentRef.current++;
         autoplayBootstrapRunningRef.current = false;
 
-        void requestPlayState(false);
+        // Pause the underlying player without destroying desired intent.
+        setPlayerPlayCommand(false);
+        sendNativeImperativeCommand(false);
+        stopProgressTracking();
       },
 
       resumeAfterAd: () => {
-        const shouldResume =
-          wasPlayingBeforeAdRef.current === true;
+        const shouldResume = wasPlayingBeforeAdRef.current;
 
-        // Consume the saved intent exactly once.
+        // Clear temporary ad state FIRST so all controls become usable
+        // regardless of whether automatic resume succeeds.
+        temporarilyPausedForAdRef.current = false;
         wasPlayingBeforeAdRef.current = false;
 
-        if (!shouldResume) {
+        // A real user pause must always win.
+        if (!shouldResume || manualPauseRef.current) {
           return;
         }
 
-        // A genuine user pause after/between ad events must win.
-        if (manualPauseRef.current) {
-          return;
-        }
+        desiredPlayRef.current = true;
+        lastRequestedStateRef.current = true;
+
+        setPlayerPlayCommand(true);
+        setIsPlaying(true);
+        onPlayingChangeRef.current?.(true);
 
         void requestPlayState(true);
       },
     });
 
     return unregisterAdPlayback;
-  }, [requestPlayState]);
+  }, [
+    requestPlayState,
+    sendNativeImperativeCommand,
+    stopProgressTracking,
+  ]);
 
 useImperativeHandle(ref, () => ({
     togglePlay: () => {
@@ -701,6 +717,13 @@ useImperativeHandle(ref, () => ({
 
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+  // An explicit user Play/Pause action is authoritative recovery.
+  // If an ad already disappeared but temporary state somehow remained,
+  // clear it so stale ad state can never brick future playback.
+  if (!playbackAdCoordinator.isAdActive) {
+    temporarilyPausedForAdRef.current = false;
+  }
+
   // Toggle from the most recent requested user intent.
   // isPlayingRef is reserved for actual YouTube onStateChange events.
   // This makes rapid taps deterministic while still allowing the
@@ -723,6 +746,12 @@ useImperativeHandle(ref, () => ({
   desiredPlayRef.current = nextState;
   lastRequestedStateRef.current = nextState;
   manualPauseRef.current = !nextState;
+
+  // Explicit user input supersedes any pending pre-ad resume.
+  if (!playbackAdCoordinator.isAdActive) {
+    wasPlayingBeforeAdRef.current = false;
+    temporarilyPausedForAdRef.current = false;
+  }
 
   // Optimistically update visible UI/controlled play prop, but do NOT
   // overwrite isPlayingRef. onStateChange owns the actual player state.

@@ -5,7 +5,8 @@
 
 class PlaybackAdCoordinator {
   private subscribers = new Set<PlaybackAdSubscriber>();
-  private adDepth = 0;
+  private adActive = false;
+  private sessionId = 0;
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
 
   register(subscriber: PlaybackAdSubscriber) {
@@ -22,11 +23,15 @@ class PlaybackAdCoordinator {
       this.resumeTimer = null;
     }
 
-    this.adDepth += 1;
-
-    if (this.adDepth !== 1) {
+    // beginAd is intentionally idempotent. Multiple callbacks for the
+    // same visible ad must never create a playback lock that requires
+    // an equal number of endAd calls to recover.
+    if (this.adActive) {
       return;
     }
+
+    this.adActive = true;
+    this.sessionId += 1;
 
     for (const subscriber of this.subscribers) {
       try {
@@ -38,17 +43,23 @@ class PlaybackAdCoordinator {
   }
 
   endAd() {
-    this.adDepth = Math.max(0, this.adDepth - 1);
+    // endAd is also intentionally idempotent.
+    // One dismissal is sufficient to restore the global player.
+    const sessionAtEnd = this.sessionId;
+    this.adActive = false;
 
-    if (this.adDepth !== 0) {
-      return;
+    if (this.resumeTimer) {
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = null;
     }
 
-    // Give the native ad view time to fully disappear before playback resumes.
+    // Short native-view settling period only. This is not used as
+    // playback state; adActive is already false so controls are usable.
     this.resumeTimer = setTimeout(() => {
       this.resumeTimer = null;
 
-      if (this.adDepth !== 0) {
+      // A newer ad started while the previous ad was closing.
+      if (this.adActive || this.sessionId !== sessionAtEnd) {
         return;
       }
 
@@ -59,11 +70,12 @@ class PlaybackAdCoordinator {
           console.warn('[PlaybackAdCoordinator] resume failed', error);
         }
       }
-    }, 350);
+    }, 200);
   }
 
   reset() {
-    this.adDepth = 0;
+    this.adActive = false;
+    this.sessionId += 1;
 
     if (this.resumeTimer) {
       clearTimeout(this.resumeTimer);
@@ -72,7 +84,7 @@ class PlaybackAdCoordinator {
   }
 
   get isAdActive() {
-    return this.adDepth > 0;
+    return this.adActive;
   }
 }
 

@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
@@ -26,48 +28,36 @@ type Role = 'user' | 'assistant';
 type Message = { role: Role; content: string };
 type Phase = 'idle' | 'greeting' | 'recording' | 'processing' | 'speaking';
 
-const voiceCharacters = [
+const voiceOptions = [
   {
     id: 'alloy',
-    name: 'Jordan',
     voiceName: 'Alloy',
-    gender: 'male',
-    description: 'Calm, balanced, and encouraging.',
+    description: 'Balanced and natural.',
   },
   {
     id: 'echo',
-    name: 'Daniel',
     voiceName: 'Echo',
-    gender: 'male',
-    description: 'Warm, confident, and conversational.',
+    description: 'Warm and conversational.',
   },
   {
     id: 'fable',
-    name: 'Oliver',
     voiceName: 'Fable',
-    gender: 'male',
-    description: 'Expressive, thoughtful, and energetic.',
+    description: 'Expressive and energetic.',
   },
   {
     id: 'onyx',
-    name: 'Marcus',
     voiceName: 'Onyx',
-    gender: 'male',
-    description: 'Deep, focused, powerful, and motivational.',
+    description: 'Deep and focused.',
   },
   {
     id: 'nova',
-    name: 'Maya',
     voiceName: 'Nova',
-    gender: 'female',
-    description: 'Energetic, upbeat, and supportive.',
+    description: 'Bright and friendly.',
   },
   {
     id: 'shimmer',
-    name: 'Sofia',
     voiceName: 'Shimmer',
-    gender: 'female',
-    description: 'Gentle, patient, and reassuring.',
+    description: 'Soft and clear.',
   },
 ] as const;
 
@@ -75,9 +65,9 @@ function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
 
-  const selectedCoach =
-    voiceCharacters.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
-    voiceCharacters[0];
+  const selectedVoice =
+    voiceOptions.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
+    voiceOptions[0];
   const { isAuthenticated } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
@@ -106,6 +96,15 @@ function VoiceCoachContent() {
   const recordingStoppingRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const temporaryTtsFileRef = useRef<string | null>(null);
+
+  // Independent layers make the voice sphere feel fluid instead of
+  // simply scaling one circle in and out.
+  const sphereBreathAnim = useRef(new Animated.Value(0)).current;
+  const sphereDriftXAnim = useRef(new Animated.Value(0)).current;
+  const sphereDriftYAnim = useRef(new Animated.Value(0)).current;
+  const sphereMorphAnim = useRef(new Animated.Value(0)).current;
+  const sphereGlowAnim = useRef(new Animated.Value(0)).current;
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
@@ -115,6 +114,73 @@ function VoiceCoachContent() {
   const autoGreetDoneRef = useRef(false);
 
   const trimConversation = useCallback((messages: Message[]) => messages.slice(-10), []);
+  useEffect(() => {
+    const animations = [
+      sphereBreathAnim,
+      sphereDriftXAnim,
+      sphereDriftYAnim,
+      sphereMorphAnim,
+      sphereGlowAnim,
+    ];
+
+    animations.forEach(anim => {
+      anim.stopAnimation();
+      anim.setValue(0);
+    });
+
+    const speaking = phase === 'speaking';
+    const recording = phase === 'recording';
+    const processing = phase === 'processing';
+
+    const breathDuration = speaking ? 620 : recording ? 760 : processing ? 1250 : 2100;
+    const driftXDuration = speaking ? 510 : recording ? 900 : processing ? 1450 : 2400;
+    const driftYDuration = speaking ? 690 : recording ? 820 : processing ? 1600 : 2700;
+    const morphDuration = speaking ? 430 : recording ? 720 : processing ? 1350 : 2300;
+    const glowDuration = speaking ? 540 : recording ? 800 : processing ? 1200 : 2000;
+
+    const makeLoop = (
+      value: Animated.Value,
+      duration: number
+    ) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+    const loops = [
+      makeLoop(sphereBreathAnim, breathDuration),
+      makeLoop(sphereDriftXAnim, driftXDuration),
+      makeLoop(sphereDriftYAnim, driftYDuration),
+      makeLoop(sphereMorphAnim, morphDuration),
+      makeLoop(sphereGlowAnim, glowDuration),
+    ];
+
+    loops.forEach(loop => loop.start());
+
+    return () => {
+      loops.forEach(loop => loop.stop());
+    };
+  }, [
+    phase,
+    sphereBreathAnim,
+    sphereDriftXAnim,
+    sphereDriftYAnim,
+    sphereMorphAnim,
+    sphereGlowAnim,
+  ]);
+
 
   const lock = useCallback(() => {
     if (actionLockRef.current) return false;
@@ -126,17 +192,37 @@ function VoiceCoachContent() {
     actionLockRef.current = false;
   }, []);
 
+  const cleanupTemporaryTtsFile = useCallback(async () => {
+    const uri = temporaryTtsFileRef.current;
+    temporaryTtsFileRef.current = null;
+
+    if (!uri || Platform.OS === 'web') {
+      return;
+    }
+
+    try {
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+    } catch (error) {
+      console.warn('[VoiceCoach] Temporary TTS cleanup failed', error);
+    }
+  }, []);
+
   const stopAndUnloadSound = useCallback(async () => {
     const s = soundRef.current;
     soundRef.current = null;
-    if (!s) return;
-    try {
-      await s.stopAsync();
-    } catch {}
-    try {
-      await s.unloadAsync();
-    } catch {}
-  }, []);
+
+    if (s) {
+      try {
+        await s.stopAsync();
+      } catch {}
+
+      try {
+        await s.unloadAsync();
+      } catch {}
+    }
+
+    await cleanupTemporaryTtsFile();
+  }, [cleanupTemporaryTtsFile]);
 
   const setPlaybackMode = useCallback(async () => {
     await Audio.setAudioModeAsync({
@@ -149,39 +235,131 @@ function VoiceCoachContent() {
   }, []);
 
   const speakText = useCallback(
-    async (text: string) => {
-      if (!text?.trim()) return;
+    async (spokenText: string) => {
+      if (!spokenText?.trim()) return;
 
       setPhase('speaking');
       setCurrentStatus('Coach is speaking...');
 
       try {
         await stopAndUnloadSound();
+
+        // Recording mode must be fully disabled before speaker playback.
         await setPlaybackMode();
 
         const preferredVoice = profile.preferredVoice || 'alloy';
-        const tts = await generateTTS({ text, voice: preferredVoice as any });
+        const tts = await generateTTS({
+          text: spokenText,
+          voice: preferredVoice as any,
+        });
 
-        const uri = `data:${tts.audio.mimeType};base64,${tts.audio.base64Data}`;
-        const { sound } = await Audio.Sound.createAsync(
-          { uri },
-          { shouldPlay: true, volume: 1.0 },
+        const base64Data = tts?.audio?.base64Data;
+        const mimeType = tts?.audio?.mimeType || 'audio/mpeg';
+
+        if (!base64Data) {
+          throw new Error('Voice service returned no audio data');
+        }
+
+        let playbackUri: string;
+
+        if (Platform.OS === 'web') {
+          playbackUri = `data:${mimeType};base64,${base64Data}`;
+        } else {
+          const cacheDirectory = FileSystem.cacheDirectory;
+
+          if (!cacheDirectory) {
+            throw new Error('Temporary audio storage is unavailable');
+          }
+
+          const extension =
+            mimeType.includes('wav') ? 'wav' :
+            mimeType.includes('m4a') ? 'm4a' :
+            'mp3';
+
+          const temporaryUri =
+            `${cacheDirectory}voice-coach-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2)}.${extension}`;
+
+          await FileSystem.writeAsStringAsync(
+            temporaryUri,
+            base64Data,
+            {
+              encoding: FileSystem.EncodingType.Base64,
+            }
+          );
+
+          temporaryTtsFileRef.current = temporaryUri;
+          playbackUri = temporaryUri;
+        }
+
+        let createdSound: Audio.Sound | null = null;
+
+        const result = await Audio.Sound.createAsync(
+          { uri: playbackUri },
+          {
+            shouldPlay: true,
+            volume: 1.0,
+            progressUpdateIntervalMillis: 150,
+          },
           (status: AVPlaybackStatus) => {
-            if (status.isLoaded && status.didJustFinish) {
+            if (!status.isLoaded) {
+              return;
+            }
+
+            if (status.didJustFinish) {
+              const finishedSound = createdSound;
+
+              if (soundRef.current === finishedSound) {
+                soundRef.current = null;
+              }
+
+              if (finishedSound) {
+                void finishedSound.unloadAsync().catch(() => {});
+              }
+
+              void cleanupTemporaryTtsFile();
+
               setPhase('idle');
               setCurrentStatus('Ready to listen');
             }
           }
         );
-        soundRef.current = sound;
+
+        createdSound = result.sound;
+        soundRef.current = result.sound;
+
+        // Be explicit. Some iOS audio-session transitions load successfully
+        // but do not begin playback immediately from shouldPlay alone.
+        const playbackStatus = await result.sound.getStatusAsync();
+
+        if (
+          playbackStatus.isLoaded &&
+          !playbackStatus.isPlaying
+        ) {
+          await result.sound.playAsync();
+        }
       } catch (err: any) {
-        console.error('âŒ TTS error:', err);
+        console.error('[VoiceCoach] TTS playback error:', err);
+
+        await stopAndUnloadSound().catch(() => {});
+        await cleanupTemporaryTtsFile().catch(() => {});
+
         setPhase('idle');
         setCurrentStatus('Ready to listen');
-        Alert.alert('Voice Error', err?.message || 'Unable to play coach voice right now.');
+
+        Alert.alert(
+          'Voice Error',
+          err?.message || 'Unable to play coach voice right now.'
+        );
       }
     },
-    [profile.preferredVoice, stopAndUnloadSound, setPlaybackMode, iapContext]
+    [
+      profile.preferredVoice,
+      stopAndUnloadSound,
+      setPlaybackMode,
+      cleanupTemporaryTtsFile,
+    ]
   );
 
   const getCoachReply = useCallback(
@@ -204,11 +382,9 @@ function VoiceCoachContent() {
 
       try {
         const userName = profile.name || 'friend';
-        const coachName = selectedCoach.name;
-        const coachDescription =
-          selectedCoach.description;
+        const voiceDescription = selectedVoice.description;
 
-        const systemPrompt = `You are an AI motivation coach named "${coachName}". ${coachDescription}.
+        const systemPrompt = `You are the user's AI motivation coach. ${voiceDescription}
 Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}" when natural.`;
 
         const nextConversation = trimConversation([
@@ -492,6 +668,28 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
   stopRecordingRef.current = stopRecording;
 
+  useEffect(() => {
+    return () => {
+      const activeSound = soundRef.current;
+      soundRef.current = null;
+
+      if (activeSound) {
+        void activeSound.stopAsync().catch(() => {});
+        void activeSound.unloadAsync().catch(() => {});
+      }
+
+      const temporaryUri = temporaryTtsFileRef.current;
+      temporaryTtsFileRef.current = null;
+
+      if (temporaryUri && Platform.OS !== 'web') {
+        void FileSystem.deleteAsync(
+          temporaryUri,
+          { idempotent: true }
+        ).catch(() => {});
+      }
+    };
+  }, []);
+
   const stopSpeaking = useCallback(async () => {
     await stopAndUnloadSound();
     setPhase('idle');
@@ -504,10 +702,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     setHasGreeted(true);
 
     const userName = profile.name || 'friend';
-    const coachName = selectedCoach.name;
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-    const greetingText = `${greeting}, ${userName}! I'm ${coachName}. I'm ready to help you win today. What's on your mind?`;
+    const greetingText = `${greeting}, ${userName}! I'm your AI Voice Coach. I'm ready to help you win today. What's on your mind?`;
 
     conversationRef.current = trimConversation([
       ...conversationRef.current,
@@ -679,34 +876,132 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         <View style={styles.avatarSection}>
           <Animated.View
             style={[
-              styles.avatar,
+              styles.voiceSphere,
               {
-                transform: [{ scale: avatarScale }],
-                shadowColor: colors.primary,
+                transform: [
+                  {
+                    scale: sphereBreathAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange:
+                        phase === 'speaking'
+                          ? [0.965, 1.045]
+                          : phase === 'recording'
+                            ? [0.98, 1.035]
+                            : [0.99, 1.018],
+                    }),
+                  },
+                ],
+                opacity: sphereGlowAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.94, 1],
+                }),
               },
             ]}
           >
-            <View
+            <LinearGradient
+              colors={[
+                '#FFFFFF',
+                '#F7FCFF',
+                '#DDF5FF',
+                '#67CFFF',
+                '#1595F5',
+              ]}
+              locations={[0, 0.32, 0.58, 0.8, 1]}
+              style={styles.voiceSphereGradient}
+            />
+
+            <Animated.View
               style={[
-                styles.magicOrbOuter,
+                styles.voiceSphereSoftLayer,
+                styles.voiceSphereUpperGlow,
                 {
-                  borderColor: colors.primary + '70',
-                  backgroundColor: colors.primary + '18',
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-5, 6],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [2, -6],
+                      }),
+                    },
+                    {
+                      scaleX: sphereMorphAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.93, 1.08],
+                      }),
+                    },
+                    {
+                      scaleY: sphereMorphAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1.06, 0.94],
+                      }),
+                    },
+                  ],
                 },
               ]}
-            >
-              <View
-                style={[
-                  styles.magicOrbInner,
-                  {
-                    backgroundColor: colors.primary + '28',
-                    borderColor: colors.primary,
-                  },
-                ]}
-              >
-                <Sparkles size={48} color={colors.primary} />
-              </View>
-            </View>
+            />
+
+            <Animated.View
+              style={[
+                styles.voiceSphereSoftLayer,
+                styles.voiceSphereBlueLayer,
+                {
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [7, -5],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [5, -2],
+                      }),
+                    },
+                    {
+                      scale: sphereBreathAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange:
+                          phase === 'speaking'
+                            ? [0.9, 1.1]
+                            : [0.96, 1.04],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+
+            <Animated.View
+              style={[
+                styles.voiceSphereHighlight,
+                {
+                  opacity: sphereGlowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.42, 0.72],
+                  }),
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-2, 4],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-3, 3],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
           </Animated.View>
 
           <View style={styles.coachInfo}>
@@ -718,10 +1013,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           </View>
 
           <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>
-            {selectedCoach.description}
+            {selectedVoice.description}
           </Text>
           <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Voice: {selectedCoach.voiceName}
+            Voice: {selectedVoice.voiceName}
           </Text>
         </View>
 
@@ -773,7 +1068,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           {!hasPermission && <Text style={styles.warningText}>Grant microphone access to use voice features</Text>}
           <TouchableOpacity testID="voice-settings-button" style={styles.voiceSettingsButton} onPress={() => setShowVoiceModal(true)}>
             <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {selectedCoach.voiceName}</Text>
+              Voice: {selectedVoice.voiceName}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -783,7 +1078,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice</Text>
             <ScrollView style={styles.voiceList}>
-              {voiceCharacters.map((voice) => (
+              {voiceOptions.map((voice) => (
                 <TouchableOpacity
                   key={voice.id}
                   style={[
@@ -857,21 +1152,47 @@ const createStyles = (colors: any) =>
       shadowOffset: { width: 0, height: 0 },
       elevation: 8,
     },
-    magicOrbOuter: {
-      width: '100%',
-      height: '100%',
-      borderRadius: 60,
-      borderWidth: 2,
+    voiceSphere: {
+      width: 164,
+      height: 164,
+      borderRadius: 82,
+      overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
+      shadowColor: '#48B8FF',
+      shadowOpacity: 0.42,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 12,
     },
-    magicOrbInner: {
-      width: 82,
-      height: 82,
-      borderRadius: 41,
-      borderWidth: 2,
-      justifyContent: 'center',
-      alignItems: 'center',
+    voiceSphereGradient: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 82,
+    },
+    voiceSphereSoftLayer: {
+      position: 'absolute',
+      borderRadius: 100,
+    },
+    voiceSphereUpperGlow: {
+      width: 132,
+      height: 104,
+      top: 7,
+      backgroundColor: 'rgba(255,255,255,0.72)',
+    },
+    voiceSphereBlueLayer: {
+      width: 146,
+      height: 96,
+      bottom: -18,
+      backgroundColor: 'rgba(0,149,255,0.33)',
+    },
+    voiceSphereHighlight: {
+      position: 'absolute',
+      width: 92,
+      height: 66,
+      top: 18,
+      left: 27,
+      borderRadius: 46,
+      backgroundColor: 'rgba(255,255,255,0.62)',
     },
     coachInfo: {
       flexDirection: 'row',
