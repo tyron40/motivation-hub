@@ -660,9 +660,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-  // Restore proven manual toggle behavior from 71dd741:
-  // toggle from the actual current player state.
-  const nextState = !isPlayingRef.current;
+  // Toggle from the most recent requested user intent.
+  // isPlayingRef is reserved for actual YouTube onStateChange events.
+  // This makes rapid taps deterministic while still allowing the
+  // watchdog to detect a command that YouTube failed to honor.
+  const nextState = !desiredPlayRef.current;
 
   lastManualToggleTargetRef.current = nextState;
 
@@ -681,8 +683,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   lastRequestedStateRef.current = nextState;
   manualPauseRef.current = !nextState;
 
-  // Restore the direct state/prop transition from 71dd741.
-  isPlayingRef.current = nextState;
+  // Optimistically update visible UI/controlled play prop, but do NOT
+  // overwrite isPlayingRef. onStateChange owns the actual player state.
   setPlayerPlayCommand(nextState);
   setIsPlaying(nextState);
   onPlayingChangeRef.current?.(nextState);

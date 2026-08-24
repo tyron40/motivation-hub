@@ -49,12 +49,17 @@ export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
     }
   }, []);
 
-  const createPlaylist = useCallback(async (name: string, description?: string, color?: string) => {
+  const createPlaylist = useCallback(async (
+    name: string,
+    description?: string,
+    color?: string,
+    initialSpeechId?: string
+  ) => {
     const newPlaylist: Playlist = {
       id: Date.now().toString(),
       name,
       description,
-      speechIds: [],
+      speechIds: initialSpeechId ? [initialSpeechId] : [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
       color: color || '#8B4513',

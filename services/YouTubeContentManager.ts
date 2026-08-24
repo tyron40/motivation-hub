@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_ENDPOINTS } from '@/lib/config';
 
 const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
-const MAX_FETCHES_PER_DAY = 30;
+// Two backend YouTube quota pools are available.
+const MAX_FETCHES_PER_DAY = 60;
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',
@@ -224,7 +225,10 @@ async function mergeDedupVideos(...groups: CachedVideo[][]): Promise<CachedVideo
 async function fetchCategoryFromBackend(category: string, limit: number): Promise<CachedVideo[]> {
   const [categoryPrimary, categorySearchFallback] = await Promise.all([
     fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit }),
-    fetchFromBackend(API_ENDPOINTS.youtubeSearch, { query: category, limit }),
+    fetchFromBackend(API_ENDPOINTS.youtubeSearch, {
+      query: category,
+      limit: Math.min(limit, 50),
+    }),
   ]);
   const merged = await mergeDedupVideos(categoryPrimary, categorySearchFallback);
   return merged.slice(0, limit);
@@ -251,13 +255,21 @@ export const YouTubeContentManager = {
 
     if (cached && cached.length > 0) {
       const needsRefresh = await shouldRefresh(normalizedCategory);
-      if (!needsRefresh) {
+      const cacheIsUndersized = cached.length < limit;
+
+      if (!needsRefresh && !cacheIsUndersized) {
         return cached.slice(0, limit);
       }
 
       const canFetch = await canFetchMore();
       if (!canFetch) {
         return cached.slice(0, limit);
+      }
+
+      // A request for a larger category should be visible immediately,
+      // rather than returning the old smaller cache for another 3 hours.
+      if (cacheIsUndersized) {
+        return await this.fetchAndCacheCategory(normalizedCategory, limit);
       }
 
       this.refreshCategoryInBackground(normalizedCategory, limit).catch(() => {});

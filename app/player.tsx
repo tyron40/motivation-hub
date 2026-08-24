@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
@@ -40,10 +41,12 @@ export default function PlayerScreen() {
     setCurrentTime,
   } = useSpeechContext();
   const { showInterstitialAd, canShowAds, tryShowInterstitialOnTransition, isShowingAd } = useAdMob();
-  const { playlists, addToPlaylist } = usePlaylists();
+  const { playlists, addToPlaylist, createPlaylist } = usePlaylists();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const styles = getStyles(colors);
   const sortedPlaylists = useMemo(
     () => [...playlists].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
@@ -116,23 +119,49 @@ export default function PlayerScreen() {
   };
   const handleAddToPlaylist = useCallback(async () => {
     if (!currentSpeech) return;
-    if (!playlists.length) {
-      Alert.alert(
-        'No Playlists',
-        'Create a playlist first from the Playlists screen.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Go to Playlists',
-            onPress: () => router.push('/playlists'),
-          },
-        ]
-      );
+    setShowPlaylistModal(true);
+  }, [currentSpeech]);
+
+  const handleCreatePlaylistFromPlayer = useCallback(async () => {
+    if (!currentSpeech || isCreatingPlaylist) return;
+
+    const name = newPlaylistName.trim();
+
+    if (!name) {
+      Alert.alert('Playlist Name', 'Enter a name for the new playlist.');
       return;
     }
 
-    setShowPlaylistModal(true);
-  }, [currentSpeech, playlists.length]);
+    try {
+      setIsCreatingPlaylist(true);
+
+      const playlist = await createPlaylist(
+        name,
+        undefined,
+        undefined,
+        currentSpeech.id
+      );
+
+      setNewPlaylistName('');
+      setShowPlaylistModal(false);
+
+      Alert.alert(
+        'Playlist Created',
+        `"${currentSpeech.title}" was added to "${playlist.name}".`
+      );
+    } catch (error) {
+      console.error('Error creating playlist from player:', error);
+      Alert.alert('Error', 'Failed to create playlist.');
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
+  }, [
+    currentSpeech,
+    newPlaylistName,
+    isCreatingPlaylist,
+    createPlaylist,
+  ]);
+
 
   const handleSaveToPlaylist = useCallback(async (playlistId: string) => {
     if (!currentSpeech) return;
@@ -370,7 +399,41 @@ export default function PlayerScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Save to Playlist</Text>
-              <Text style={styles.modalSubtitle}>Choose where to save this speech</Text>
+              <Text style={styles.modalSubtitle}>
+                Choose an existing playlist or create a new one
+              </Text>
+
+              <View style={styles.createPlaylistRow}>
+                <TextInput
+                  style={styles.createPlaylistInput}
+                  value={newPlaylistName}
+                  onChangeText={setNewPlaylistName}
+                  placeholder="New playlist name"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  returnKeyType="done"
+                  onSubmitEditing={() => void handleCreatePlaylistFromPlayer()}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.createPlaylistButton,
+                    (!newPlaylistName.trim() || isCreatingPlaylist) &&
+                      styles.createPlaylistButtonDisabled,
+                  ]}
+                  disabled={!newPlaylistName.trim() || isCreatingPlaylist}
+                  onPress={() => void handleCreatePlaylistFromPlayer()}
+                >
+                  <Text style={styles.createPlaylistButtonText}>
+                    {isCreatingPlaylist ? 'Creating...' : 'Create'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {sortedPlaylists.length === 0 && (
+                <Text style={styles.noPlaylistText}>
+                  No playlists yet. Create one above and this speech will be
+                  added automatically.
+                </Text>
+              )}
 
               <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
                 {sortedPlaylists.map((playlist) => (
@@ -637,6 +700,42 @@ const getStyles = (_colors: any) => StyleSheet.create({
     marginTop: 4,
     marginBottom: 14,
     fontSize: 13,
+  },
+  createPlaylistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  createPlaylistInput: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    color: '#FFF',
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  createPlaylistButton: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#8B4513',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createPlaylistButtonDisabled: {
+    opacity: 0.45,
+  },
+  createPlaylistButtonText: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  noPlaylistText: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
   },
   modalList: {
     maxHeight: 280,

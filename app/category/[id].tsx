@@ -189,7 +189,9 @@ export default function CategoryScreen() {
     () => (category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : []),
     [category, getSpeechesByCategory]
   );
-  const TARGET_CATEGORY_COUNT = 40;
+  // Two independent YouTube quota pools are active on the backend.
+  // Request enough inventory for both pools to contribute distinct videos.
+  const TARGET_CATEGORY_COUNT = 80;
   const isChristianCategory =
     category?.id === 'church' ||
     ['christian motivation', 'christian', 'church']

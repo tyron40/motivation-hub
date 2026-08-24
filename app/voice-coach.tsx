@@ -104,6 +104,7 @@ function VoiceCoachContent() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingStartedAtRef = useRef(0);
   const soundRef = useRef<Audio.Sound | null>(null);
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
@@ -273,6 +274,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         webRecorderRef.current = mediaRecorder;
         mediaRecorder.start();
+        recordingStartedAtRef.current = Date.now();
 
         setHasPermission(true);
         setPhase('recording');
@@ -327,6 +329,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       });
 
       await recording.startAsync();
+      recordingStartedAtRef.current = Date.now();
       recordingRef.current = recording;
       setPhase('recording');
     } catch (err: any) {
@@ -340,6 +343,23 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
   }, [phase, lock, unlock, stopAndUnloadSound]);
 
   const stopRecording = useCallback(async () => {
+    // OpenAI rejects recordings below ~100ms. More importantly, an
+    // immediate press/release on iOS can produce a valid URI with 0ms
+    // of audio. Give the recorder enough real capture time before stop.
+    const elapsedRecordingMs =
+      recordingStartedAtRef.current > 0
+        ? Date.now() - recordingStartedAtRef.current
+        : 0;
+
+    const minimumRecordingMs = 650;
+
+    if (elapsedRecordingMs < minimumRecordingMs) {
+      await new Promise(resolve =>
+        setTimeout(resolve, minimumRecordingMs - elapsedRecordingMs)
+      );
+    }
+
+
     if (phase !== 'recording') return;
     if (!lock()) return;
 
