@@ -265,8 +265,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
         // Never convert an ad pause into a user's manual pause.
         manualPauseRef.current = false;
-    temporarilyPausedForAdRef.current = false;
-    wasPlayingBeforeAdRef.current = false;
 
         bootstrapIntentRef.current++;
         autoplayBootstrapRunningRef.current = false;
@@ -310,7 +308,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
 useImperativeHandle(ref, () => ({
     togglePlay: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) {
+      if (
+        playerErrorRef.current &&
+        !playbackAdCoordinator.isAdActive
+      ) {
+        playerErrorRef.current = false;
+        setPlayerError(false);
+      }
+
+      if (!playerReadyRef.current) {
         console.log('Player not ready for toggle');
         return;
       }
@@ -353,22 +359,40 @@ useImperativeHandle(ref, () => ({
     pauseForAd: () => {
       wasPlayingBeforeAdRef.current =
         isPlayingRef.current || desiredPlayRef.current;
+
+      temporarilyPausedForAdRef.current = true;
+
+      // Ad pause is never a user/manual pause.
       manualPauseRef.current = false;
+
       bootstrapIntentRef.current++;
       autoplayBootstrapRunningRef.current = false;
-      void requestPlayState(false);
+
+      // Preserve the user's desired play intent while only pausing
+      // the actual player for the temporary ad interruption.
+      setPlayerPlayCommand(false);
+      sendNativeImperativeCommand(false);
+      stopProgressTracking();
     },
     resumeAfterAd: () => {
       const shouldResume = wasPlayingBeforeAdRef.current === true;
 
-      // Consume the captured pre-ad state once. A stale desired-play
-      // request must never restart content after an ad.
+      // Ad interruption is fully consumed at dismissal.
+      temporarilyPausedForAdRef.current = false;
       wasPlayingBeforeAdRef.current = false;
 
-      if (!playerReadyRef.current || playerErrorRef.current) return;
       if (manualPauseRef.current) return;
 
-      if (shouldResume) {
+      // A stale error left by the interrupted video must not make
+      // future manual controls permanently unusable.
+      if (playerErrorRef.current) {
+        playerErrorRef.current = false;
+        setPlayerError(false);
+      }
+
+      if (shouldResume && playerReadyRef.current) {
+        desiredPlayRef.current = true;
+        lastRequestedStateRef.current = true;
         void requestPlayState(true);
       }
     },
@@ -412,11 +436,25 @@ useImperativeHandle(ref, () => ({
   // â”€â”€ Video change: reset everything, cancel old bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     activeVideoIdRef.current = videoId;
+
+    // A new speech begins from a completely clean transient state.
     manualPauseRef.current = false;
+    temporarilyPausedForAdRef.current = false;
+    wasPlayingBeforeAdRef.current = false;
+
     lastManualToggleTargetRef.current = null;
+    lastRequestedStateRef.current = null;
+
     clearCommandWatchdog();
     onEndCalledRef.current = false;
+
     desiredPlayRef.current = false;
+
+    // Errors from the previous YouTube item must NEVER poison
+    // controls for the new speech.
+    playerErrorRef.current = false;
+    setPlayerError(false);
+
     autoplayBootstrapDoneRef.current = false;
     autoplayBootstrapRunningRef.current = false;
     bootstrapIntentRef.current++; // cancel any in-flight bootstrap
@@ -675,12 +713,37 @@ useImperativeHandle(ref, () => ({
         return;
       }
       onEndCalledRef.current = true;
+
       isPlayingRef.current = false;
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
+
       stopProgressTracking();
+      clearCommandWatchdog();
+
       setCurrentTime(0);
-      console.log('Video ended, calling onEnd for:', activeVideoIdRef.current);
+
+      // ENDED is a hard lifecycle boundary. Any temporary state left by
+      // a previously displayed ad belongs to the finished speech only.
+      if (!playbackAdCoordinator.isAdActive) {
+        temporarilyPausedForAdRef.current = false;
+        wasPlayingBeforeAdRef.current = false;
+      }
+
+      desiredPlayRef.current = false;
+      lastRequestedStateRef.current = false;
+      manualPauseRef.current = false;
+      autoplayBootstrapRunningRef.current = false;
+
+      // Do not allow a transient YouTube error associated with this
+      // finished speech to disable every speech loaded afterward.
+      playerErrorRef.current = false;
+      setPlayerError(false);
+
+      console.log(
+        'Video ended with playback state normalized, calling onEnd for:',
+        activeVideoIdRef.current
+      );
       setTimeout(() => {
         if (mountedRef.current) {
           onEndRef.current?.();
@@ -710,8 +773,15 @@ useImperativeHandle(ref, () => ({
   // Restored from working commit 08dce452: manual target toggle +
   // imperative command watchdog. No manual seek workarounds.
   const handlePlayPause = useCallback(() => {
-  if (playerError || !playerReady) {
-    console.log('Player not ready for play/pause');
+  // Explicit user input is also a recovery action after an ad.
+  // Clear an obsolete error rather than permanently disabling controls.
+  if (playerError && !playbackAdCoordinator.isAdActive) {
+    playerErrorRef.current = false;
+    setPlayerError(false);
+  }
+
+  if (!playerReadyRef.current) {
+    console.log('Player not ready for play/pause yet');
     return;
   }
 
