@@ -101,7 +101,9 @@
           "userTrackingUsageDescription": "Motivation Fuel uses your advertising identifier to deliver more relevant ads."
         }
       ],
-      "./plugins/with-appdelegate-rctbridge-fix.js"
+      "./plugins/with-appdelegate-rctbridge-fix.js",
+      "expo-font",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {
