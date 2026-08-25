@@ -114,11 +114,16 @@ export default function GlobalYouTubePlayer() {
     onEndLockedRef.current = true;
     midpointAdShownRef.current = false;
     quarterAdShownRef.current = false;
-    if (canShowAds) {
-      try { await tryShowInterstitialOnTransition(); } catch {}
+    try {
+      if (canShowAds) {
+        try { await tryShowInterstitialOnTransition(); } catch {}
+      }
+      skipToNext();
+    } finally {
+      // Always release the lock — even if skipToNext throws — so the
+      // next speech's own onEnd can never be permanently blocked.
+      setTimeout(() => { onEndLockedRef.current = false; }, 2000);
     }
-    skipToNext();
-    setTimeout(() => { onEndLockedRef.current = false; }, 2000);
   }, [canShowAds, tryShowInterstitialOnTransition, skipToNext]);
 
   const handleNext = useCallback(() => {

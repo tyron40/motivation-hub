@@ -118,6 +118,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const playerErrorRef = useRef(false);
   const activeVideoIdRef = useRef(videoId);
 
+  // WebView lifetime tracking. react-native-youtube-iframe fires onReady
+  // only ONCE per WebView load — loadVideoById (video change) never
+  // re-fires it. These refs keep the player recoverable across videos.
+  const webViewEverReadyRef = useRef(false);
+  const videoHasPlayedRef = useRef(false);
+  const videoEpochRef = useRef(0);
+  const pausedAtVideoEpochRef = useRef(-1);
+  const videoChangedAtRef = useRef(0);
+
   // desiredPlayRef: what the user/app last requested (play or pause).
   const desiredPlayRef = useRef(false);
   const manualPauseRef = useRef(false);
@@ -169,36 +178,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => clearCommandWatchdog();
   }, [clearCommandWatchdog]);
 
-  // Optional diagnostic/fallback ONLY — playback is driven by the `play` prop
-  // (playerPlayCommand). playVideo/pauseVideo are NOT documented ref methods
-  // of react-native-youtube-iframe; undefined is expected, never an error.
-  const sendNativeImperativeCommand = useCallback(
-    (newState: boolean) => {
-      const player = playerRef.current;
-
-      console.log('[Playback Methods]', {
-        requested: newState,
-        refExists: Boolean(player),
-        playVideo: typeof player?.playVideo,
-        pauseVideo: typeof player?.pauseVideo,
-        seekTo: typeof player?.seekTo,
-      });
-
-      const fn = newState ? player?.playVideo : player?.pauseVideo;
-
-      if (typeof fn === 'function') {
-        try {
-          console.log('[Manual Playback] calling', newState ? 'playVideo' : 'pauseVideo');
-          fn.call(player);
-        } catch (error) {
-          console.log('[Playback] optional imperative command failed', error);
-        }
-      }
-    },
-    []
-  );
-
-  // ── requestPlayState — the single entry point for native play/pause ────
+  // ── requestPlayState — the single entry point for play/pause ──────────
+  // The `play` prop (playerPlayCommand) is the ONLY play/pause channel:
+  // react-native-youtube-iframe@2.4.1 exposes no playVideo/pauseVideo ref
+  // methods (verified in its source) — commands are delivered by toggling
+  // the prop, which the library forwards to the WebView.
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log(newState ? '[Playback] request play' : '[Playback] request pause');
@@ -211,8 +195,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     setPlayerPlayCommand(newState);
-    sendNativeImperativeCommand(newState);
-  }, [sendNativeImperativeCommand]);
+  }, []);
 
   // Diagnostic: the authoritative play prop must visibly transition on every command.
   useEffect(() => {
@@ -272,14 +255,23 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       requestPlayState(false);
     },
     pauseForAd: () => {
-      wasPlayingBeforeAdRef.current = isPlayingRef.current || desiredPlayRef.current;
-      manualPauseRef.current = false;
+      // Capture intent BEFORE pausing. Includes the not-yet-started
+      // autoplay case so an ad shown during startup still resumes.
+      wasPlayingBeforeAdRef.current =
+        isPlayingRef.current ||
+        desiredPlayRef.current ||
+        (autoplay && !videoHasPlayedRef.current && !manualPauseRef.current);
+      pausedAtVideoEpochRef.current = videoEpochRef.current;
       bootstrapIntentRef.current++;
       autoplayBootstrapRunningRef.current = false;
       void requestPlayState(false);
     },
     resumeAfterAd: () => {
       if (!playerReadyRef.current || playerErrorRef.current) return;
+      // An ad that spanned a video change must never resume/pause the
+      // newer speech — the new video's own autoplay logic owns it.
+      if (pausedAtVideoEpochRef.current !== videoEpochRef.current) return;
+      // A manual pause before/during the ad is never overridden.
       if (manualPauseRef.current) return;
       const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
       if (shouldResume) {
@@ -308,7 +300,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     },
     getIsPlaying: () => isPlayingRef.current,
-  }), [requestPlayState, stopProgressTracking]);
+  }), [autoplay, requestPlayState, stopProgressTracking]);
 
   // ── Pulse animation ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -335,15 +327,23 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     };
   }, []);
 
-  // ── Video change: reset everything, cancel old bootstrap ────────────────
+  // ── Video change: reset PER-VIDEO state, keep WebView readiness ───────
+  // onReady fires only once per WebView (first video). Resetting
+  // playerReady on every video change was the root cause of the
+  // permanently dead player after a speech change — once the WebView
+  // is ready it stays ready, and controls must stay usable.
   useEffect(() => {
-    console.log('[Playback] component mounted for videoId:', videoId);
+    console.log('[Playback] videoId changed:', videoId);
     activeVideoIdRef.current = videoId;
+    videoEpochRef.current++;
+    videoChangedAtRef.current = Date.now();
+    videoHasPlayedRef.current = false;
+    wasPlayingBeforeAdRef.current = false;
+    pausedAtVideoEpochRef.current = -1;
     manualPauseRef.current = false;
     lastManualToggleTargetRef.current = null;
     clearCommandWatchdog();
     onEndCalledRef.current = false;
-    desiredPlayRef.current = false;
     isPlayingRef.current = false;
     autoplayBootstrapDoneRef.current = false;
     autoplayBootstrapRunningRef.current = false;
@@ -354,13 +354,28 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       progressInterval.current = null;
     }
 
-    setPlayerPlayCommand(false);
+    // Autoplay intent for the NEW video (Next/Previous/opening a speech).
+    // The library reads the play prop at video-change time to choose
+    // loadVideoById (autoplay) vs cueVideoById.
+    const autoplayIntent = Boolean(autoplay);
+    desiredPlayRef.current = autoplayIntent;
+    setPlayerPlayCommand(autoplayIntent);
     setIsPlaying(false);
-    setPlayerReady(false);
-    setPlayerError(false);
     setCurrentTime(0);
     setError(null);
     setIsLoading(true);
+    setPlayerError(false);
+    playerErrorRef.current = false;
+
+    if (webViewEverReadyRef.current) {
+      // WebView already initialized — it stays ready for every video.
+      setPlayerReady(true);
+      playerReadyRef.current = true;
+    } else {
+      // First video: wait for onReady.
+      setPlayerReady(false);
+      playerReadyRef.current = false;
+    }
 
     if (videoId) {
       const fetchVideoMetadata = async () => {
@@ -522,6 +537,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Playback] YouTube onReady fired for:', videoId);
+    webViewEverReadyRef.current = true;
     setPlayerReady(true);
     playerReadyRef.current = true;
     setPlayerError(false);
@@ -552,21 +568,40 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     if (!mountedRef.current) return;
 
     const isErrorEmbeddable = EMBEDDING_ERROR_CODES.has(parseInt(errorMsg, 10));
-    if (isErrorEmbeddable || errorMsg.includes('embed') || errorMsg.includes('restricted')) {
+    const isRestrictionError =
+      isErrorEmbeddable || errorMsg.includes('embed') || errorMsg.includes('restricted');
+
+    // A video/WebView that already reached ready or playing must remain
+    // recoverable: transient post-ad/WebView errors are logged and cleared
+    // WITHOUT disabling controls. Only a TRUE initial load failure (WebView
+    // never ready, or a restriction error on a video that never played) is
+    // treated as a real error.
+    const isInitialLoadFailure =
+      !webViewEverReadyRef.current || (isRestrictionError && !videoHasPlayedRef.current);
+
+    if (isInitialLoadFailure) {
       setPlayerError(true);
       playerErrorRef.current = true;
-      setPlayerReady(false);
-      playerReadyRef.current = false;
       bootstrapIntentRef.current++; // cancel bootstrap
       autoplayBootstrapRunningRef.current = false;
       desiredPlayRef.current = false;
       setPlayerPlayCommand(false);
       setIsPlaying(false);
       isPlayingRef.current = false;
+      setIsLoading(false);
       setError(errorMsg);
       onErrorRef.current?.(errorMsg);
       stopProgressTracking();
+      return;
     }
+
+    // Transient error (typically fired when a full-screen ad suspends the
+    // WebView): keep every control alive and just stop progress polling.
+    console.log('[Playback] transient player error ignored (player stays usable):', errorMsg);
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    onPlayingChangeRef.current?.(false);
+    stopProgressTracking();
   }, [stopProgressTracking]);
 
   // ── State change handler — AUTHORITATIVE for isPlayingRef ───────────────
@@ -577,8 +612,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     console.log('[Manual Playback] YouTube state:', state);
 
     if (state === 'playing') {
+      videoHasPlayedRef.current = true;
       isPlayingRef.current = true;
+      setPlayerPlayCommand(true); // keep the play prop in sync with reality
       setIsPlaying(true);
+      setIsLoading(false);
       onPlayingChangeRef.current?.(true);
       console.log('[Playback] actual state playing');
       startProgressTracking();
@@ -587,7 +625,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
     if (state === 'paused') {
       isPlayingRef.current = false;
+      setPlayerPlayCommand(false); // prop reflects actual state (proven 08dce452 behavior)
       setIsPlaying(false);
+      setIsLoading(false);
       onPlayingChangeRef.current?.(false);
       console.log('[Playback] actual state paused');
       stopProgressTracking();
@@ -595,24 +635,32 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'ended') {
+      // Ignore a stale 'ended' from the PREVIOUS video arriving right
+      // after a video change (end-of-speech ad flow).
+      if (Date.now() - videoChangedAtRef.current < 800) {
+        console.log('[Playback] stale ended event ignored');
+        return;
+      }
+      if (onEndCalledRef.current) return;
+      onEndCalledRef.current = true;
       isPlayingRef.current = false;
+      desiredPlayRef.current = false;
+      setPlayerPlayCommand(false);
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
       stopProgressTracking();
-      if (!onEndCalledRef.current) {
-        onEndCalledRef.current = true;
-        console.log('[Playback] video ended');
-        setTimeout(() => {
-          if (mountedRef.current) {
-            onEndRef.current?.();
-          }
-        }, 100);
-      }
+      console.log('[Playback] video ended');
+      setTimeout(() => {
+        if (mountedRef.current) {
+          onEndRef.current?.();
+        }
+      }, 100);
       return;
     }
 
     if (state === 'buffering') {
       console.log('[Playback] buffering');
+      setIsLoading(false);
       stopProgressTracking();
     }
   }, [startProgressTracking, stopProgressTracking]);
@@ -658,19 +706,22 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   void requestPlayState(nextState);
 
   clearCommandWatchdog();
+  // If the WebView ignored the command (e.g. just returned from an ad),
+  // re-issue it through the play prop: a quick off→on toggle makes the
+  // library deliver a fresh playVideo/pauseVideo to the WebView.
   commandWatchdogRef.current = setTimeout(() => {
     if (!mountedRef.current) return;
 
     const actual = isPlayingRef.current;
 
     if (actual !== nextState) {
-      console.log(
-        '[PlayPause] Watchdog retry imperative command:',
-        nextState
-      );
-      sendNativeImperativeCommand(nextState);
+      console.log('[PlayPause] Watchdog: re-issuing command via play prop');
+      setPlayerPlayCommand(!nextState);
+      setTimeout(() => {
+        if (mountedRef.current) setPlayerPlayCommand(nextState);
+      }, 120);
     }
-  }, 350);
+  }, 600);
 
   if (!nextState) {
     stopProgressTracking();
@@ -682,7 +733,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   playerReady,
   clearCommandWatchdog,
   requestPlayState,
-  sendNativeImperativeCommand,
   stopProgressTracking,
   startProgressTracking,
 ]);

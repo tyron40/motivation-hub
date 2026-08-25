@@ -108,7 +108,15 @@ function VoiceCoachContent() {
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  // Single authoritative TTS sound owner: a ref (not state) so async flows
+  // never act on a stale sound object, plus an epoch counter so late
+  // callbacks from an OLD sound can never unload/reset a NEWER response.
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundEpochRef = useRef(0);
+  const isPlayingRef = useRef(false);
+  // True while an AI turn (transcribe -> chat -> TTS) is in flight, so a
+  // finally-block never clobbers the "Coach is thinking..." status.
+  const aiTurnActiveRef = useRef(false);
   const [currentStatus, setCurrentStatus] = useState<string>('Initializing voice coach...');
 
   const [showVoiceModal, setShowVoiceModal] = useState(false);
@@ -121,9 +129,43 @@ function VoiceCoachContent() {
   
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const avatarAnim = useRef(new Animated.Value(0)).current;
+  // Voice orb animation values (visual only - never touches audio logic)
+  const orbScale = useRef(new Animated.Value(1)).current;
+  const orbGlow = useRef(new Animated.Value(0.22)).current;
+  const orbRotate = useRef(new Animated.Value(0)).current;
+  const ripple1 = useRef(new Animated.Value(0)).current;
+  const ripple2 = useRef(new Animated.Value(0)).current;
   
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  // -- Audio resource helpers (single owner for TTS sounds) -------------
+  /** Fully stops and unloads the current TTS sound, if any. */
+  const unloadCurrentSound = useCallback(async () => {
+    const current = soundRef.current;
+    soundRef.current = null;
+    if (!current) return;
+    try { await current.stopAsync(); } catch {}
+    try { await current.unloadAsync(); } catch {}
+  }, []);
+
+  /** Fully stops and unloads any leftover recorder, if any. */
+  const forceUnloadRecorder = useCallback(async () => {
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    if (!rec) return;
+    try {
+      const status = await rec.getStatusAsync();
+      if (status.canRecord || status.isRecording) {
+        await rec.stopAndUnloadAsync();
+      }
+    } catch {}
+  }, []);
+
+  // Ref mirror of isPlaying so async finally-blocks always read the
+  // CURRENT playing state, not a stale closure.
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
 
   const speakMessage = useCallback(async (text: string) => {
@@ -141,18 +183,29 @@ function VoiceCoachContent() {
         return;
       }
       
+      // Every spoken response gets a new epoch: late callbacks from older
+      // sounds must never touch this (or a newer) turn.
+      const epoch = ++soundEpochRef.current;
+      aiTurnActiveRef.current = true;
+
       setIsPlaying(true);
       setCurrentStatus('Coach is speaking...');
-      
-      if (sound) {
-        try {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-          setSound(null);
-        } catch (e) {
-          console.log('âš ï¸ Error stopping previous sound:', e);
-        }
-      }
+
+      // Fully stop/unload the previous sound BEFORE anything else.
+      await unloadCurrentSound();
+      // Safety: fully unload any leftover recorder before playback.
+      await forceUnloadRecorder();
+
+      // Speaker playback mode + a short settle window so the iOS audio
+      // session fully leaves recording mode before TTS audio starts.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      await new Promise(resolve => setTimeout(resolve, 150));
       
       const preferredVoice = profile.preferredVoice || 'alloy';
       console.log('ðŸŽµ Selected voice:', preferredVoice);
@@ -169,6 +222,9 @@ function VoiceCoachContent() {
         const ttsElapsed = Date.now() - ttsStartTime;
         console.log(`âœ… TTS audio received in ${ttsElapsed}ms`);
         
+        // A newer turn superseded this one - abandon silently.
+        if (epoch !== soundEpochRef.current) return;
+
         // Deduct 1 credit for TTS
         const creditUsed = await iapContext.useCredit();
         if (creditUsed) {
@@ -178,20 +234,74 @@ function VoiceCoachContent() {
         }
         
         const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
-        
+
+        // Create PAUSED - never depend on shouldPlay. The explicit
+        // playAsync below is the single point where playback starts.
+        let createdSound: Audio.Sound | null = null;
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: audioUri },
-          { shouldPlay: true },
+          { shouldPlay: false },
           (status: AVPlaybackStatus) => {
+            // Late callbacks from an OLD sound must never unload or
+            // reset a NEWER response.
+            if (epoch !== soundEpochRef.current) return;
             if (status.isLoaded && status.didJustFinish) {
-              console.log('âœ… TTS playback finished');
+              console.log('TTS playback finished');
               setIsPlaying(false);
+              isPlayingRef.current = false;
+              aiTurnActiveRef.current = false;
               setCurrentStatus('Ready to listen');
+              // Clean up ONLY the exact sound that finished.
+              if (createdSound && soundRef.current === createdSound) {
+                createdSound.unloadAsync().catch(() => {});
+                soundRef.current = null;
+              }
+            } else if (!status.isLoaded) {
+              // Load/playback error - never leave the coach stuck speaking.
+              console.warn('TTS playback error:', (status as any).error);
+              setIsPlaying(false);
+              isPlayingRef.current = false;
+              aiTurnActiveRef.current = false;
+              setCurrentStatus('Ready to listen');
+              if (createdSound && soundRef.current === createdSound) {
+                createdSound.unloadAsync().catch(() => {});
+                soundRef.current = null;
+              }
             }
           }
         );
-        
-        setSound(newSound);
+        createdSound = newSound;
+        if (epoch === soundEpochRef.current) {
+          soundRef.current = newSound;
+        } else {
+          // Superseded while loading - discard immediately.
+          try { await newSound.unloadAsync(); } catch {}
+          return;
+        }
+
+        // Confirm the sound is loaded, then start playback explicitly.
+        // Retry ONCE if native audio had not finished loading yet.
+        const attemptPlay = async () => {
+          const st = await newSound.getStatusAsync();
+          if (!st.isLoaded) {
+            throw new Error('TTS sound not loaded');
+          }
+          await newSound.playAsync();
+        };
+        try {
+          await attemptPlay();
+        } catch (playError) {
+          console.warn('TTS playAsync failed, retrying once after settle...', playError);
+          await new Promise(resolve => setTimeout(resolve, 400));
+          if (epoch !== soundEpochRef.current) return;
+          try {
+            await attemptPlay();
+          } catch (finalError) {
+            console.error('TTS playback could not start:', finalError);
+            await unloadCurrentSound();
+            throw new Error('Audio playback could not start. Please try again.');
+          }
+        }
         console.log('ðŸ”Š TTS playback started');
       } catch (ttsError: any) {
         console.error('âŒ TTS generation failed:', ttsError);
@@ -208,9 +318,12 @@ function VoiceCoachContent() {
           errorMessage = ttsError.message;
         }
         
+        if (epoch !== soundEpochRef.current) return;
         Alert.alert(errorTitle, errorMessage, [{ text: 'OK' }]);
         
         setIsPlaying(false);
+        isPlayingRef.current = false;
+        aiTurnActiveRef.current = false;
         setCurrentStatus('Ready to listen (text mode)');
       }
     } catch (error) {
@@ -234,11 +347,16 @@ function VoiceCoachContent() {
       
       Alert.alert(errorTitle, displayMessage, [{ text: 'OK' }]);
       
-      setIsPlaying(false);
-      setCurrentStatus('Ready to listen (text mode)');
+      if (!soundRef.current) {
+        // Don't clobber a newer turn that already started playing.
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+        aiTurnActiveRef.current = false;
+        setCurrentStatus('Ready to listen (text mode)');
+      }
       console.log('Speech synthesis failed, continuing in text mode');
     }
-  }, [profile.preferredVoice, sound, usageStats.credits, iapContext]);
+  }, [profile.preferredVoice, usageStats.credits, iapContext, unloadCurrentSound, forceUnloadRecorder]);
 
   const handleInitialGreeting = useCallback(async () => {
     if (hasGreeted) {
@@ -334,10 +452,11 @@ function VoiceCoachContent() {
         console.log('ðŸ§¹ Cleaning up audio resources...');
         
         try {
-          if (sound) {
-            await sound.stopAsync();
-            await sound.unloadAsync();
-            console.log('âœ… Sound cleaned up');
+          const currentSound = soundRef.current;
+          if (currentSound) {
+            await currentSound.stopAsync();
+            await currentSound.unloadAsync();
+            soundRef.current = null;
           }
         } catch (e) {
           console.log('âš ï¸ Sound cleanup error:', e);
@@ -371,7 +490,7 @@ function VoiceCoachContent() {
       
       cleanup();
     };
-  }, [sound]);
+  }, []);
 
   // Greeting effect: trigger once the user's profile name is loaded (or fallback after timeout)
   useEffect(() => {
@@ -420,31 +539,95 @@ function VoiceCoachContent() {
     }
   }, [isRecording, pulseAnim]);
 
-  // Avatar animation when speaking
+  // ── Voice orb animation — visual only, never touches audio logic ──────
+  const orbPhase: 'idle' | 'listening' | 'thinking' | 'speaking' =
+    isPlaying ? 'speaking' : isRecording ? 'listening' : isProcessing ? 'thinking' : 'idle';
+
   useEffect(() => {
-    if (isPlaying) {
-      const bounce = Animated.loop(
-        Animated.sequence([
-          Animated.timing(avatarAnim, {
-            toValue: 1,
-            duration: 600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(avatarAnim, {
-            toValue: 0,
-            duration: 600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
+    const loops: Animated.CompositeAnimation[] = [];
+
+    if (orbPhase === 'speaking') {
+      // Organic, amplitude-like motion: irregular keyframe cycle.
+      orbGlow.setValue(0.45);
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.1, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.03, duration: 190, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.12, duration: 300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 220, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.08, duration: 240, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 320, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+          ])
+        )
       );
-      bounce.start();
-      return () => bounce.stop();
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbGlow, { toValue: 0.7, duration: 350, useNativeDriver: true }),
+            Animated.timing(orbGlow, { toValue: 0.4, duration: 300, useNativeDriver: true }),
+          ])
+        )
+      );
+    } else if (orbPhase === 'listening') {
+      // Steady quick pulse + expanding ripple rings.
+      orbGlow.setValue(0.35);
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.06, duration: 550, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 550, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+          ])
+        )
+      );
+      const rippleCycle = (value: Animated.Value, delay: number) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(value, { toValue: 1, duration: 1400, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+            Animated.timing(value, { toValue: 0, duration: 0, useNativeDriver: true }),
+          ])
+        );
+      loops.push(rippleCycle(ripple1, 0));
+      loops.push(rippleCycle(ripple2, 700));
+    } else if (orbPhase === 'thinking') {
+      // Gentle breathing + a slowly orbiting dot.
+      orbGlow.setValue(0.3);
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.04, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+          ])
+        )
+      );
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbRotate, { toValue: 1, duration: 1800, easing: Easing.linear, useNativeDriver: true }),
+            Animated.timing(orbRotate, { toValue: 0, duration: 0, useNativeDriver: true }),
+          ])
+        )
+      );
     } else {
-      avatarAnim.setValue(0);
+      // Idle: quiet, subtle breathing.
+      loops.push(
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(orbScale, { toValue: 1.03, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            Animated.timing(orbScale, { toValue: 1.0, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+          ])
+        )
+      );
+      Animated.timing(orbGlow, { toValue: 0.22, duration: 500, useNativeDriver: true }).start();
     }
-  }, [isPlaying, avatarAnim]);
+
+    loops.forEach((loop) => loop.start());
+    return () => {
+      loops.forEach((loop) => loop.stop());
+      orbScale.setValue(1);
+    };
+  }, [orbPhase, orbScale, orbGlow, orbRotate, ripple1, ripple2]);
 
   const startRecording = async () => {
     try {
@@ -457,17 +640,13 @@ function VoiceCoachContent() {
       
       isStartingRef.current = true;
       
-      if (sound || isPlaying) {
-        console.log('ðŸ”‡ Stopping any existing playback...');
+      if (soundRef.current || isPlaying) {
         try {
-          if (sound) {
-            await sound.stopAsync();
-            await sound.unloadAsync();
-            setSound(null);
-          }
+          await unloadCurrentSound();
           setIsPlaying(false);
+          isPlayingRef.current = false;
         } catch (e) {
-          console.log('âš ï¸ Error stopping playback:', e);
+          console.log('Error stopping playback:', e);
         }
         await new Promise(resolve => setTimeout(resolve, 300));
       }
@@ -855,6 +1034,7 @@ function VoiceCoachContent() {
         console.log('âŒ No recording URI available');
         Alert.alert('Recording Error', 'No audio was recorded. Please hold the button while speaking.');
         setCurrentStatus('Ready to listen');
+        aiTurnActiveRef.current = false;
       }
     } catch (error) {
       console.error('âŒ Error stopping recording:', error);
@@ -953,7 +1133,7 @@ function VoiceCoachContent() {
     } finally {
       setIsProcessing(false);
       isStartingRef.current = false;
-      if (!isPlaying) {
+      if (!isPlayingRef.current && !aiTurnActiveRef.current) {
         setCurrentStatus('Ready to listen');
       }
     }
@@ -1011,7 +1191,7 @@ function VoiceCoachContent() {
       Alert.alert('Processing Error', (error as Error).message);
     } finally {
       setIsProcessing(false);
-      if (!isPlaying) setCurrentStatus('Ready to listen');
+      if (!isPlayingRef.current && !aiTurnActiveRef.current) setCurrentStatus('Ready to listen');
     }
   };
 
@@ -1020,6 +1200,8 @@ function VoiceCoachContent() {
       console.log('ðŸ¤– Getting AI response...');
       console.log('ðŸ“ Conversation messages:', conversationMessages.length);
       
+      aiTurnActiveRef.current = true;
+
       // Check credits before making AI request
       if (usageStats.credits <= 0) {
         Alert.alert(
@@ -1034,6 +1216,7 @@ function VoiceCoachContent() {
         };
         updateMessages(prev => [...prev, noCreditsMessage]);
         setCurrentStatus('Ready to listen');
+        aiTurnActiveRef.current = false;
         return;
       }
       
@@ -1114,6 +1297,7 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       
       updateMessages(prev => [...prev, fallbackMessage]);
       setCurrentStatus('Ready to listen');
+      aiTurnActiveRef.current = false;
       
       if (profile.voiceEnabled !== false) {
         speakMessage(fallbackMessage.content).catch(() => {
@@ -1136,13 +1320,11 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
           }
         }
         
-        if (sound) {
-          await sound.stopAsync();
-          await sound.unloadAsync();
-          setSound(null);
-        }
+        await unloadCurrentSound();
         
         setIsPlaying(false);
+        isPlayingRef.current = false;
+        aiTurnActiveRef.current = false;
         setCurrentStatus('Ready to listen');
       } catch (e) {
         console.log('âš ï¸ Error stopping speech:', e);
@@ -1157,13 +1339,16 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
     React.useCallback(() => {
       return () => {
         console.log('ðŸ§¹ Voice coach lost focus â€” stopping TTS, recording, and resetting state');
-        // Stop TTS playback
-        if (sound) {
-          sound.stopAsync().catch(() => {});
-          sound.unloadAsync().catch(() => {});
-          setSound(null);
+        // Stop TTS playback and invalidate any in-flight TTS turn.
+        soundEpochRef.current++;
+        if (soundRef.current) {
+          soundRef.current.stopAsync().catch(() => {});
+          soundRef.current.unloadAsync().catch(() => {});
+          soundRef.current = null;
         }
         setIsPlaying(false);
+        isPlayingRef.current = false;
+        aiTurnActiveRef.current = false;
         setIsProcessing(false);
         setCurrentStatus('Ready to listen');
 
@@ -1216,12 +1401,12 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
           }).catch(() => {});
         }
       };
-    }, [sound])
+    }, [])
   );
 
-  const avatarScale = avatarAnim.interpolate({
+  const orbSpin = orbRotate.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.1],
+    outputRange: ['0deg', '360deg'],
   });
 
   if (!isAuthenticated) {
@@ -1273,14 +1458,50 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
       
       <View style={styles.content}>
         <View style={styles.avatarSection}>
-          <Animated.View 
-            style={[
-              styles.avatar,
-              { transform: [{ scale: avatarScale }] }
-            ]}
-          >
-            <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
-          </Animated.View>
+          <View style={styles.orbWrapper}>
+            <Animated.View
+              style={[
+                styles.orbGlow,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: orbGlow,
+                  transform: [{ scale: orbScale }],
+                },
+              ]}
+            />
+            {isRecording && (
+              <>
+                <Animated.View
+                  style={[
+                    styles.orbRipple,
+                    {
+                      borderColor: colors.primary,
+                      opacity: ripple1.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
+                      transform: [{ scale: ripple1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.orbRipple,
+                    {
+                      borderColor: colors.primary,
+                      opacity: ripple2.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
+                      transform: [{ scale: ripple2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
+                    },
+                  ]}
+                />
+              </>
+            )}
+            {isProcessing && (
+              <Animated.View style={[styles.orbOrbit, { transform: [{ rotate: orbSpin }] }]}>
+                <View style={[styles.orbOrbitDot, { backgroundColor: colors.primary }]} />
+              </Animated.View>
+            )}
+            <Animated.View style={[styles.avatar, { transform: [{ scale: orbScale }] }]}>
+              <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
+            </Animated.View>
+          </View>
           
           <View style={styles.coachInfo}>
             <Text style={[styles.coachName, { color: colors.text }]}>{selectedCoach.name}</Text>
@@ -1456,7 +1677,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.primary + '10',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
     borderWidth: 3,
     borderColor: colors.primary,
     overflow: 'hidden',
@@ -1464,6 +1684,40 @@ const createStyles = (colors: any) => StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
+  },
+  orbWrapper: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orbGlow: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    opacity: 0.22,
+  },
+  orbRipple: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+  },
+  orbOrbit: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+  },
+  orbOrbitDot: {
+    position: 'absolute',
+    top: -5,
+    alignSelf: 'center',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   coachInfo: {
     flexDirection: 'row',
