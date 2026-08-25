@@ -26,6 +26,7 @@ const SKAD_NETWORK_IDS = require('./appodeal-skadnetwork-ids.json');
 const POD_SOURCES = [
   "source 'https://github.com/appodeal/CocoaPods.git'",
   "source 'https://github.com/bidon-io/CocoaPods-Specs.git'",
+  "source 'https://cdn.cocoapods.org'",
 ];
 
 /** Adapter pods matched to react-native-appodeal@4.2.0 (official example Podfile). */
