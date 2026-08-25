@@ -96,6 +96,9 @@ function VoiceCoachContent() {
   const recordingStoppingRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
   const soundRef = useRef<Audio.Sound | null>(null);
+  // Generation counter for TTS playback: callbacks and error paths from
+  // an OLD sound must never modify, unload, or reset UI for a NEWER sound.
+  const soundEpochRef = useRef(0);
   const temporaryTtsFileRef = useRef<string | null>(null);
 
   // Independent layers make the voice sphere feel fluid instead of
@@ -238,6 +241,10 @@ function VoiceCoachContent() {
     async (spokenText: string) => {
       if (!spokenText?.trim()) return;
 
+      // Every spoken response takes a new generation. Late callbacks and
+      // error paths from older sounds must never touch a newer response.
+      const epoch = ++soundEpochRef.current;
+
       setPhase('speaking');
       setCurrentStatus('Coach is speaking...');
 
@@ -258,6 +265,9 @@ function VoiceCoachContent() {
           text: spokenText,
           voice: preferredVoice as any,
         });
+
+        // A newer turn superseded this one — abandon silently.
+        if (epoch !== soundEpochRef.current) return;
 
         const base64Data = tts?.audio?.base64Data;
         const mimeType = tts?.audio?.mimeType || 'audio/mpeg';
@@ -309,7 +319,21 @@ function VoiceCoachContent() {
             progressUpdateIntervalMillis: 150,
           },
           (status: AVPlaybackStatus) => {
+            // Late callbacks from an OLD sound must never unload or
+            // reset a NEWER response.
+            if (epoch !== soundEpochRef.current) return;
+
             if (!status.isLoaded) {
+              // A load/playback error on the CURRENT sound must never
+              // leave the coach stuck in "speaking". (A normal unload
+              // fails the identity check below and is ignored.)
+              if (createdSound && soundRef.current === createdSound) {
+                soundRef.current = null;
+                void createdSound.unloadAsync().catch(() => {});
+                void cleanupTemporaryTtsFile();
+                setPhase('idle');
+                setCurrentStatus('Ready to listen');
+              }
               return;
             }
 
@@ -337,11 +361,25 @@ function VoiceCoachContent() {
         );
 
         createdSound = result.sound;
+
+        if (epoch !== soundEpochRef.current) {
+          // Superseded while loading — discard this sound immediately so
+          // it can never clobber or overlay a newer coach response.
+          await result.sound.unloadAsync().catch(() => {});
+          // Delete this turn's temp file ONLY if it is still ours.
+          if (temporaryTtsFileRef.current === playbackUri) {
+            await cleanupTemporaryTtsFile().catch(() => {});
+          }
+          return;
+        }
+
         soundRef.current = result.sound;
 
         // Proven lifecycle: creation and playback are separate operations.
         // Never rely on shouldPlay during sound creation on native iOS.
         let playbackStatus = await result.sound.getStatusAsync();
+
+        if (epoch !== soundEpochRef.current) return;
 
         if (playbackStatus.isLoaded) {
           await result.sound.playAsync();
@@ -350,7 +388,7 @@ function VoiceCoachContent() {
             '[VoiceCoach] TTS audio not loaded immediately; retrying once'
           );
 
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 400));
 
           // Make sure this sound was not superseded while waiting.
           if (soundRef.current !== result.sound) {
@@ -370,6 +408,10 @@ function VoiceCoachContent() {
         }
       } catch (err: any) {
         console.error('[VoiceCoach] TTS playback error:', err);
+
+        // A superseded turn must never unload a NEWER sound or reset its
+        // UI — only the current generation performs cleanup.
+        if (epoch !== soundEpochRef.current) return;
 
         await stopAndUnloadSound().catch(() => {});
         await cleanupTemporaryTtsFile().catch(() => {});
@@ -720,6 +762,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
   }, []);
 
   const stopSpeaking = useCallback(async () => {
+    // Invalidate any in-flight TTS turn so it can never start playing
+    // after the user stopped the coach.
+    soundEpochRef.current++;
     await stopAndUnloadSound();
     setPhase('idle');
     setCurrentStatus('Ready to listen');

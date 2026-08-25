@@ -138,6 +138,17 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   const adInterruptedVideoRef = useRef(false);
   const temporarilyPausedForAdRef = useRef(false);
 
+  // WebView lifetime tracking. react-native-youtube-iframe fires onReady
+  // only ONCE per WebView load — loadVideoById (video change) never
+  // re-fires it. Once the WebView has proven itself ready it must stay
+  // ready, or every speech change would permanently lock the player.
+  const webViewEverReadyRef = useRef(false);
+  // Speech generation counter: an ad that spanned a speech change must
+  // never resume/pause the NEWER speech via a stale pause/resume callback.
+  const videoEpochRef = useRef(0);
+  const pausedAtVideoEpochRef = useRef(-1);
+  const videoChangedAtRef = useRef(0);
+
   const manualPauseRef = useRef(false);
   const lastRequestedStateRef = useRef<boolean | null>(null);
   const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,8 +217,18 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     },
     []
   );
+  // NOTE: sendNativeImperativeCommand is retained only as a diagnostic.
+  // react-native-youtube-iframe exposes no playVideo/pauseVideo ref
+  // methods, so it is a guaranteed no-op — the play prop is the single
+  // authoritative command channel and must not be duplicated here.
+  void sendNativeImperativeCommand;
 
   // â”€â”€ requestPlayState â€” the single entry point for native play/pause â”€â”€â”€â”€
+  // ── requestPlayState — the single entry point for play/pause ─────────
+  // The `play` prop (playerPlayCommand) is the ONLY play/pause channel:
+  // react-native-youtube-iframe@2.4.1 exposes no playVideo/pauseVideo
+  // ref methods (verified in its source) — commands are delivered by
+  // toggling the prop, which the library forwards to the WebView.
   const requestPlayState = useCallback(async (newState: boolean) => {
     if (!mountedRef.current) return;
     console.log(newState ? '[Playback] request play' : '[Playback] request pause');
@@ -220,8 +241,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     setPlayerPlayCommand(newState);
-    sendNativeImperativeCommand(newState);
-  }, [sendNativeImperativeCommand]);
+  }, []);
 
   // Diagnostic: the authoritative play prop must visibly transition on every command.
   useEffect(() => {
@@ -271,6 +291,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         wasPlayingBeforeAdRef.current =
           isPlayingRef.current || desiredPlayRef.current;
 
+        // Capture the speech generation BEFORE pausing: a resume callback
+        // must never act on a NEWER speech than the one that was paused.
+        pausedAtVideoEpochRef.current = videoEpochRef.current;
+
         temporarilyPausedForAdRef.current = true;
       adInterruptedVideoRef.current = true;
 
@@ -287,6 +311,10 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       },
 
       resumeAfterAd: () => {
+        // An ad that spanned a speech change must never resume the NEWER
+        // speech — the new speech's own autoplay lifecycle owns playback.
+        if (pausedAtVideoEpochRef.current !== videoEpochRef.current) return;
+
         const shouldResume = wasPlayingBeforeAdRef.current;
 
         // Clear temporary ad state FIRST so all controls become usable
@@ -380,6 +408,10 @@ useImperativeHandle(ref, () => ({
       wasPlayingBeforeAdRef.current =
         isPlayingRef.current || desiredPlayRef.current;
 
+      // Capture the speech generation BEFORE pausing: a resume callback
+      // must never act on a NEWER speech than the one that was paused.
+      pausedAtVideoEpochRef.current = videoEpochRef.current;
+
       temporarilyPausedForAdRef.current = true;
       adInterruptedVideoRef.current = true;
 
@@ -396,6 +428,10 @@ useImperativeHandle(ref, () => ({
       stopProgressTracking();
     },
     resumeAfterAd: () => {
+      // An ad that spanned a speech change must never resume the NEWER
+      // speech — the new speech's own autoplay lifecycle owns playback.
+      if (pausedAtVideoEpochRef.current !== videoEpochRef.current) return;
+
       const shouldResume = wasPlayingBeforeAdRef.current === true;
 
       // Ad interruption is fully consumed at dismissal.
@@ -462,15 +498,20 @@ useImperativeHandle(ref, () => ({
   // â”€â”€ Video change: reset everything, cancel old bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     activeVideoIdRef.current = videoId;
+    videoEpochRef.current++;
+    videoChangedAtRef.current = Date.now();
 
-    // New YouTube item = completely new lifecycle.
-    playerHadReadyRef.current = false;
+    // New YouTube item = completely new lifecycle — EXCEPT WebView
+    // readiness: onReady fires only once per WebView, so a video change
+    // must never reset it (that was the permanently-dead-player bug).
+    playerHadReadyRef.current = webViewEverReadyRef.current;
     adInterruptedVideoRef.current = false;
 
     // A new speech begins from a completely clean transient state.
     manualPauseRef.current = false;
     temporarilyPausedForAdRef.current = false;
     wasPlayingBeforeAdRef.current = false;
+    pausedAtVideoEpochRef.current = -1;
 
     lastManualToggleTargetRef.current = null;
     lastRequestedStateRef.current = null;
@@ -478,7 +519,12 @@ useImperativeHandle(ref, () => ({
     clearCommandWatchdog();
     onEndCalledRef.current = false;
 
-    desiredPlayRef.current = false;
+    // Autoplay intent for the NEW speech. The library reads the play
+    // prop at video-change time (loadVideoById vs cueVideoById), and the
+    // play prop is the single playback command channel.
+    const autoplayIntent = Boolean(autoplay);
+    desiredPlayRef.current = autoplayIntent;
+    setPlayerPlayCommand(autoplayIntent);
 
     // Errors from the previous YouTube item must NEVER poison
     // controls for the new speech.
@@ -582,7 +628,10 @@ useImperativeHandle(ref, () => ({
     };
 
     if (videoId) {
-      setPlayerReady(false);
+      // Once the WebView has proven ready it STAYS ready across speech
+      // changes — onReady will not fire again for this WebView.
+      setPlayerReady(webViewEverReadyRef.current);
+      playerReadyRef.current = webViewEverReadyRef.current;
       setPlayerError(false);
       setCurrentTime(0);
       setIsPlaying(false);
@@ -671,6 +720,7 @@ useImperativeHandle(ref, () => ({
     if (!mountedRef.current) return;
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
     console.log('[Playback] onReady', videoId);
+    webViewEverReadyRef.current = true;
     setPlayerReady(true);
     playerHadReadyRef.current = true;
     setPlayerError(false);
@@ -703,9 +753,13 @@ useImperativeHandle(ref, () => ({
     console.error('YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
 
+    // Any error is transient once the WebView has proven itself ready and
+    // the current video already reached ready/playing — post-ad/WebView
+    // errors must never permanently disable the player. Only a genuine
+    // initial load failure (WebView never ready) is a real error.
     const recoverablePostAdError =
-      adInterruptedVideoRef.current &&
-      playerHadReadyRef.current;
+      webViewEverReadyRef.current &&
+      (adInterruptedVideoRef.current || playerHadReadyRef.current);
 
     bootstrapIntentRef.current++;
     autoplayBootstrapRunningRef.current = false;
@@ -752,8 +806,10 @@ useImperativeHandle(ref, () => ({
     console.log('[Manual Playback] YouTube state:', state);
 
     if (state === 'playing') {
+      webViewEverReadyRef.current = true;
       playerHadReadyRef.current = true;
       isPlayingRef.current = true;
+      setPlayerPlayCommand(true); // keep the play prop in sync with reality
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);
       console.log('[Playback] actual state playing');
@@ -763,6 +819,7 @@ useImperativeHandle(ref, () => ({
 
     if (state === 'paused') {
       isPlayingRef.current = false;
+      setPlayerPlayCommand(false); // prop reflects actual state (proven 08dce452 behavior)
       setIsPlaying(false);
       onPlayingChangeRef.current?.(false);
       console.log('[Playback] actual state paused');
@@ -771,11 +828,18 @@ useImperativeHandle(ref, () => ({
     }
 
     if (state === 'ended') {
+      // Ignore a stale 'ended' from the PREVIOUS video arriving right
+      // after a speech change (end-of-speech ad flow).
+      if (Date.now() - videoChangedAtRef.current < 800) {
+        console.log('[Playback] stale ended event ignored');
+        return;
+      }
       if (onEndCalledRef.current) {
         console.log('onEnd already called for this video, ignoring');
         return;
       }
       onEndCalledRef.current = true;
+      setPlayerPlayCommand(false);
 
       isPlayingRef.current = false;
       setIsPlaying(false);
@@ -895,19 +959,22 @@ useImperativeHandle(ref, () => ({
   void requestPlayState(nextState);
 
   clearCommandWatchdog();
+  // If the WebView ignored the command (e.g. just returned from an ad),
+  // re-issue it through the play prop: a quick off→on toggle makes the
+  // library deliver a fresh playVideo/pauseVideo to the WebView.
   commandWatchdogRef.current = setTimeout(() => {
     if (!mountedRef.current) return;
 
     const actual = isPlayingRef.current;
 
     if (actual !== nextState) {
-      console.log(
-        '[PlayPause] Watchdog retry imperative command:',
-        nextState
-      );
-      sendNativeImperativeCommand(nextState);
+      console.log('[PlayPause] Watchdog: re-issuing command via play prop');
+      setPlayerPlayCommand(!nextState);
+      setTimeout(() => {
+        if (mountedRef.current) setPlayerPlayCommand(nextState);
+      }, 120);
     }
-  }, 350);
+  }, 600);
 
   if (!nextState) {
     stopProgressTracking();
