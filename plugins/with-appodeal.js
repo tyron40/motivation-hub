@@ -7,8 +7,10 @@
  *     mediates AdMob, the AdMob config is NOT removed), ATT usage description,
  *     NSAllowsLocalNetworking (only required ATS setting), SKAdNetworkItems
  *     (official Appodeal list, merged with any existing entries).
- *   - Podfile: Appodeal pod sources + the adapter set matched to
- *     react-native-appodeal@4.2.0 (Appodeal iOS SDK 4.2.0).
+ *   - Podfile: Appodeal pod sources + the minimal pod set required by
+ *     react-native-appodeal@4.2.0 (Appodeal 4.2.0 + AppodealIABAdapter
+ *     3.5.0.0) plus the Appodeal Google AdMob adapter, which keeps AdMob
+ *     mediation working. No other mediation adapters are installed.
  *
  * Props (app.json):
  *   - iosAppId: AdMob App ID used for GADApplicationIdentifier
@@ -22,102 +24,41 @@ const { withInfoPlist, withDangerousMod } = require('expo/config-plugins');
 /** Official Appodeal SKAdNetwork IDs (256). */
 const SKAD_NETWORK_IDS = require('./appodeal-skadnetwork-ids.json');
 
-/** Pod sources required by Appodeal SDK 4.2.0. */
+/**
+ * Pod sources, in resolution order (CocoaPods uses the first source that
+ * contains a podspec):
+ *   1. Appodeal spec repo — Appodeal, AppodealIABAdapter,
+ *      AppodealGoogleAdMobAdapter.
+ *   2. Bidon spec repo — Bidon 0.15.0, a required transitive dependency of
+ *      AppodealGoogleAdMobAdapter 13.5.0.0 (not published on trunk or in the
+ *      Appodeal repo, so this source must stay while the AdMob adapter is
+ *      installed).
+ *   3. CocoaPods trunk/CDN — Expo/React Native pods and the Appodeal SDK's
+ *      own transitive dependencies (Protobuf, StackConsentManager,
+ *      StackModules, Google-Mobile-Ads-SDK).
+ */
 const POD_SOURCES = [
   "source 'https://github.com/appodeal/CocoaPods.git'",
   "source 'https://github.com/bidon-io/CocoaPods-Specs.git'",
   "source 'https://cdn.cocoapods.org'",
 ];
 
-/** Adapter pods matched to react-native-appodeal@4.2.0 (official example Podfile). */
-const APPODEAL_PODS = `# Appodeal SDK 4.2.0
+/**
+ * Minimal Appodeal pod set for react-native-appodeal@4.2.0:
+ *   - Appodeal 4.2.0 and AppodealIABAdapter 3.5.0.0 are the exact
+ *     dependencies declared by RNAppodeal.podspec.
+ *   - AppodealGoogleAdMobAdapter keeps AdMob mediation (the app's configured
+ *     ad provider); it transitively pulls Google-Mobile-Ads-SDK 13.5.0 (trunk)
+ *     and Bidon 0.15.0 (Bidon spec repo).
+ * No other network adapters are installed — the app only initializes Appodeal
+ * with AdMob mediation, and the ~76 extra adapters previously listed here
+ * caused CocoaPods to flood trunk/GitHub and fail with HTTP 429 on EAS.
+ */
+const APPODEAL_PODS = `# Appodeal SDK 4.2.0 — minimal mediation set (Appodeal + AdMob)
 def appodeal
   pod 'Appodeal', '4.2.0'
-  # AppLovin MAX
-  pod 'AppLovinMediationAmazonAdMarketplaceAdapter', '5.3.2.0'
-  pod 'AppLovinMediationBidMachineAdapter', '3.7.1.0.0'
-  pod 'AppLovinMediationBigoAdsAdapter', '5.0.0.0'
-  pod 'AppLovinMediationByteDanceAdapter', '7.7.0.7.0'
-  pod 'AppLovinMediationChartboostAdapter', '9.10.1.0'
-  pod 'AppLovinMediationFacebookAdapter', '6.20.1.0'
-  pod 'AppLovinMediationFyberAdapter', '8.4.1.0'
-  pod 'AppLovinMediationGoogleAdManagerAdapter', '13.5.0.0'
-  pod 'AppLovinMediationGoogleAdapter', '13.5.0.0'
-  pod 'AppLovinMediationInMobiAdapter', '11.1.0.0'
-  pod 'AppLovinMediationIronSourceAdapter', '9.1.0.0.0'
-  pod 'AppLovinMediationMintegralAdapter', '7.7.9.0.0'
-  pod 'AppLovinMediationMobileFuseAdapter', '1.9.3.0'
-  pod 'AppLovinMediationMolocoAdapter', '4.1.0.0'
-  pod 'AppLovinMediationMyTargetAdapter', '5.36.2.0'
-  pod 'AppLovinMediationOguryPresageAdapter', '5.1.1.0'
-  pod 'AppLovinMediationPubMaticAdapter', '4.10.0.0'
-  pod 'AppLovinMediationSmaatoAdapter', '23.1.0.0'
-  pod 'AppLovinMediationUnityAdsAdapter', '4.16.3.0'
-  pod 'AppLovinMediationVerveAdapter', '3.8.1.0'
-  pod 'AppLovinMediationVungleAdapter', '7.6.2.0'
-  pod 'AppLovinMediationYandexAdapter', '7.17.0.0'
-  # Level Play
-  pod 'IronSourceAdMobAdapter', '5.10.0.0'
-  pod 'IronSourceAppLovinAdapter', '5.3.0.0'
-  pod 'IronSourceBidMachineAdapter', '5.7.0.0'
-  pod 'IronSourceBigoAdapter', '5.1.0.0'
-  pod 'IronSourceFacebookAdapter', '5.0.0.0'
-  pod 'IronSourceFyberAdapter', '5.2.0.0'
-  pod 'IronSourceInMobiAdapter', '5.3.0.0'
-  pod 'IronSourceMintegralAdapter', '5.1.0.0'
-  pod 'IronSourceMobileFuseAdapter', '5.0.0.0'
-  pod 'IronSourceMolocoAdapter', '5.2.0.0'
-  pod 'IronSourceMyTargetAdapter', '5.3.0.0'
-  pod 'IronSourceOguryAdapter', '5.0.0.0'
-  pod 'IronSourcePangleAdapter', '5.5.0.0'
-  pod 'IronSourceSmaatoAdapter', '5.2.0.0'
-  pod 'IronSourceUnityAdsAdapter', '5.2.0.0'
-  pod 'IronSourceVerveAdapter', '5.5.0.0'
-  pod 'IronSourceVungleAdapter', '5.3.0.0'
-  # Appodeal
-  pod 'AppodealAdjustAdapter', '5.4.6.1'
-  pod 'AppodealAmazonAdapter', '5.3.2.0'
-  pod 'AppodealAppLovinAdapter', '13.5.1.0'
-  pod 'AppodealAppLovinMAXAdapter', '13.5.1.1'
-  pod 'AppodealAppsFlyerAdapter', '6.17.7.1'
-  pod 'AppodealBidMachineAdapter', '3.7.1.0'
-  pod 'AppodealBidonAdapter', '0.15.0.0'
-  pod 'AppodealBigoAdsAdapter', '5.0.0.0'
-  pod 'AppodealDTExchangeAdapter', '8.4.1.0'
-  pod 'AppodealFacebookAdapter', '18.0.1.0'
-  pod 'AppodealFirebaseAdapter', '12.4.0.1'
-  pod 'AppodealGoogleAdMobAdapter', '13.5.0.0'
   pod 'AppodealIABAdapter', '3.5.0.0'
-  pod 'AppodealInMobiAdapter', '11.1.0.0'
-  pod 'AppodealIronSourceAdapter', '9.1.0.0.0'
-  pod 'AppodealLevelPlayAdapter', '9.1.0.0.0'
-  pod 'AppodealMetaAudienceNetworkAdapter', '6.20.1.0'
-  pod 'AppodealMintegralAdapter', '7.7.9.0'
-  pod 'AppodealMyTargetAdapter', '5.36.2.0'
-  pod 'AppodealSentryAdapter', '8.57.2.1'
-  pod 'AppodealUnityAdapter', '4.16.3.0'
-  pod 'AppodealVungleAdapter', '7.6.2.0'
-  pod 'AppodealYandexAdapter', '7.17.0.1'
-  # Bidon
-  pod 'BidonAdapterAmazon', '5.3.2.0'
-  pod 'BidonAdapterAppLovin', '13.5.1.0'
-  pod 'BidonAdapterBidMachine', '3.7.1.1'
-  pod 'BidonAdapterBigoAds', '5.0.0.0'
-  pod 'BidonAdapterChartboost', '9.10.1.0'
-  pod 'BidonAdapterDTExchange', '8.4.1.0'
-  pod 'BidonAdapterInMobi', '11.1.0.0'
-  pod 'BidonAdapterIronSource', '9.1.0.0.0'
-  pod 'BidonAdapterMetaAudienceNetwork', '6.20.1.0'
-  pod 'BidonAdapterMintegral', '7.7.9.0'
-  pod 'BidonAdapterMobileFuse', '1.9.3.0'
-  pod 'BidonAdapterMoloco', '4.1.0.0'
-  pod 'BidonAdapterMyTarget', '5.36.2.0'
-  pod 'BidonAdapterStartIo', '4.13.0.0'
-  pod 'BidonAdapterTaurusX', '1.15.0.0'
-  pod 'BidonAdapterUnityAds', '4.16.3.0'
-  pod 'BidonAdapterVungle', '7.6.2.0'
-  pod 'BidonAdapterYandex', '7.17.0.0'
-  pod 'BidonAdapterZmaticoo', '2.2.0.0'
+  pod 'AppodealGoogleAdMobAdapter', '13.5.0.0'
 end`;
 
 function withAppodealInfoPlist(config, props) {
