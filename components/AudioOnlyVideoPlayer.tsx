@@ -126,6 +126,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   // isPlayingRef: confirmed YouTube state (onStateChange + state sync).
   const desiredPlayRef = useRef(false);
   const wasPlayingBeforeAdRef = useRef(false);
+
+  // True once the active YouTube item has successfully reached ready/playing.
+  // This lets us distinguish a real load failure from a transient error on
+  // content that was already working before an ad interruption.
+  const playerHadReadyRef = useRef(false);
+
+  // Remains true for the lifetime of this video once an ad interrupts it.
+  // Do NOT clear this at ad dismissal; late YouTube callbacks can arrive
+  // after the ad closes or even after the video reports ended.
+  const adInterruptedVideoRef = useRef(false);
   const temporarilyPausedForAdRef = useRef(false);
 
   const manualPauseRef = useRef(false);
@@ -262,6 +272,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           isPlayingRef.current || desiredPlayRef.current;
 
         temporarilyPausedForAdRef.current = true;
+      adInterruptedVideoRef.current = true;
 
         // Never convert an ad pause into a user's manual pause.
         manualPauseRef.current = false;
@@ -282,6 +293,15 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         // regardless of whether automatic resume succeeds.
         temporarilyPausedForAdRef.current = false;
         wasPlayingBeforeAdRef.current = false;
+
+        // An already-working player must remain usable after ad dismissal.
+        if (playerHadReadyRef.current) {
+          playerErrorRef.current = false;
+          setPlayerError(false);
+
+          playerReadyRef.current = true;
+          setPlayerReady(true);
+        }
 
         // A real user pause must always win.
         if (!shouldResume || manualPauseRef.current) {
@@ -361,6 +381,7 @@ useImperativeHandle(ref, () => ({
         isPlayingRef.current || desiredPlayRef.current;
 
       temporarilyPausedForAdRef.current = true;
+      adInterruptedVideoRef.current = true;
 
       // Ad pause is never a user/manual pause.
       manualPauseRef.current = false;
@@ -388,6 +409,11 @@ useImperativeHandle(ref, () => ({
       if (playerErrorRef.current) {
         playerErrorRef.current = false;
         setPlayerError(false);
+      }
+
+      if (playerHadReadyRef.current) {
+        playerReadyRef.current = true;
+        setPlayerReady(true);
       }
 
       if (shouldResume && playerReadyRef.current) {
@@ -436,6 +462,10 @@ useImperativeHandle(ref, () => ({
   // â”€â”€ Video change: reset everything, cancel old bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     activeVideoIdRef.current = videoId;
+
+    // New YouTube item = completely new lifecycle.
+    playerHadReadyRef.current = false;
+    adInterruptedVideoRef.current = false;
 
     // A new speech begins from a completely clean transient state.
     manualPauseRef.current = false;
@@ -642,6 +672,7 @@ useImperativeHandle(ref, () => ({
     console.log('[Autoplay] YouTube player ready for video:', activeVideoIdRef.current);
     console.log('[Playback] onReady', videoId);
     setPlayerReady(true);
+    playerHadReadyRef.current = true;
     setPlayerError(false);
     setError(null);
 
@@ -671,15 +702,46 @@ useImperativeHandle(ref, () => ({
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
-    setPlayerError(true);
-    setPlayerReady(false);
-    bootstrapIntentRef.current++; // cancel bootstrap
+
+    const recoverablePostAdError =
+      adInterruptedVideoRef.current &&
+      playerHadReadyRef.current;
+
+    bootstrapIntentRef.current++;
     autoplayBootstrapRunningRef.current = false;
-    desiredPlayRef.current = false;
+
     setPlayerPlayCommand(false);
     setIsPlaying(false);
     isPlayingRef.current = false;
     stopProgressTracking();
+
+    if (recoverablePostAdError) {
+      // This video had already proven that the YouTube iframe was ready.
+      // Ad interruptions can produce late native/WebView error callbacks.
+      // Never allow one of those callbacks to permanently disable the
+      // persistent global player.
+      console.warn(
+        '[Playback] treating post-ad YouTube error as transient:',
+        errorMsg
+      );
+
+      playerErrorRef.current = false;
+      setPlayerError(false);
+
+      playerReadyRef.current = true;
+      setPlayerReady(true);
+
+      return;
+    }
+
+    // Genuine initial/unrecoverable load failure.
+    playerErrorRef.current = true;
+    setPlayerError(true);
+
+    playerReadyRef.current = false;
+    setPlayerReady(false);
+
+    desiredPlayRef.current = false;
   }, [stopProgressTracking]);
 
   // â”€â”€ State change handler â€” AUTHORITATIVE for isPlayingRef â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -690,6 +752,7 @@ useImperativeHandle(ref, () => ({
     console.log('[Manual Playback] YouTube state:', state);
 
     if (state === 'playing') {
+      playerHadReadyRef.current = true;
       isPlayingRef.current = true;
       setIsPlaying(true);
       onPlayingChangeRef.current?.(true);

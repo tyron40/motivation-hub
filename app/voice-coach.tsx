@@ -247,6 +247,12 @@ function VoiceCoachContent() {
         // Recording mode must be fully disabled before speaker playback.
         await setPlaybackMode();
 
+        // Proven native behavior: allow the iOS/Android audio session to
+        // finish switching from microphone mode to speaker playback mode.
+        if (Platform.OS !== 'web') {
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+
         const preferredVoice = profile.preferredVoice || 'alloy';
         const tts = await generateTTS({
           text: spokenText,
@@ -298,7 +304,7 @@ function VoiceCoachContent() {
         const result = await Audio.Sound.createAsync(
           { uri: playbackUri },
           {
-            shouldPlay: true,
+            shouldPlay: false,
             volume: 1.0,
             progressUpdateIntervalMillis: 150,
           },
@@ -310,14 +316,18 @@ function VoiceCoachContent() {
             if (status.didJustFinish) {
               const finishedSound = createdSound;
 
-              if (soundRef.current === finishedSound) {
-                soundRef.current = null;
+              // A completion event from an older sound must never clear,
+              // unload, or change UI state for a newer coach response.
+              if (!finishedSound || soundRef.current !== finishedSound) {
+                if (finishedSound) {
+                  void finishedSound.unloadAsync().catch(() => {});
+                }
+                return;
               }
 
-              if (finishedSound) {
-                void finishedSound.unloadAsync().catch(() => {});
-              }
+              soundRef.current = null;
 
+              void finishedSound.unloadAsync().catch(() => {});
               void cleanupTemporaryTtsFile();
 
               setPhase('idle');
@@ -329,14 +339,33 @@ function VoiceCoachContent() {
         createdSound = result.sound;
         soundRef.current = result.sound;
 
-        // Be explicit. Some iOS audio-session transitions load successfully
-        // but do not begin playback immediately from shouldPlay alone.
-        const playbackStatus = await result.sound.getStatusAsync();
+        // Proven lifecycle: creation and playback are separate operations.
+        // Never rely on shouldPlay during sound creation on native iOS.
+        let playbackStatus = await result.sound.getStatusAsync();
 
-        if (
-          playbackStatus.isLoaded &&
-          !playbackStatus.isPlaying
-        ) {
+        if (playbackStatus.isLoaded) {
+          await result.sound.playAsync();
+        } else {
+          console.log(
+            '[VoiceCoach] TTS audio not loaded immediately; retrying once'
+          );
+
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Make sure this sound was not superseded while waiting.
+          if (soundRef.current !== result.sound) {
+            await result.sound.unloadAsync().catch(() => {});
+            return;
+          }
+
+          playbackStatus = await result.sound.getStatusAsync();
+
+          if (!playbackStatus.isLoaded) {
+            throw new Error(
+              'Voice audio failed to load after retry'
+            );
+          }
+
           await result.sound.playAsync();
         }
       } catch (err: any) {
