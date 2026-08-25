@@ -162,29 +162,57 @@ export async function transcribeAudio(params: {
       console.error('❌ STT API error response:', errorText.substring(0, 200));
 
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Unauthorized/Forbidden from backend. Verify deployment protection/auth headers and Vercel protection.');
+        throw new Error('Voice service is unavailable right now. Please try again later.');
       }
 
-      throw new Error(`STT API error: ${response.status} ${errorText.substring(0, 120)}`);
+      throw new Error('Voice service error. Please try again in a moment.');
     }
 
     const responseText = await response.text();
     if (!contentType.includes('application/json')) {
-      throw new Error(`Expected JSON response but got ${contentType || 'unknown content type'}`);
+      console.error(
+        'STT response was not JSON | content-type:',
+        contentType,
+        '| body preview:',
+        responseText.substring(0, 120)
+      );
+      throw new Error('Voice service returned an unexpected response. Please try again.');
     }
 
     let result: any;
     try {
       result = JSON.parse(responseText);
     } catch {
-      throw new Error(`Invalid JSON response from STT API: ${responseText.substring(0, 100)}`);
+      console.error(
+        'STT response was not valid JSON | body preview:',
+        responseText.substring(0, 120)
+      );
+      throw new Error('Voice service returned an unexpected response. Please try again.');
     }
 
-    if (!result?.text || typeof result.text !== 'string') {
-      throw new Error('Invalid STT response format');
+    // Canonical transcript: the production contract is { text }, with
+    // { transcript } accepted as a compatible variant.
+    const rawTranscript = result?.text ?? result?.transcript;
+
+    if (typeof rawTranscript !== 'string') {
+      console.error(
+        'STT response missing transcript field | keys:',
+        result ? Object.keys(result).join(', ') : 'none',
+        '| body preview:',
+        responseText.substring(0, 120)
+      );
+      throw new Error('Voice service returned an unexpected response. Please try again.');
     }
 
-    return { text: result.text };
+    const transcript = rawTranscript.trim();
+
+    if (!transcript) {
+      // Whisper legitimately returns an empty transcription when no speech
+      // is detected in the audio — this is not a format error.
+      throw new Error('No speech detected. Hold the button and speak.');
+    }
+
+    return { text: transcript };
   } catch (error: any) {
     console.error('❌ STT request failed:', error);
     if (error?.name === 'AbortError') {

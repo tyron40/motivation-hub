@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
+import { Mic, MicOff, Check, Sparkles } from 'lucide-react-native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -80,10 +80,8 @@ function VoiceCoachContent() {
 
   const isRecording = phase === 'recording';
   const isProcessing = phase === 'processing';
-  const isPlaying = phase === 'speaking';
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const avatarAnim = useRef(new Animated.Value(0)).current;
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -100,6 +98,8 @@ function VoiceCoachContent() {
   // an OLD sound must never modify, unload, or reset UI for a NEWER sound.
   const soundEpochRef = useRef(0);
   const temporaryTtsFileRef = useRef<string | null>(null);
+  // Guards UI updates from audio callbacks that fire after unmount.
+  const mountedRef = useRef(true);
 
   // Independent layers make the voice sphere feel fluid instead of
   // simply scaling one circle in and out.
@@ -246,7 +246,7 @@ function VoiceCoachContent() {
       const epoch = ++soundEpochRef.current;
 
       setPhase('speaking');
-      setCurrentStatus('Coach is speaking...');
+      setCurrentStatus('Speaking...');
 
       try {
         await stopAndUnloadSound();
@@ -319,9 +319,9 @@ function VoiceCoachContent() {
             progressUpdateIntervalMillis: 150,
           },
           (status: AVPlaybackStatus) => {
-            // Late callbacks from an OLD sound must never unload or
-            // reset a NEWER response.
-            if (epoch !== soundEpochRef.current) return;
+            // Late callbacks from an OLD sound must never unload or reset a
+            // NEWER response, and nothing may update an unmounted screen.
+            if (epoch !== soundEpochRef.current || !mountedRef.current) return;
 
             if (!status.isLoaded) {
               // A load/playback error on the CURRENT sound must never
@@ -411,7 +411,7 @@ function VoiceCoachContent() {
 
         // A superseded turn must never unload a NEWER sound or reset its
         // UI — only the current generation performs cleanup.
-        if (epoch !== soundEpochRef.current) return;
+        if (epoch !== soundEpochRef.current || !mountedRef.current) return;
 
         await stopAndUnloadSound().catch(() => {});
         await cleanupTemporaryTtsFile().catch(() => {});
@@ -449,7 +449,7 @@ function VoiceCoachContent() {
       }
 
       setPhase('processing');
-      setCurrentStatus('Coach is thinking...');
+      setCurrentStatus('Thinking...');
 
       try {
         const userName = profile.name || 'friend';
@@ -487,14 +487,13 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         }
 
         await speakText(reply);
-      } catch (err) {
+      } catch (err: any) {
         console.error('âŒ coach reply error:', err);
-        const fallback = "I'm still here with you. Let's try that again.";
-        conversationRef.current = trimConversation([
-          ...conversationRef.current,
-          { role: 'assistant', content: fallback },
-        ]);
-        await speakText(fallback);
+        // Do not mask backend failures with canned speech — surface a
+        // concise error and return the mic to a usable state.
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        Alert.alert('Coach Error', err?.message || 'The coach could not respond. Please try again.');
       }
     },
     [usageStats.credits, profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, iapContext, speakText]
@@ -503,7 +502,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
 
   const startRecording = useCallback(async () => {
-    if (phase !== 'idle') return;
+    // Recording may interrupt a greeting or spoken response, but never an
+    // in-flight processing turn and never a second recorder.
+    if (phase === 'recording' || phase === 'processing') return;
     if (recordingStartingRef.current || recordingActiveRef.current) return;
     if (!lock()) return;
 
@@ -512,8 +513,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     recordingStoppingRef.current = false;
 
     try {
+      // Pressing the mic while the coach speaks (or greets) must stop that
+      // audio immediately and never let it resume or play later.
+      soundEpochRef.current++;
       await stopAndUnloadSound();
-      setCurrentStatus('Listening... Speak now!');
+      setCurrentStatus('Listening...');
 
       if (Platform.OS === 'web') {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -761,15 +765,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     };
   }, []);
 
-  const stopSpeaking = useCallback(async () => {
-    // Invalidate any in-flight TTS turn so it can never start playing
-    // after the user stopped the coach.
-    soundEpochRef.current++;
-    await stopAndUnloadSound();
-    setPhase('idle');
-    setCurrentStatus('Ready to listen');
-  }, [stopAndUnloadSound]);
-
   const doGreeting = useCallback(async () => {
     if (autoGreetDoneRef.current || hasGreeted) return;
     autoGreetDoneRef.current = true;
@@ -786,7 +781,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     ]);
 
     setPhase('greeting');
-    setCurrentStatus('Coach is greeting you...');
+    setCurrentStatus('Speaking...');
 
     if (profile.voiceEnabled === false) {
       setPhase('idle');
@@ -825,6 +820,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     init();
 
     return () => {
+      mountedRef.current = false;
       stopAndUnloadSound();
       const rec = recordingRef.current;
       if (rec) {
@@ -871,37 +867,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     return () => pulse.stop();
   }, [isRecording, pulseAnim]);
 
-  useEffect(() => {
-    if (!isPlaying) {
-      avatarAnim.setValue(0);
-      return;
-    }
-
-    const bounce = Animated.loop(
-      Animated.sequence([
-        Animated.timing(avatarAnim, {
-          toValue: 1,
-          duration: 600,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(avatarAnim, {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    bounce.start();
-    return () => bounce.stop();
-  }, [isPlaying, avatarAnim]);
-
-  const avatarScale = avatarAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.1],
-  });
-
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
@@ -938,11 +903,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           title: 'Voice Coach',
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
-          headerRight: () => (
-            <TouchableOpacity onPress={() => setShowVoiceModal(true)} style={styles.headerButton}>
-              <Settings size={24} color={colors.text} />
-            </TouchableOpacity>
-          ),
         }}
       />
 
@@ -1078,29 +1038,14 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
             />
           </Animated.View>
 
-          <View style={styles.coachInfo}>
-            <Text style={[styles.coachName, { color: colors.text }]}>AI Voice Coach</Text>
-            <TouchableOpacity style={styles.changeCoachButton} onPress={() => setShowVoiceModal(true)}>
-              <Sparkles size={14} color={colors.primary} />
-              <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Voice</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>
-            {selectedVoice.description}
-          </Text>
-          <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Voice: {selectedVoice.voiceName}
-          </Text>
-        </View>
-
-        <View style={styles.messageSection}>
-          <Text style={[styles.statusMainText, { color: colors.primary }]}>{currentStatus}</Text>
-          {isPlaying && (
-            <TouchableOpacity style={styles.stopButton} onPress={stopSpeaking}>
-              <Text style={styles.stopButtonText}>Stop Speaking</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            testID="voice-settings-button"
+            style={styles.changeCoachButton}
+            onPress={() => setShowVoiceModal(true)}
+          >
+            <Sparkles size={14} color={colors.primary} />
+            <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Voice</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.controlsSection}>
@@ -1110,41 +1055,21 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
               style={[
                 styles.recordButton,
                 isRecording && styles.recordButtonActive,
-                (isProcessing || isPlaying || phase === 'greeting') && styles.recordButtonDisabled,
+                isProcessing && styles.recordButtonDisabled,
               ]}
               onPressIn={startRecording}
               onPressOut={stopRecording}
-              disabled={isProcessing || isPlaying || phase === 'greeting'}
+              disabled={isProcessing}
               activeOpacity={0.8}
             >
               {isRecording ? <MicOff size={40} color="white" /> : <Mic size={40} color="white" />}
             </TouchableOpacity>
           </Animated.View>
 
-          <View style={styles.statusIndicator}>
-            {isRecording && (
-              <View style={styles.recordingIndicator}>
-                <View style={styles.recordingDot} />
-                <Text style={styles.recordingText}>Listening...</Text>
-              </View>
-            )}
-            {isProcessing && <Text style={[styles.statusText, { color: colors.primary }]}>Processing...</Text>}
-            {isPlaying && <Text style={[styles.statusText, { color: colors.primary }]}>Speaking...</Text>}
-          </View>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>{currentStatus}</Text>
+          {!hasPermission && <Text style={styles.permissionText}>Microphone access needed</Text>}
         </View>
 
-        <View style={styles.instructionsSection}>
-          <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
-            {hasPermission
-              ? 'Hold the microphone button to speak with your coach'
-              : 'Microphone permission required - tap the button to enable'}
-          </Text>
-          {!hasPermission && <Text style={styles.warningText}>Grant microphone access to use voice features</Text>}
-          <TouchableOpacity testID="voice-settings-button" style={styles.voiceSettingsButton} onPress={() => setShowVoiceModal(true)}>
-            <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {selectedVoice.voiceName}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <Modal visible={showVoiceModal} animationType="slide" transparent onRequestClose={() => setShowVoiceModal(false)}>
@@ -1203,28 +1128,12 @@ const createStyles = (colors: any) =>
     },
     content: {
       flex: 1,
-      padding: 20,
-      justifyContent: 'space-between',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
     },
     avatarSection: {
       alignItems: 'center',
-      paddingTop: 40,
-    },
-    avatar: {
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      backgroundColor: colors.primary + '10',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 16,
-      borderWidth: 3,
-      borderColor: colors.primary,
-      overflow: 'visible',
-      shadowOpacity: 0.35,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 0 },
-      elevation: 8,
     },
     voiceSphere: {
       width: 164,
@@ -1268,71 +1177,25 @@ const createStyles = (colors: any) =>
       borderRadius: 46,
       backgroundColor: 'rgba(255,255,255,0.62)',
     },
-    coachInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 4,
-    },
     changeCoachButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 6,
+      marginTop: 36,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
       backgroundColor: colors.primary + '10',
-      borderRadius: 12,
+      borderRadius: 20,
       borderWidth: 1,
       borderColor: colors.primary + '40',
     },
     changeCoachText: {
-      fontSize: 12,
-      fontWeight: '500' as const,
-    },
-    coachName: {
-      fontSize: 24,
-      fontWeight: 'bold' as const,
-      marginBottom: 4,
-    },
-    coachTitle: {
-      fontSize: 16,
-      textAlign: 'center' as const,
-    },
-    voiceIndicator: {
-      fontSize: 12,
-      textAlign: 'center' as const,
-      marginTop: 4,
-      fontStyle: 'italic' as const,
-    },
-    messageSection: {
-      flex: 1,
-      justifyContent: 'center' as const,
-      paddingHorizontal: 20,
-      alignItems: 'center',
-    },
-    statusMainText: {
-      fontSize: 20,
-      textAlign: 'center' as const,
-      lineHeight: 28,
-      fontWeight: '600' as const,
-      marginBottom: 16,
-    },
-    stopButton: {
-      backgroundColor: 'rgba(231, 76, 60, 0.2)',
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 24,
-      borderWidth: 2,
-      borderColor: '#e74c3c',
-    },
-    stopButtonText: {
-      color: '#e74c3c',
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: '600' as const,
     },
     controlsSection: {
       alignItems: 'center' as const,
-      paddingVertical: 40,
+      marginTop: 56,
     },
     recordButton: {
       width: 100,
@@ -1355,59 +1218,17 @@ const createStyles = (colors: any) =>
       opacity: 0.6,
     },
     recordButtonContainer: {},
-    statusIndicator: {
-      marginTop: 20,
-      height: 30,
-      justifyContent: 'center' as const,
-      alignItems: 'center' as const,
-    },
-    recordingIndicator: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-    },
-    recordingDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: '#e74c3c',
-      marginRight: 8,
-    },
-    recordingText: {
-      color: '#e74c3c',
-      fontSize: 16,
-      fontWeight: '500' as const,
-    },
     statusText: {
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: '500' as const,
-    },
-    instructionsSection: {
-      alignItems: 'center' as const,
-      paddingBottom: 20,
-    },
-    instructionsText: {
-      fontSize: 14,
+      marginTop: 20,
+      minHeight: 18,
       textAlign: 'center' as const,
-      lineHeight: 20,
-      marginBottom: 12,
     },
-    warningText: {
+    permissionText: {
       fontSize: 12,
       color: '#e74c3c',
-      marginBottom: 8,
-    },
-    voiceSettingsButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      backgroundColor: colors.primary + '10',
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.primary + '40',
-      alignSelf: 'center' as const,
-    },
-    voiceSettingsText: {
-      fontSize: 14,
-      fontWeight: '500' as const,
+      marginTop: 6,
     },
     modalOverlay: {
       flex: 1,
@@ -1464,9 +1285,6 @@ const createStyles = (colors: any) =>
       color: 'white',
       fontSize: 18,
       fontWeight: '600' as const,
-    },
-    headerButton: {
-      marginRight: 16,
     },
     accountRequiredContainer: {
       flex: 1,
