@@ -70,12 +70,27 @@ interface VideoMetadata {
   publishedAt: string;
 }
 
-const EMBEDDING_ERROR_CODES = new Set([100, 101, 150, 153]);
-
 // YouTube IFrame API requires a player viewport of at least 200x200.
 // The native player is hosted at 220x220 but visually hidden.
 const NATIVE_PLAYER_SIZE = 220;
 
+/**
+ * PLAYBACK STATE MODEL — exactly three concepts:
+ *
+ * 1. webViewReady   WebView LIFETIME readiness (onReady fires once per
+ *                   WebView load). Once true it is NEVER reset — changing
+ *                   videos never requires a second onReady, so controls can
+ *                   never become permanently disabled by a video change.
+ * 2. wantPlaying    User/app intent. The ONLY thing that drives the
+ *                   YoutubePlayer `play` prop. Never written by YouTube
+ *                   state callbacks.
+ * 3. actualPlaying  What YouTube reports via onChangeState. Display only.
+ *                   Never issues playback commands.
+ *
+ * Per-video data (currentTime, duration, onEndCalled, videoLoading, the
+ * one-shot autoplay bootstrap) resets on videoId change. Everything above
+ * survives it.
+ */
 const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoPlayerProps>(({
   videoId,
   title: _title,
@@ -91,65 +106,42 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   onProgressChange,
 }, ref) => {
   // ── State ───────────────────────────────────────────────────────────────
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playerPlayCommand, setPlayerPlayCommand] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [webViewReady, setWebViewReady] = useState(false);
+  const [wantPlaying, setWantPlaying] = useState(false);
+  const [actualPlaying, setActualPlaying] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(true);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
-  const [playerReady, setPlayerReady] = useState(false);
-  const [playerError, setPlayerError] = useState(false);
 
   // ── Refs ────────────────────────────────────────────────────────────────
   const playerRef = useRef<any>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const mountedRef = useRef(true);
+
+  // Ref mirrors of the three state concepts (imperative handle reads).
+  const webViewReadyRef = useRef(false);
+  const wantPlayingRef = useRef(false);
+  const actualPlayingRef = useRef(false);
+
+  // Per-video bookkeeping.
   const onEndCalledRef = useRef(false);
   const durationRef = useRef(0);
   const currentTimeRef = useRef(0);
   const isSeekingRef = useRef(isSeeking);
-
-  // isPlayingRef: confirmed YouTube state (onStateChange + state sync).
-  const isPlayingRef = useRef(false);
-  const playerReadyRef = useRef(false);
-  const playerErrorRef = useRef(false);
-  const activeVideoIdRef = useRef(videoId);
-
-  // WebView lifetime tracking. react-native-youtube-iframe fires onReady
-  // only ONCE per WebView load — loadVideoById (video change) never
-  // re-fires it. These refs keep the player recoverable across videos.
-  const webViewEverReadyRef = useRef(false);
-  const videoHasPlayedRef = useRef(false);
   const videoEpochRef = useRef(0);
-  const pausedAtVideoEpochRef = useRef(-1);
   const videoChangedAtRef = useRef(0);
+  const bootstrapDoneRef = useRef(false);
 
-  // desiredPlayRef: what the user/app last requested (play or pause).
-  const desiredPlayRef = useRef(false);
-  const manualPauseRef = useRef(false);
-  const lastRequestedStateRef = useRef<boolean | null>(null);
-  const commandWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastManualToggleTargetRef = useRef<boolean | null>(null);
+  // Ad interruption (owned by pauseForAd/resumeAfterAd only).
   const wasPlayingBeforeAdRef = useRef(false);
+  const adPausedAtEpochRef = useRef(-1);
 
-  const clearCommandWatchdog = useCallback(() => {
-    if (commandWatchdogRef.current) {
-      clearTimeout(commandWatchdogRef.current);
-      commandWatchdogRef.current = null;
-    }
-  }, []);
-
-  // ── Autoplay bootstrap refs ─────────────────────────────────────────────
-  // ONE deterministic bootstrap per video. Self-disables after firing.
-  const autoplayBootstrapDoneRef = useRef(false);
-  const autoplayBootstrapRunningRef = useRef(false);
-  // Incremented on every cancel (video change, manual pause). The bootstrap
-  // captures the value at start and bails if it changes, so a stale async
-  // seek cannot issue a Play command after the user pressed Pause.
-  const bootstrapIntentRef = useRef(0);
+  // Manual pause intent, so a video change preserves the user's pause.
+  const userPausedRef = useRef(false);
 
   // Callback refs
   const onEndRef = useRef(onEnd);
@@ -163,9 +155,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   useEffect(() => { onProgressChangeRef.current = onProgressChange; }, [onProgressChange]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
-  useEffect(() => { playerReadyRef.current = playerReady; }, [playerReady]);
-  useEffect(() => { playerErrorRef.current = playerError; }, [playerError]);
-  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { isSeekingRef.current = isSeeking; }, [isSeeking]);
 
   useEffect(() => {
@@ -173,42 +162,13 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Clear any pending command watchdog on unmount.
-  useEffect(() => {
-    return () => clearCommandWatchdog();
-  }, [clearCommandWatchdog]);
-
-  // ── requestPlayState — the single entry point for play/pause ──────────
-  // The `play` prop (playerPlayCommand) is the ONLY play/pause channel:
-  // react-native-youtube-iframe@2.4.1 exposes no playVideo/pauseVideo ref
-  // methods (verified in its source) — commands are delivered by toggling
-  // the prop, which the library forwards to the WebView.
-  const requestPlayState = useCallback(async (newState: boolean) => {
-    if (!mountedRef.current) return;
-    console.log(newState ? '[Playback] request play' : '[Playback] request pause');
-    desiredPlayRef.current = newState;
-    lastRequestedStateRef.current = newState;
-
-    if (Platform.OS === 'web') {
-      postMessageToWebPlayerRef.current?.(newState ? 'playVideo' : 'pauseVideo');
-      return;
-    }
-
-    setPlayerPlayCommand(newState);
-  }, []);
-
-  // Diagnostic: the authoritative play prop must visibly transition on every command.
-  useEffect(() => {
-    console.log('[Playback Prop] playerPlayCommand:', playerPlayCommand);
-  }, [playerPlayCommand]);
-
   // ── Progress tracking ───────────────────────────────────────────────────
   const startProgressTracking = useCallback(() => {
     if (progressInterval.current) {
       clearInterval(progressInterval.current);
     }
     progressInterval.current = setInterval(() => {
-      if (playerRef.current && !isSeekingRef.current && playerReadyRef.current && mountedRef.current) {
+      if (playerRef.current && !isSeekingRef.current && webViewReadyRef.current && mountedRef.current) {
         try {
           if (typeof playerRef.current.getCurrentTime === 'function') {
             const timePromise = playerRef.current.getCurrentTime();
@@ -233,65 +193,136 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
+      }
+    };
+  }, []);
+
+  // ── Intent application — the ONLY writer of wantPlaying ─────────────────
+  const applyWantPlaying = useCallback((next: boolean) => {
+    console.log('[Playback] wantPlaying ->', next);
+    wantPlayingRef.current = next;
+    setWantPlaying(next);
+  }, []);
+
+  // ONE controlled prop edge (true -> false -> true) for the rare case the
+  // WebView ignored a command while the play prop already equals intent.
+  // Cancellation: epoch guard, mount guard, and user-intent guard.
+  const reissuePlayCommand = useCallback(() => {
+    const epoch = videoEpochRef.current;
+    console.log('[Playback] re-issuing play command via prop edge');
+    setWantPlaying(false);
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      if (videoEpochRef.current !== epoch) return;
+      if (wantPlayingRef.current !== true) return;
+      setWantPlaying(true);
+    }, 150);
+  }, []);
+
+  // ── ONE-SHOT autoplay bootstrap per video ───────────────────────────────
+  // A single silent 0 -> 1 -> 0 seek right after the video is accepted,
+  // historically required to activate iOS autoplay. It only ever STARTS
+  // playback once; it is not a playback state manager and it can never run
+  // after a manual pause or after the video has changed.
+  const scheduleAutoplayBootstrap = useCallback(() => {
+    if (Platform.OS === 'web') return;
+    if (!autoplay) return;
+    if (bootstrapDoneRef.current) return;
+    bootstrapDoneRef.current = true;
+    const epoch = videoEpochRef.current;
+
+    setTimeout(() => {
+      if (!mountedRef.current) return;
+      if (videoEpochRef.current !== epoch) return;   // video changed
+      if (!webViewReadyRef.current) return;
+      if (!wantPlayingRef.current) return;           // ad pause / no autoplay
+      if (userPausedRef.current) return;             // manual pause wins
+      if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+
+      console.log('[Playback] autoplay bootstrap seek');
+      try {
+        const first = playerRef.current.seekTo(1, true);
+        const back = () => {
+          if (mountedRef.current && videoEpochRef.current === epoch) {
+            try { void playerRef.current?.seekTo(0, true); } catch {}
+          }
+        };
+        if (first && typeof first.then === 'function') first.then(back).catch(() => {});
+        else back();
+      } catch (e) {
+        console.log('[Playback] bootstrap seek failed', e);
+      }
+    }, 350);
+  }, [autoplay]);
+
+  // ── Manual play/pause commands (shared by UI button and handle) ─────────
+  const playNow = useCallback(() => {
+    if (!webViewReadyRef.current) return;
+    if (actualPlayingRef.current) return;
+    userPausedRef.current = false;
+    const hadIntent = wantPlayingRef.current;
+    applyWantPlaying(true);
+    // The prop already equalled intent (e.g. a post-ad WebView that ignored
+    // the command) — force ONE controlled edge so the command is delivered.
+    if (hadIntent) reissuePlayCommand();
+  }, [applyWantPlaying, reissuePlayCommand]);
+
+  const pauseNow = useCallback(() => {
+    if (!webViewReadyRef.current) return;
+    userPausedRef.current = true;
+    applyWantPlaying(false);
+  }, [applyWantPlaying]);
+
   // ── Imperative handle ──────────────────────────────────────────────────
+  // Gated ONLY on WebView lifetime readiness — never on per-video loading,
+  // never on transient errors.
   useImperativeHandle(ref, () => ({
     togglePlay: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) {
-        console.log('Player not ready for toggle');
-        return;
-      }
-      const newState = !isPlayingRef.current;
-      console.log('Ref togglePlay:', isPlayingRef.current, '->', newState);
-      void requestPlayState(newState);
+      if (actualPlayingRef.current) pauseNow();
+      else playNow();
     },
-    play: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) return;
-      if (isPlayingRef.current) return;
-      requestPlayState(true);
-    },
-    pause: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) return;
-      if (!isPlayingRef.current) return;
-      requestPlayState(false);
-    },
+    play: playNow,
+    pause: pauseNow,
     pauseForAd: () => {
       // Capture intent BEFORE pausing. Includes the not-yet-started
       // autoplay case so an ad shown during startup still resumes.
       wasPlayingBeforeAdRef.current =
-        isPlayingRef.current ||
-        desiredPlayRef.current ||
-        (autoplay && !videoHasPlayedRef.current && !manualPauseRef.current);
-      pausedAtVideoEpochRef.current = videoEpochRef.current;
-      bootstrapIntentRef.current++;
-      autoplayBootstrapRunningRef.current = false;
-      void requestPlayState(false);
+        actualPlayingRef.current || wantPlayingRef.current;
+      adPausedAtEpochRef.current = videoEpochRef.current;
+      applyWantPlaying(false);
+      // An ad pause is NOT user intent — userPausedRef is untouched.
     },
     resumeAfterAd: () => {
-      if (!playerReadyRef.current || playerErrorRef.current) return;
-      // An ad that spanned a video change must never resume/pause the
-      // newer speech — the new video's own autoplay logic owns it.
-      if (pausedAtVideoEpochRef.current !== videoEpochRef.current) return;
-      // A manual pause before/during the ad is never overridden.
-      if (manualPauseRef.current) return;
-      const shouldResume = wasPlayingBeforeAdRef.current || desiredPlayRef.current;
-      if (shouldResume) {
-        requestPlayState(true);
-      }
+      const shouldResume = wasPlayingBeforeAdRef.current;
+      const adEpoch = adPausedAtEpochRef.current;
+      wasPlayingBeforeAdRef.current = false;
+      adPausedAtEpochRef.current = -1;
+      if (!shouldResume) return;
+      if (!webViewReadyRef.current) return;
+      if (adEpoch !== videoEpochRef.current) return; // ad spanned a video change
+      if (userPausedRef.current) return;             // user paused during the ad
+      // Edge guaranteed: pauseForAd set the prop to false.
+      applyWantPlaying(true);
     },
     seekForward: (seconds = 15) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
+      if (!webViewReadyRef.current || !playerRef.current) return;
       const newPos = Math.min(currentTimeRef.current + seconds, durationRef.current);
       void playerRef.current.seekTo(newPos, true);
       setCurrentTime(newPos);
     },
     seekBackward: (seconds = 15) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
+      if (!webViewReadyRef.current || !playerRef.current) return;
       const newPos = Math.max(currentTimeRef.current - seconds, 0);
       void playerRef.current.seekTo(newPos, true);
       setCurrentTime(newPos);
     },
     seekTo: async (position: number) => {
-      if (!playerReadyRef.current || !playerRef.current) return;
+      if (!webViewReadyRef.current || !playerRef.current) return;
       try {
         await playerRef.current.seekTo(position, true);
         setCurrentTime(position);
@@ -299,12 +330,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         console.error('Error seeking:', err);
       }
     },
-    getIsPlaying: () => isPlayingRef.current,
-  }), [autoplay, requestPlayState, stopProgressTracking]);
+    getIsPlaying: () => actualPlayingRef.current,
+  }), [playNow, pauseNow, applyWantPlaying, reissuePlayCommand]);
 
   // ── Pulse animation ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (isPlaying) {
+    if (actualPlaying) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.04, duration: 2000, useNativeDriver: true }),
@@ -315,235 +346,132 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       pulseAnim.stopAnimation();
       Animated.timing(pulseAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     }
-  }, [isPlaying, pulseAnim]);
+  }, [actualPlaying, pulseAnim]);
 
-  // ── Cleanup on unmount ──────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (progressInterval.current) {
-        clearInterval(progressInterval.current);
-        progressInterval.current = null;
-      }
-    };
-  }, []);
-
-  // ── Video change: reset PER-VIDEO state, keep WebView readiness ───────
-  // onReady fires only once per WebView (first video). Resetting
-  // playerReady on every video change was the root cause of the
-  // permanently dead player after a speech change — once the WebView
-  // is ready it stays ready, and controls must stay usable.
+  // ── Video change: reset PER-VIDEO state only ────────────────────────────
+  // webViewReady / wantPlaying intent survive; a second onReady is never
+  // required, so controls can never lock up across speeches.
   useEffect(() => {
     console.log('[Playback] videoId changed:', videoId);
-    activeVideoIdRef.current = videoId;
     videoEpochRef.current++;
     videoChangedAtRef.current = Date.now();
-    videoHasPlayedRef.current = false;
-    wasPlayingBeforeAdRef.current = false;
-    pausedAtVideoEpochRef.current = -1;
-    manualPauseRef.current = false;
-    lastManualToggleTargetRef.current = null;
-    clearCommandWatchdog();
     onEndCalledRef.current = false;
-    isPlayingRef.current = false;
-    autoplayBootstrapDoneRef.current = false;
-    autoplayBootstrapRunningRef.current = false;
-    bootstrapIntentRef.current++; // cancel any in-flight bootstrap
+    bootstrapDoneRef.current = false;
+    wasPlayingBeforeAdRef.current = false;
+    adPausedAtEpochRef.current = -1;
+    stopProgressTracking();
 
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-      progressInterval.current = null;
-    }
-
-    // Autoplay intent for the NEW video (Next/Previous/opening a speech).
-    // The library reads the play prop at video-change time to choose
-    // loadVideoById (autoplay) vs cueVideoById.
-    const autoplayIntent = Boolean(autoplay);
-    desiredPlayRef.current = autoplayIntent;
-    setPlayerPlayCommand(autoplayIntent);
-    setIsPlaying(false);
+    actualPlayingRef.current = false;
+    setActualPlaying(false);
     setCurrentTime(0);
+    currentTimeRef.current = 0;
+    setDuration(0);
+    durationRef.current = 0;
     setError(null);
-    setIsLoading(true);
-    setPlayerError(false);
-    playerErrorRef.current = false;
+    setVideoLoading(true);
 
-    if (webViewEverReadyRef.current) {
-      // WebView already initialized — it stays ready for every video.
-      setPlayerReady(true);
-      playerReadyRef.current = true;
-    } else {
-      // First video: wait for onReady.
-      setPlayerReady(false);
-      playerReadyRef.current = false;
+    // Deterministic autoplay intent for the NEW video (Part: Next must
+    // always recover). The user's manual pause is preserved; anything else
+    // that was playing (or autoplay) keeps playing.
+    if (userPausedRef.current) {
+      applyWantPlaying(false);
+    } else if (autoplay || wantPlayingRef.current) {
+      applyWantPlaying(true);
+      if (webViewReadyRef.current) {
+        scheduleAutoplayBootstrap();
+      }
     }
 
-    if (videoId) {
-      const fetchVideoMetadata = async () => {
-        try {
-          console.log('[Playback] metadata loading for:', videoId);
-          const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
-          if (!apiKey) {
-            console.log('[Playback] No YouTube API key, using props');
-            if (mountedRef.current) setIsLoading(false);
-            return;
-          }
+    if (!videoId) return;
 
-          const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-          detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
-          detailsUrl.searchParams.set('id', videoId);
-          detailsUrl.searchParams.set('key', apiKey);
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch(detailsUrl.toString(), { signal: controller.signal });
-          clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            console.warn('[Metadata] YouTube API error:', response.status);
-            return;
-          }
-
-          const data = await response.json();
-
-          if (!data.items || data.items.length === 0) {
-            console.warn('[Metadata] Video not found:', videoId);
-            return;
-          }
-
-          const video = data.items[0];
-
-          const parseDuration = (dur: string): number => {
-            const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-            if (!match) return 0;
-            const hours = parseInt(match[1] || '0');
-            const minutes = parseInt(match[2] || '0');
-            const seconds = parseInt(match[3] || '0');
-            return hours * 3600 + minutes * 60 + seconds;
-          };
-
-          const videoDuration = parseDuration(video.contentDetails.duration);
-          if (mountedRef.current && videoDuration > 0) {
-            setDuration(videoDuration);
-            durationRef.current = videoDuration;
-          }
-
-          if (mountedRef.current) {
-            setMetadata({
-              id: video.id,
-              title: video.snippet.title,
-              description: video.snippet.description || '',
-              thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
-              channelTitle: video.snippet.channelTitle,
-              duration: videoDuration,
-              viewCount: parseInt(video.statistics.viewCount || '0'),
-              publishedAt: video.snippet.publishedAt,
-            });
-          }
-
-          console.log('[Playback] metadata loaded:', video.snippet.title);
-        } catch (err: any) {
-          if (err?.name === 'AbortError') {
-            console.warn('[Playback] metadata fetch timed out, using props');
-          } else {
-            console.warn('[Playback] metadata fetch failed, using props:', err?.message);
-          }
-          if (mountedRef.current) {
-            setIsLoading(false);
-          }
+    const fetchVideoMetadata = async () => {
+      try {
+        const apiKey = process.env.EXPO_PUBLIC_YOUTUBE_API_KEY;
+        if (!apiKey) {
+          console.log('[Playback] No YouTube API key, using props');
+          if (mountedRef.current) setVideoLoading(false);
+          return;
         }
-      };
 
-      void fetchVideoMetadata();
-    }
-  }, [videoId]);
+        const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+        detailsUrl.searchParams.set('part', 'snippet,contentDetails,statistics');
+        detailsUrl.searchParams.set('id', videoId);
+        detailsUrl.searchParams.set('key', apiKey);
 
-  // ── ONE-SHOT autoplay bootstrap ─────────────────────────────────────────
-  // Fires once per video after onPlayerReady. Performs a silent seek 0->1->0
-  // to activate the native player, then issues a play command. Self-disables
-  // via autoplayBootstrapDoneRef so it never runs again for that video.
-  // If the user presses Pause while the bootstrap is in flight, the intent
-  // ref is incremented and the async work bails out — no stale Play command.
-  const runAutoplayBootstrap = useCallback(async () => {
-    if (Platform.OS === 'web') return;
-    if (!autoplay) return;
-    if (autoplayBootstrapDoneRef.current) return;
-    if (autoplayBootstrapRunningRef.current) return;
-    if (manualPauseRef.current) return;
-    if (!mountedRef.current) return;
-    if (activeVideoIdRef.current !== videoId) return;
-    if (!playerRef.current || typeof playerRef.current.seekTo !== 'function') return;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    autoplayBootstrapRunningRef.current = true;
-    autoplayBootstrapDoneRef.current = true; // lock — never run again for this video
-    const intent = bootstrapIntentRef.current;
-    desiredPlayRef.current = true;
+        const response = await fetch(detailsUrl.toString(), { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-    console.log('[Autoplay Bootstrap] start');
+        if (!response.ok) {
+          console.warn('[Metadata] YouTube API error:', response.status);
+          return;
+        }
 
-    // Step 1: Issue initial play command
-    await requestPlayState(true);
+        const data = await response.json();
 
-    // Step 2: Silent seek 0 -> 1 -> 0 to activate the player
-    try {
-      const maxSeek = Math.max(durationRef.current - 0.1, 1);
-      const forward = Math.min(1, maxSeek);
+        if (!data.items || data.items.length === 0) {
+          console.warn('[Metadata] Video not found:', videoId);
+          return;
+        }
 
-      await playerRef.current.seekTo(forward, true);
-      console.log('[Autoplay Bootstrap] seek 0 -> 1');
+        const video = data.items[0];
 
-      // Wait briefly for the seek to register
-      await new Promise(resolve => setTimeout(resolve, 120));
+        const parseDuration = (dur: string): number => {
+          const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+          if (!match) return 0;
+          const hours = parseInt(match[1] || '0');
+          const minutes = parseInt(match[2] || '0');
+          const seconds = parseInt(match[3] || '0');
+          return hours * 3600 + minutes * 60 + seconds;
+        };
 
-      // Bail if cancelled (video change, manual pause, unmount)
-      if (
-        bootstrapIntentRef.current !== intent ||
-        !mountedRef.current ||
-        activeVideoIdRef.current !== videoId ||
-        manualPauseRef.current
-      ) {
-        console.log('[Autoplay Bootstrap] cancelled before return seek');
-        autoplayBootstrapRunningRef.current = false;
-        return;
+        const videoDuration = parseDuration(video.contentDetails.duration);
+        if (mountedRef.current && videoDuration > 0) {
+          setDuration(videoDuration);
+          durationRef.current = videoDuration;
+        }
+
+        if (mountedRef.current) {
+          setMetadata({
+            id: video.id,
+            title: video.snippet.title,
+            description: video.snippet.description || '',
+            thumbnail: video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default.url,
+            channelTitle: video.snippet.channelTitle,
+            duration: videoDuration,
+            viewCount: parseInt(video.statistics.viewCount || '0'),
+            publishedAt: video.snippet.publishedAt,
+          });
+          // Success path must also clear the per-video loading state —
+          // relying on a second onReady here was the permanent-lock bug.
+          setVideoLoading(false);
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          console.warn('[Playback] metadata fetch timed out, using props');
+        } else {
+          console.warn('[Playback] metadata fetch failed, using props:', err?.message);
+        }
+        if (mountedRef.current) {
+          setVideoLoading(false);
+        }
       }
+    };
 
-      await playerRef.current.seekTo(0, true);
-      setCurrentTime(0);
-      console.log('[Autoplay Bootstrap] seek 0 -> 1 -> 0');
-
-      // Bail if cancelled after return seek
-      if (
-        bootstrapIntentRef.current !== intent ||
-        !mountedRef.current ||
-        activeVideoIdRef.current !== videoId ||
-        manualPauseRef.current
-      ) {
-        console.log('[Autoplay Bootstrap] cancelled after return seek');
-        autoplayBootstrapRunningRef.current = false;
-        return;
-      }
-
-      // Step 3: Re-affirm play
-      await requestPlayState(true);
-      console.log('[Autoplay Bootstrap] complete');
-    } catch (e) {
-      console.log('[Autoplay Bootstrap] failed:', e);
-    }
-
-    autoplayBootstrapRunningRef.current = false;
-  }, [autoplay, videoId, requestPlayState]);
+    void fetchVideoMetadata();
+  }, [videoId, autoplay, applyWantPlaying, scheduleAutoplayBootstrap, stopProgressTracking]);
 
   // ── Player ready handler (native) ────────────────────────────────────────
+  // Fires ONCE per WebView load. Marks the WebView as ready FOR LIFE.
   const onPlayerReady = useCallback(() => {
     if (!mountedRef.current) return;
     console.log('[Playback] YouTube onReady fired for:', videoId);
-    webViewEverReadyRef.current = true;
-    setPlayerReady(true);
-    playerReadyRef.current = true;
-    setPlayerError(false);
-    playerErrorRef.current = false;
+    webViewReadyRef.current = true;
+    setWebViewReady(true);
     setError(null);
-    setIsLoading(false);
+    setVideoLoading(false);
 
     try {
       if (playerRef.current && typeof playerRef.current.getDuration === 'function') {
@@ -556,80 +484,58 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
     } catch {}
 
-    // ONE bootstrap per video — nothing else
-    if (autoplay && !manualPauseRef.current) {
-      void runAutoplayBootstrap();
-    }
-  }, [autoplay, videoId, runAutoplayBootstrap]);
+    scheduleAutoplayBootstrap();
+  }, [videoId, scheduleAutoplayBootstrap]);
 
   // ── Player error handler ────────────────────────────────────────────────
+  // Only a WebView that has NEVER been ready can fail fatally. Once the
+  // WebView has worked, every later iframe error is transient (typically an
+  // ad suspending the WebView) and must never disable controls.
   const onPlayerError = useCallback((errorMsg: string) => {
     console.error('[Playback] YouTube player error:', errorMsg);
     if (!mountedRef.current) return;
 
-    const isErrorEmbeddable = EMBEDDING_ERROR_CODES.has(parseInt(errorMsg, 10));
-    const isRestrictionError =
-      isErrorEmbeddable || errorMsg.includes('embed') || errorMsg.includes('restricted');
-
-    // A video/WebView that already reached ready or playing must remain
-    // recoverable: transient post-ad/WebView errors are logged and cleared
-    // WITHOUT disabling controls. Only a TRUE initial load failure (WebView
-    // never ready, or a restriction error on a video that never played) is
-    // treated as a real error.
-    const isInitialLoadFailure =
-      !webViewEverReadyRef.current || (isRestrictionError && !videoHasPlayedRef.current);
-
-    if (isInitialLoadFailure) {
-      setPlayerError(true);
-      playerErrorRef.current = true;
-      bootstrapIntentRef.current++; // cancel bootstrap
-      autoplayBootstrapRunningRef.current = false;
-      desiredPlayRef.current = false;
-      setPlayerPlayCommand(false);
-      setIsPlaying(false);
-      isPlayingRef.current = false;
-      setIsLoading(false);
+    if (!webViewReadyRef.current) {
+      // Genuine initial failure — fatal, but a NEW video still recovers.
       setError(errorMsg);
-      onErrorRef.current?.(errorMsg);
+      actualPlayingRef.current = false;
+      setActualPlaying(false);
+      onPlayingChangeRef.current?.(false);
       stopProgressTracking();
+      onErrorRef.current?.(errorMsg);
       return;
     }
 
-    // Transient error (typically fired when a full-screen ad suspends the
-    // WebView): keep every control alive and just stop progress polling.
     console.log('[Playback] transient player error ignored (player stays usable):', errorMsg);
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    onPlayingChangeRef.current?.(false);
+    if (actualPlayingRef.current) {
+      actualPlayingRef.current = false;
+      setActualPlaying(false);
+      onPlayingChangeRef.current?.(false);
+    }
     stopProgressTracking();
   }, [stopProgressTracking]);
 
-  // ── State change handler — AUTHORITATIVE for isPlayingRef ───────────────
-  // Only this callback sets isPlayingRef. It NEVER issues new playback commands.
-  const onStateChange = useCallback((state: string) => {
+  // ── State change handler — AUTHORITATIVE for actualPlaying only ─────────
+  // This callback NEVER issues playback commands and NEVER writes the play
+  // prop: intent (wantPlaying) and reality (actualPlaying) stay independent.
+  const onStateChange = useCallback((state: PlayerState) => {
     if (!mountedRef.current) return;
     console.log('[Playback] YouTube state:', state);
-    console.log('[Manual Playback] YouTube state:', state);
 
     if (state === 'playing') {
-      videoHasPlayedRef.current = true;
-      isPlayingRef.current = true;
-      setPlayerPlayCommand(true); // keep the play prop in sync with reality
-      setIsPlaying(true);
-      setIsLoading(false);
+      actualPlayingRef.current = true;
+      setActualPlaying(true);
+      setVideoLoading(false);
       onPlayingChangeRef.current?.(true);
-      console.log('[Playback] actual state playing');
       startProgressTracking();
       return;
     }
 
     if (state === 'paused') {
-      isPlayingRef.current = false;
-      setPlayerPlayCommand(false); // prop reflects actual state (proven 08dce452 behavior)
-      setIsPlaying(false);
-      setIsLoading(false);
+      actualPlayingRef.current = false;
+      setActualPlaying(false);
+      setVideoLoading(false);
       onPlayingChangeRef.current?.(false);
-      console.log('[Playback] actual state paused');
       stopProgressTracking();
       return;
     }
@@ -643,13 +549,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       }
       if (onEndCalledRef.current) return;
       onEndCalledRef.current = true;
-      isPlayingRef.current = false;
-      desiredPlayRef.current = false;
-      setPlayerPlayCommand(false);
-      setIsPlaying(false);
+      actualPlayingRef.current = false;
+      setActualPlaying(false);
       onPlayingChangeRef.current?.(false);
       stopProgressTracking();
-      console.log('[Playback] video ended');
+      // wantPlaying intentionally stays true: the next speech autoplays.
       setTimeout(() => {
         if (mountedRef.current) {
           onEndRef.current?.();
@@ -659,109 +563,49 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     }
 
     if (state === 'buffering') {
-      console.log('[Playback] buffering');
-      setIsLoading(false);
+      setVideoLoading(true);
       stopProgressTracking();
+    }
+
+    if (state === 'unstarted') {
+      setVideoLoading(false);
     }
   }, [startProgressTracking, stopProgressTracking]);
 
-  // ── Manual play/pause button ───────────────────────────────────────────────
-  // Restored from working commit 08dce452: manual target toggle +
-  // imperative command watchdog. No manual seek workarounds.
+  // ── Manual play/pause button ────────────────────────────────────────────
+  // Pure intent: flip wantPlaying. The prop edge carries the command.
   const handlePlayPause = useCallback(() => {
-  if (playerError || !playerReady) {
-    console.log('Player not ready for play/pause');
-    return;
-  }
-
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-  // Restore proven manual toggle behavior from 71dd741:
-  // toggle from the actual current player state.
-  const nextState = !isPlayingRef.current;
-
-  lastManualToggleTargetRef.current = nextState;
-
-  console.log(
-    'Manual play/pause:',
-    isPlayingRef.current,
-    '->',
-    nextState
-  );
-
-  // User intent always wins over the one-shot autoplay bootstrap.
-  bootstrapIntentRef.current++;
-  autoplayBootstrapRunningRef.current = false;
-
-  desiredPlayRef.current = nextState;
-  lastRequestedStateRef.current = nextState;
-  manualPauseRef.current = !nextState;
-
-  // Restore the direct state/prop transition from 71dd741.
-  isPlayingRef.current = nextState;
-  setPlayerPlayCommand(nextState);
-  setIsPlaying(nextState);
-  onPlayingChangeRef.current?.(nextState);
-
-  void requestPlayState(nextState);
-
-  clearCommandWatchdog();
-  // If the WebView ignored the command (e.g. just returned from an ad),
-  // re-issue it through the play prop: a quick off→on toggle makes the
-  // library deliver a fresh playVideo/pauseVideo to the WebView.
-  commandWatchdogRef.current = setTimeout(() => {
-    if (!mountedRef.current) return;
-
-    const actual = isPlayingRef.current;
-
-    if (actual !== nextState) {
-      console.log('[PlayPause] Watchdog: re-issuing command via play prop');
-      setPlayerPlayCommand(!nextState);
-      setTimeout(() => {
-        if (mountedRef.current) setPlayerPlayCommand(nextState);
-      }, 120);
-    }
-  }, 600);
-
-  if (!nextState) {
-    stopProgressTracking();
-  } else {
-    startProgressTracking();
-  }
-}, [
-  playerError,
-  playerReady,
-  clearCommandWatchdog,
-  requestPlayState,
-  stopProgressTracking,
-  startProgressTracking,
-]);
+    if (!webViewReadyRef.current) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (actualPlayingRef.current) pauseNow();
+    else playNow();
+  }, [pauseNow, playNow]);
 
   const handleSkipForward = useCallback(async () => {
-    if (!playerReadyRef.current || !playerRef.current) return;
+    if (!webViewReadyRef.current || !playerRef.current) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      const newPosition = Math.min(currentTimeRef.current + 15, duration);
+      const newPosition = Math.min(currentTimeRef.current + 15, durationRef.current);
       await playerRef.current.seekTo(newPosition, true);
       setCurrentTime(newPosition);
-      onProgressChangeRef.current?.(newPosition, duration);
+      onProgressChangeRef.current?.(newPosition, durationRef.current);
     } catch (err) {
       console.error('Error skipping forward:', err);
     }
-  }, [duration]);
+  }, []);
 
   const handleSkipBackward = useCallback(async () => {
-    if (!playerReadyRef.current || !playerRef.current) return;
+    if (!webViewReadyRef.current || !playerRef.current) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const newPosition = Math.max(currentTimeRef.current - 15, 0);
       await playerRef.current.seekTo(newPosition, true);
       setCurrentTime(newPosition);
-      onProgressChangeRef.current?.(newPosition, duration);
+      onProgressChangeRef.current?.(newPosition, durationRef.current);
     } catch (err) {
       console.error('Error skipping backward:', err);
     }
-  }, [duration]);
+  }, []);
 
   const handleNext = useCallback(() => {
     if (!onNext) return;
@@ -776,21 +620,21 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
   }, [onPrevious]);
 
   const handleSliderChange = useCallback((value: number) => {
-    if (!playerReadyRef.current) return;
+    if (!webViewReadyRef.current) return;
     setCurrentTime(value);
   }, []);
 
   const handleSliderComplete = useCallback(async (value: number) => {
-    if (!playerReadyRef.current || !playerRef.current) return;
+    if (!webViewReadyRef.current || !playerRef.current) return;
     try {
       await playerRef.current.seekTo(value, true);
       setIsSeeking(false);
-      onProgressChangeRef.current?.(value, duration);
+      onProgressChangeRef.current?.(value, durationRef.current);
     } catch (err) {
       console.error('Error seeking:', err);
       setIsSeeking(false);
     }
-  }, [duration]);
+  }, []);
 
   // ── Web player support ─────────────────────────────────────────────────
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -824,30 +668,26 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         if (data.event === 'onReady') {
           console.log('[Playback] YouTube onReady fired (web) for:', videoId);
           if (!mountedRef.current) return;
-          setPlayerReady(true);
-          playerReadyRef.current = true;
-          setPlayerError(false);
-          playerErrorRef.current = false;
+          webViewReadyRef.current = true;
+          setWebViewReady(true);
           setError(null);
-          setIsLoading(false);
+          setVideoLoading(false);
 
           if (autoplay && !webAutoplayTriggeredRef.current) {
             webAutoplayTriggeredRef.current = true;
-            desiredPlayRef.current = true;
+            applyWantPlaying(true);
             setTimeout(() => {
               if (mountedRef.current) {
                 postMessageToWebPlayer('playVideo');
-                setPlayerPlayCommand(true);
               }
             }, 300);
           }
         } else if (data.event === 'onStateChange') {
           const stateCode = data.info;
           if (stateCode === 1) { // playing
-            isPlayingRef.current = true;
-            setIsPlaying(true);
+            actualPlayingRef.current = true;
+            setActualPlaying(true);
             onPlayingChangeRef.current?.(true);
-            console.log('[Playback] actual state playing');
             if (!webProgressIntervalRef.current) {
               webProgressIntervalRef.current = setInterval(() => {
                 postMessageToWebPlayer('getCurrentTime');
@@ -855,13 +695,12 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
               }, 500);
             }
           } else if (stateCode === 2) { // paused
-            isPlayingRef.current = false;
-            setIsPlaying(false);
+            actualPlayingRef.current = false;
+            setActualPlaying(false);
             onPlayingChangeRef.current?.(false);
-            console.log('[Playback] actual state paused');
           } else if (stateCode === 0) { // ended
-            isPlayingRef.current = false;
-            setIsPlaying(false);
+            actualPlayingRef.current = false;
+            setActualPlaying(false);
             onPlayingChangeRef.current?.(false);
             if (webProgressIntervalRef.current) {
               clearInterval(webProgressIntervalRef.current);
@@ -894,7 +733,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         webProgressIntervalRef.current = null;
       }
     };
-  }, [videoId, autoplay, postMessageToWebPlayer]);
+  }, [videoId, autoplay, postMessageToWebPlayer, applyWantPlaying]);
 
   // Reset web autoplay trigger on video change
   useEffect(() => {
@@ -925,7 +764,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         videoId={videoId}
         height={NATIVE_PLAYER_SIZE}
         width={NATIVE_PLAYER_SIZE}
-        play={playerPlayCommand}
+        play={wantPlaying}
+        mute={false}
+        volume={100}
         forceAndroidAutoplay={true}
         onReady={onPlayerReady}
         onError={onPlayerError}
@@ -956,22 +797,9 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
     );
   }
 
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        {hiddenPlayerElement}
-        <View style={styles.coverImageContainer}>
-          <Image source={{ uri: coverImageUrl }} style={styles.coverImage} blurRadius={2} />
-          <View style={styles.coverOverlay}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          </View>
-        </View>
-        <Text style={styles.loadingText}>Loading audio...</Text>
-      </View>
-    );
-  }
-
-  if (error && !metadata && playerError) {
+  // Fatal: the WebView never became ready. The hidden player stays mounted,
+  // so moving to another speech (Next) still recovers.
+  if (error) {
     return (
       <View style={styles.container}>
         {hiddenPlayerElement}
@@ -991,14 +819,16 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
       <Animated.View style={[styles.coverImageContainer, { transform: [{ scale: pulseAnim }] }]}>
         <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
         <View style={styles.coverGradient}>
-          {isPlaying && (
+          {actualPlaying ? (
             <View style={styles.nowPlayingIndicator}>
               <View style={[styles.soundBar, styles.soundBar1]} />
               <View style={[styles.soundBar, styles.soundBar2]} />
               <View style={[styles.soundBar, styles.soundBar3]} />
               <View style={[styles.soundBar, styles.soundBar4]} />
             </View>
-          )}
+          ) : videoLoading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : null}
         </View>
       </Animated.View>
 
@@ -1013,7 +843,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
         <Slider
           style={styles.slider}
           minimumValue={0}
-          maximumValue={duration}
+          maximumValue={Math.max(duration, 1)}
           value={currentTime}
           onValueChange={handleSliderChange}
           onSlidingStart={() => setIsSeeking(true)}
@@ -1021,7 +851,7 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           minimumTrackTintColor="#667eea"
           maximumTrackTintColor="rgba(255,255,255,0.2)"
           thumbTintColor="#FFFFFF"
-          disabled={!playerReady}
+          disabled={!webViewReady}
         />
         <View style={styles.timeRow}>
           <Text style={styles.timeText}>{formatDuration(currentTime)}</Text>
@@ -1041,8 +871,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
         <TouchableOpacity
           onPress={() => void handleSkipBackward()}
-          style={[styles.seekButton, !playerReady && styles.buttonDisabled]}
-          disabled={!playerReady}
+          style={[styles.seekButton, !webViewReady && styles.buttonDisabled]}
+          disabled={!webViewReady}
           activeOpacity={0.7}
         >
           <RotateCcw size={20} color="#FFFFFF" />
@@ -1053,11 +883,11 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           onPress={handlePlayPause}
           style={styles.playButton}
           activeOpacity={0.8}
-          disabled={!playerReady || playerError}
+          disabled={!webViewReady}
         >
-          {!playerReady ? (
+          {!webViewReady ? (
             <ActivityIndicator size="small" color="#000000" />
-          ) : isPlaying ? (
+          ) : actualPlaying ? (
             <Pause size={32} color="#000000" fill="#000000" />
           ) : (
             <Play size={32} color="#000000" fill="#000000" style={{ marginLeft: 3 }} />
@@ -1066,8 +896,8 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
 
         <TouchableOpacity
           onPress={() => void handleSkipForward()}
-          style={[styles.seekButton, !playerReady && styles.buttonDisabled]}
-          disabled={!playerReady}
+          style={[styles.seekButton, !webViewReady && styles.buttonDisabled]}
+          disabled={!webViewReady}
           activeOpacity={0.7}
         >
           <RotateCw size={20} color="#FFFFFF" />
@@ -1083,12 +913,6 @@ const AudioOnlyVideoPlayer = forwardRef<AudioOnlyVideoPlayerRef, AudioOnlyVideoP
           <SkipForward size={22} color="#FFFFFF" fill="#FFFFFF" />
         </TouchableOpacity>
       </View>
-
-      {playerError && (
-        <View style={styles.fallbackButton}>
-          <Text style={styles.fallbackText}>Audio playback issue - try next speech</Text>
-        </View>
-      )}
     </View>
   );
 });

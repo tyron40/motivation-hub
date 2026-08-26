@@ -23,10 +23,14 @@ import { useIAP } from '@/hooks/iap-context';
 import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
 import { API_ENDPOINTS } from '@/lib/config';
+import { RECORDING_AUDIO_MODE, restorePlaybackAudioSession } from '@/lib/audio-session';
 
 type Role = 'user' | 'assistant';
 type Message = { role: Role; content: string };
-type Phase = 'idle' | 'greeting' | 'recording' | 'processing' | 'speaking';
+// ONE authoritative phase machine. All booleans shown in the UI derive
+// from this single enum; parallel isPlaying/greeting/recording flags that
+// could disagree are gone.
+type Phase = 'idle' | 'recording' | 'processing' | 'speaking';
 
 const voiceOptions = [
   {
@@ -80,7 +84,6 @@ function VoiceCoachContent() {
   const [currentStatus, setCurrentStatus] = useState('Initializing voice coach...');
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
-  const [hasGreeted, setHasGreeted] = useState(false);
   // REAL state (not a ref) so the greeting effect re-runs deterministically
   // once initialization has completed. A ref mutation can never trigger it.
   const [initializationReady, setInitializationReady] = useState(false);
@@ -118,9 +121,7 @@ function VoiceCoachContent() {
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
-  const actionLockRef = useRef(false);
   const conversationRef = useRef<Message[]>([]);
-  const initDoneRef = useRef(false);
   const autoGreetDoneRef = useRef(false);
 
   const trimConversation = useCallback((messages: Message[]) => messages.slice(-10), []);
@@ -192,16 +193,6 @@ function VoiceCoachContent() {
   ]);
 
 
-  const lock = useCallback(() => {
-    if (actionLockRef.current) return false;
-    actionLockRef.current = true;
-    return true;
-  }, []);
-
-  const unlock = useCallback(() => {
-    actionLockRef.current = false;
-  }, []);
-
   const cleanupTemporaryTtsFile = useCallback(async () => {
     const uri = temporaryTtsFileRef.current;
     temporaryTtsFileRef.current = null;
@@ -234,15 +225,9 @@ function VoiceCoachContent() {
     await cleanupTemporaryTtsFile();
   }, [cleanupTemporaryTtsFile]);
 
-  const setPlaybackMode = useCallback(async () => {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    });
-  }, []);
+  // Shared playback-mode restore lives in lib/audio-session and is used by
+  // the speech player as well, so Voice Coach can never leave the global
+  // session in recording mode.
 
   // Single TTS pipeline for greeting AND AI replies: generateTTS ->
   // temp file -> Sound.createAsync -> playAsync. `source` only labels logs.
@@ -261,7 +246,7 @@ function VoiceCoachContent() {
         await stopAndUnloadSound();
 
         // Recording mode must be fully disabled before speaker playback.
-        await setPlaybackMode();
+        await restorePlaybackAudioSession();
 
         // Proven native behavior: allow the iOS/Android audio session to
         // finish switching from microphone mode to speaker playback mode.
@@ -449,7 +434,6 @@ function VoiceCoachContent() {
     [
       profile.preferredVoice,
       stopAndUnloadSound,
-      setPlaybackMode,
       cleanupTemporaryTtsFile,
     ]
   );
@@ -527,7 +511,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     // in-flight processing turn and never a second recorder.
     if (phase === 'recording' || phase === 'processing') return;
     if (recordingStartingRef.current || recordingActiveRef.current) return;
-    if (!lock()) return;
 
     recordingStartingRef.current = true;
     recordingStopRequestedRef.current = false;
@@ -583,13 +566,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       setHasPermission(true);
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      await Audio.setAudioModeAsync(RECORDING_AUDIO_MODE);
 
       const recording = new Audio.Recording();
       await recording.prepareToRecordAsync({
@@ -654,9 +631,8 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       if (!recordingRef.current && !webRecorderRef.current) {
         recordingActiveRef.current = false;
       }
-      unlock();
     }
-  }, [phase, lock, unlock, stopAndUnloadSound]);
+  }, [phase, stopAndUnloadSound]);
 
   const stopRecording = useCallback(async () => {
     // onPressOut may fire before native/web recorder startup has finished.
@@ -690,11 +666,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       await new Promise(resolve =>
         setTimeout(resolve, minimumRecordingMs - elapsedRecordingMs)
       );
-    }
-
-    if (!lock()) {
-      recordingStoppingRef.current = false;
-      return;
     }
 
     try {
@@ -764,7 +735,12 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      await setPlaybackMode();
+
+      // Immediately return the global session to playback mode, then let
+      // it settle before any upload/synthesis — the recorder's category
+      // must never leak into STT/TTS or the rest of the app.
+      await restorePlaybackAudioSession();
+      await new Promise(resolve => setTimeout(resolve, 250));
 
       if (!uri) throw new Error('No audio captured');
 
@@ -822,9 +798,8 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       recordingStopRequestedRef.current = false;
       recordingStoppingRef.current = false;
       recordingStartedAtRef.current = 0;
-      unlock();
     }
-  }, [lock, unlock, setPlaybackMode, getCoachReply]);
+  }, [getCoachReply]);
 
   stopRecordingRef.current = stopRecording;
 
@@ -851,9 +826,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
   }, []);
 
   const doGreeting = useCallback(async () => {
-    if (autoGreetDoneRef.current || hasGreeted) return;
+    // autoGreetDoneRef is ONLY a duplicate-call guard; the deterministic
+    // trigger is the initializationReady state below.
+    if (autoGreetDoneRef.current) return;
     autoGreetDoneRef.current = true;
-    setHasGreeted(true);
 
     if (!mountedRef.current) {
       console.warn('[VoiceCoach] greeting skipped — screen unmounted');
@@ -870,18 +846,14 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       { role: 'assistant', content: greetingText },
     ]);
 
-    setPhase('greeting');
-    setCurrentStatus('Speaking...');
-
     if (profile.voiceEnabled === false) {
-      setPhase('idle');
       setCurrentStatus('Ready to listen');
       return;
     }
 
     console.log('[VoiceCoach] greeting TTS requested');
     await speakText(greetingText, 'greeting');
-  }, [profile.name, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
+  }, [profile.name, profile.voiceEnabled, trimConversation, speakText]);
 
   // Mount-only initialization. Dependencies are intentionally stable
   // (setPlaybackMode and stopAndUnloadSound never change identity) so this
@@ -889,8 +861,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
   // profile change re-rendered the screen.
   useEffect(() => {
     const init = async () => {
-      if (initDoneRef.current) return;
-      initDoneRef.current = true;
       try {
         const perm = await Audio.requestPermissionsAsync();
         setHasPermission(perm.status === 'granted');
@@ -899,7 +869,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       }
 
       try {
-        await setPlaybackMode();
+        await restorePlaybackAudioSession();
       } catch {}
 
       console.log('[VoiceCoach] init complete');
@@ -921,6 +891,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         recordingRef.current = null;
       }
 
+      // Leaving the screen must return the app-wide session to playback
+      // mode — a leaked recording category silences speech everywhere.
+      void restorePlaybackAudioSession();
+
       recordingStartingRef.current = false;
       recordingActiveRef.current = false;
       recordingStopRequestedRef.current = false;
@@ -931,14 +905,15 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       webStreamRef.current = null;
       webRecorderRef.current = null;
     };
-  }, [setPlaybackMode, stopAndUnloadSound]);
+  }, [stopAndUnloadSound]);
 
   // Automatic greeting, exactly once per screen entry. Gated on the
   // initializationReady STATE (not a ref), so the effect is guaranteed to
   // re-run after initialization completes. A short timer lets the audio
   // session settle before the first TTS request.
   useEffect(() => {
-    if (!initializationReady || hasGreeted) return;
+    if (!initializationReady) return;
+    if (autoGreetDoneRef.current) return;
 
     console.log('[VoiceCoach] greeting scheduled');
     const timer = setTimeout(() => {
@@ -946,7 +921,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [initializationReady, hasGreeted, doGreeting]);
+  }, [initializationReady, doGreeting]);
 
 
   useEffect(() => {

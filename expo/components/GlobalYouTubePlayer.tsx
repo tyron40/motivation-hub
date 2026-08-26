@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { Audio } from 'expo-av';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useAdMob } from '@/hooks/admob-context';
+import { restorePlaybackAudioSession } from '@/lib/audio-session';
 import AudioOnlyVideoPlayer from '@/components/AudioOnlyVideoPlayer';
 import type { AudioOnlyVideoPlayerRef } from '@/components/AudioOnlyVideoPlayer';
 
@@ -57,16 +57,10 @@ export default function GlobalYouTubePlayer() {
     adSessionRef.current = false;
   }, [youtubeId]);
 
-  // ── Ensure background audio mode ───────────────────────────────────────
+  // ── Ensure background audio mode (single shared configuration) ────────
   useEffect(() => {
     if (youtubeId && Platform.OS !== 'web') {
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      }).catch(() => {});
+      void restorePlaybackAudioSession();
     }
   }, [youtubeId]);
 
@@ -78,12 +72,22 @@ export default function GlobalYouTubePlayer() {
     }
   }, [youtubeId, canShowAds, tryShowInterstitialOnTransition]);
 
-  // ── Ad pause/resume — single authoritative path via isShowingAd ────────
+  // ── Ad lifecycle — this component is the ONE owner ─────────────────────
+  // Before the ad: the player pauses itself (capturing resume intent).
+  // After the ad fully dismisses: restore the playback audio session ONCE
+  // (full-screen ads interrupt/duck the iOS AVAudioSession and nothing else
+  // restores it), THEN let the player resume. Both sides are idempotent.
+  const prevAdShownRef = useRef(isShowingAd);
   useEffect(() => {
+    if (isShowingAd === prevAdShownRef.current) return;
+    prevAdShownRef.current = isShowingAd;
+
     if (isShowingAd) {
       localPlayerRef.current?.pauseForAd();
     } else {
-      localPlayerRef.current?.resumeAfterAd();
+      void restorePlaybackAudioSession().finally(() => {
+        localPlayerRef.current?.resumeAfterAd();
+      });
     }
   }, [isShowingAd]);
 
@@ -120,9 +124,9 @@ export default function GlobalYouTubePlayer() {
       }
       skipToNext();
     } finally {
-      // Always release the lock — even if skipToNext throws — so the
-      // next speech's own onEnd can never be permanently blocked.
-      setTimeout(() => { onEndLockedRef.current = false; }, 2000);
+      // Release the lock for THIS video; the videoId change also resets it,
+      // so no previous speech's delayed onEnd can advance a newer speech.
+      onEndLockedRef.current = false;
     }
   }, [canShowAds, tryShowInterstitialOnTransition, skipToNext]);
 
