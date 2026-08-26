@@ -66,7 +66,7 @@ const voiceOptions = [
 ] as const;
 
 // Absolute floors for a usable recording. Anything below is never uploaded.
-const MIN_RECORDING_DURATION_MS = 300;
+const MIN_RECORDING_DURATION_MS = 500;
 const MIN_RECORDING_SIZE_BYTES = 1000;
 
 function VoiceCoachContent() {
@@ -99,7 +99,6 @@ function VoiceCoachContent() {
   // Native recording lifecycle must not depend on React render timing.
   // A user can release the hold button while prepare/start is still awaiting.
   const recordingStartingRef = useRef(false);
-  const recordingActiveRef = useRef(false);
   const recordingStopRequestedRef = useRef(false);
   const recordingStoppingRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
@@ -193,6 +192,12 @@ function VoiceCoachContent() {
   ]);
 
 
+  const returnToIdle = useCallback((statusText: string = 'Ready to listen') => {
+    console.log('[VoiceCoach] idle');
+    setPhase('idle');
+    setCurrentStatus(statusText);
+  }, []);
+
   const cleanupTemporaryTtsFile = useCallback(async () => {
     const uri = temporaryTtsFileRef.current;
     temporaryTtsFileRef.current = null;
@@ -276,6 +281,8 @@ function VoiceCoachContent() {
           throw new Error('Voice service returned no audio data');
         }
 
+        console.log(`[VoiceCoach] TTS received bytes=${base64Data.length}`);
+
         let playbackUri: string;
 
         if (Platform.OS === 'web') {
@@ -306,6 +313,7 @@ function VoiceCoachContent() {
           );
 
           temporaryTtsFileRef.current = temporaryUri;
+          console.log('[VoiceCoach] TTS temp file written');
           playbackUri = temporaryUri;
         }
 
@@ -332,8 +340,7 @@ function VoiceCoachContent() {
                 soundRef.current = null;
                 void createdSound.unloadAsync().catch(() => {});
                 void cleanupTemporaryTtsFile();
-                setPhase('idle');
-                setCurrentStatus('Ready to listen');
+                returnToIdle();
               }
               return;
             }
@@ -357,8 +364,7 @@ function VoiceCoachContent() {
               void finishedSound.unloadAsync().catch(() => {});
               void cleanupTemporaryTtsFile();
 
-              setPhase('idle');
-              setCurrentStatus('Ready to listen');
+              returnToIdle();
             }
           }
         );
@@ -422,8 +428,7 @@ function VoiceCoachContent() {
         await stopAndUnloadSound().catch(() => {});
         await cleanupTemporaryTtsFile().catch(() => {});
 
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
+        returnToIdle();
 
         Alert.alert(
           'Voice Error',
@@ -435,23 +440,24 @@ function VoiceCoachContent() {
       profile.preferredVoice,
       stopAndUnloadSound,
       cleanupTemporaryTtsFile,
+      returnToIdle,
     ]
   );
 
   const getCoachReply = useCallback(
     async (userText: string) => {
       if (!userText.trim()) {
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
+        returnToIdle();
         return;
       }
 
       if (usageStats.credits <= 0) {
         Alert.alert('No Credits', 'You need credits to talk with the AI coach.');
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
+        returnToIdle();
         return;
       }
+
+      console.log('[VoiceCoach] transcript:', userText);
 
       setPhase('processing');
       setCurrentStatus('Thinking...');
@@ -473,7 +479,10 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           ...nextConversation.map((m) => ({ role: m.role, content: m.content })),
         ];
 
+        console.log('[VoiceCoach] chat requested');
+
         const result = await sendChatMessage({ messages });
+        console.log('[VoiceCoach] chat result received');
         const reply = result?.message?.trim();
 
         if (!reply) throw new Error('Empty response from coach');
@@ -485,188 +494,33 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           { role: 'assistant', content: reply },
         ]);
 
-        if (profile.voiceEnabled === false) {
-          setPhase('idle');
-          setCurrentStatus('Ready to listen');
-          return;
-        }
-
-        await speakText(reply);
+        await speakText(reply, 'response');
       } catch (err: any) {
-        console.error('[VoiceCoach] coach reply error:', err?.message);
-        // Do not mask backend failures with canned speech — surface a
-        // concise error and return the mic to a usable state.
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
-        Alert.alert('Coach Error', err?.message || 'The coach could not respond. Please try again.');
+        console.error('[VoiceCoach] chat failed:', err?.message);
+        returnToIdle();
+        Alert.alert('Coach Response Failed', 'Coach response failed. Please try again.');
       }
     },
-    [usageStats.credits, profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, iapContext, speakText]
+    [usageStats.credits, profile.name, profile.preferredVoice, trimConversation, iapContext, speakText, returnToIdle]
   );
-
-  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
-
-  const startRecording = useCallback(async () => {
-    // Recording may interrupt a greeting or spoken response, but never an
-    // in-flight processing turn and never a second recorder.
-    if (phase === 'recording' || phase === 'processing') return;
-    if (recordingStartingRef.current || recordingActiveRef.current) return;
-
-    recordingStartingRef.current = true;
-    recordingStopRequestedRef.current = false;
-    recordingStoppingRef.current = false;
-
-    try {
-      // Pressing the mic while the coach speaks (or greets) must stop that
-      // audio immediately and never let it resume or play later.
-      soundEpochRef.current++;
-      await stopAndUnloadSound();
-      setCurrentStatus('Listening...');
-
-      if (Platform.OS === 'web') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        webStreamRef.current = stream;
-        const MR = (window as any).MediaRecorder;
-        const mediaRecorder = new MR(stream, { mimeType: 'audio/webm;codecs=opus' });
-        webChunksRef.current = [];
-
-        mediaRecorder.ondataavailable = (event: any) => {
-          if (event.data?.size > 0) webChunksRef.current.push(event.data);
-        };
-
-        webRecorderRef.current = mediaRecorder;
-        mediaRecorder.start();
-        recordingStartedAtRef.current = Date.now();
-        recordingStartingRef.current = false;
-        recordingActiveRef.current = true;
-
-        setHasPermission(true);
-        setPhase('recording');
-
-        // If the user already released while startup was awaiting,
-        // stop immediately now that a real recorder exists.
-        if (recordingStopRequestedRef.current) {
-          setTimeout(() => {
-            void stopRecordingRef.current?.();
-          }, 0);
-        }
-
-        return;
-      }
-
-      let perm = await Audio.getPermissionsAsync();
-      if (perm.status !== 'granted') perm = await Audio.requestPermissionsAsync();
-      if (perm.status !== 'granted') {
-        setHasPermission(false);
-        Alert.alert('Permission Needed', 'Please allow microphone access.');
-        setCurrentStatus('Ready to listen');
-        setPhase('idle');
-        return;
-      }
-
-      setHasPermission(true);
-
-      await Audio.setAudioModeAsync(RECORDING_AUDIO_MODE);
-
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync({
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.wav',
-          outputFormat: Audio.IOSOutputFormat.LINEARPCM,
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {
-          mimeType: 'audio/webm;codecs=opus',
-          bitsPerSecond: 128000,
-        },
-      });
-
-      await recording.startAsync();
-      recordingStartedAtRef.current = Date.now();
-      recordingRef.current = recording;
-      recordingStartingRef.current = false;
-      recordingActiveRef.current = true;
-      setPhase('recording');
-
-      // Verify the recorder is genuinely capturing before trusting it.
-      try {
-        const startStatus = await recording.getStatusAsync();
-        console.log('[VoiceCoach] recorder started', {
-          isRecording: startStatus?.isRecording,
-          canRecord: startStatus?.canRecord,
-          durationMillis: startStatus?.durationMillis,
-        });
-      } catch (statusErr) {
-        console.warn('[VoiceCoach] post-start status check failed', statusErr);
-      }
-
-      // onPressOut can occur before startAsync() resolves.
-      // Honor that release after the recorder is genuinely active.
-      if (recordingStopRequestedRef.current) {
-        setTimeout(() => {
-          void stopRecordingRef.current?.();
-        }, 0);
-      }
-    } catch (err: any) {
-      console.error('[VoiceCoach] startRecording error:', err?.message);
-      setPhase('idle');
-      setCurrentStatus('Ready to listen');
-      Alert.alert('Recording Error', err?.message || 'Failed to start recording');
-    } finally {
-      recordingStartingRef.current = false;
-      if (!recordingRef.current && !webRecorderRef.current) {
-        recordingActiveRef.current = false;
-      }
-    }
-  }, [phase, stopAndUnloadSound]);
 
   const stopRecording = useCallback(async () => {
     // onPressOut may fire before native/web recorder startup has finished.
     // Record the user's release immediately and let startup complete.
     recordingStopRequestedRef.current = true;
-
-    if (recordingStartingRef.current && !recordingActiveRef.current) {
-      return;
-    }
-
-    if (!recordingActiveRef.current) {
-      return;
-    }
+    console.log('[VoiceCoach] recording stop requested');
 
     if (recordingStoppingRef.current) {
       return;
     }
 
-    recordingStoppingRef.current = true;
-
-    // OpenAI rejects extremely short recordings. While this wait runs the
-    // recorder IS active, so this is real captured audio — not a fake delay.
-    const elapsedRecordingMs =
-      recordingStartedAtRef.current > 0
-        ? Date.now() - recordingStartedAtRef.current
-        : 0;
-
-    const minimumRecordingMs = 650;
-
-    if (elapsedRecordingMs < minimumRecordingMs) {
-      await new Promise(resolve =>
-        setTimeout(resolve, minimumRecordingMs - elapsedRecordingMs)
-      );
+    // No recorder yet: startup is still awaiting — the flag set above makes
+    // startup stop itself the moment the recorder becomes real.
+    if (!recordingRef.current && !webRecorderRef.current) {
+      return;
     }
+
+    recordingStoppingRef.current = true;
 
     try {
       setPhase('processing');
@@ -687,7 +541,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         webRecorderRef.current = null;
         webStreamRef.current = null;
-        recordingActiveRef.current = false;
 
         const formData = new FormData();
         formData.append('audio', blob as any, 'recording.webm');
@@ -697,7 +550,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         const data = await response.json();
         const userText = (data?.text || '').trim();
-        if (!userText) throw new Error('No speech detected');
+        if (!userText) {
+          throw new Error('No speech detected. Hold the microphone and speak clearly.');
+        }
 
         await getCoachReply(userText);
         return;
@@ -708,13 +563,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       // Consume the active recorder before awaiting stop so no second
       // release/event can attempt to unload the same Audio.Recording.
       recordingRef.current = null;
-      recordingActiveRef.current = false;
 
       if (!recording) {
         // Startup/cleanup already consumed it. This is not a user-facing
         // processing failure.
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
+        returnToIdle();
         return;
       }
 
@@ -763,7 +616,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
             ? Date.now() - recordingStartedAtRef.current
             : 0;
 
-      console.log('[VoiceCoach] recording ready', {
+      console.log('[VoiceCoach] recording captured', {
         durationMs,
         extension,
         sizeBytes,
@@ -772,8 +625,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       // Never upload an effectively empty recording to STT.
       if (durationMs < MIN_RECORDING_DURATION_MS || sizeBytes < MIN_RECORDING_SIZE_BYTES) {
         console.warn('[VoiceCoach] recording too short or empty — skipping STT upload');
-        setPhase('idle');
-        setCurrentStatus('Ready to listen');
+        returnToIdle();
         Alert.alert(
           'Hold and Speak',
           'That hold was too short to capture speech. Hold the button, speak for a couple of seconds, then release.'
@@ -781,27 +633,143 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         return;
       }
 
+      console.log('[VoiceCoach] STT requested');
+
       const userText = (await transcribeAudioViaBackend(uri)).trim();
+
+      console.log(
+        '[VoiceCoach] STT result:',
+        userText ? `ok (${userText.length} chars)` : 'empty'
+      );
+
       if (!userText || userText === '.' || userText === '...') {
-        throw new Error('Could not detect clear speech');
+        throw new Error('No speech detected. Hold the microphone and speak clearly.');
       }
 
       await getCoachReply(userText);
     } catch (err: any) {
       console.error('[VoiceCoach] stopRecording error:', err?.message);
-      setPhase('idle');
-      setCurrentStatus('Ready to listen');
+      returnToIdle();
       Alert.alert('Processing Error', err?.message || 'Failed to process speech');
     } finally {
       recordingStartingRef.current = false;
-      recordingActiveRef.current = false;
       recordingStopRequestedRef.current = false;
       recordingStoppingRef.current = false;
       recordingStartedAtRef.current = 0;
     }
-  }, [getCoachReply]);
+  }, [getCoachReply, returnToIdle]);
 
-  stopRecordingRef.current = stopRecording;
+  const startRecording = useCallback(async () => {
+    console.log('[VoiceCoach] recording start requested');
+
+    // Recording may interrupt a greeting or spoken response, but never an
+    // in-flight processing turn and never a second recorder.
+    if (phase === 'recording' || phase === 'processing') return;
+    if (recordingStartingRef.current || recordingRef.current || webRecorderRef.current) return;
+
+    recordingStartingRef.current = true;
+    recordingStopRequestedRef.current = false;
+    recordingStoppingRef.current = false;
+
+    try {
+      // Pressing the mic while the coach speaks (or greets) must stop that
+      // audio immediately and never let it resume or play later.
+      soundEpochRef.current++;
+      await stopAndUnloadSound();
+      setCurrentStatus('Listening...');
+
+      if (Platform.OS === 'web') {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        webStreamRef.current = stream;
+        const MR = (window as any).MediaRecorder;
+        const mediaRecorder = new MR(stream, { mimeType: 'audio/webm;codecs=opus' });
+        webChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event: any) => {
+          if (event.data?.size > 0) webChunksRef.current.push(event.data);
+        };
+
+        webRecorderRef.current = mediaRecorder;
+        mediaRecorder.start();
+        recordingStartedAtRef.current = Date.now();
+        recordingStartingRef.current = false;
+        setHasPermission(true);
+        setPhase('recording');
+        console.log('[VoiceCoach] recording started');
+
+        // If the user already released while startup was awaiting,
+        // stop immediately now that a real recorder exists.
+        if (recordingStopRequestedRef.current) {
+          setTimeout(() => {
+            void stopRecording();
+          }, 0);
+        }
+
+        return;
+      }
+
+      let perm = await Audio.getPermissionsAsync();
+      if (perm.status !== 'granted') perm = await Audio.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        setHasPermission(false);
+        Alert.alert('Permission Needed', 'Please allow microphone access.');
+        returnToIdle();
+        return;
+      }
+
+      setHasPermission(true);
+
+      await Audio.setAudioModeAsync(RECORDING_AUDIO_MODE);
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.wav',
+          outputFormat: Audio.IOSOutputFormat.LINEARPCM,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm;codecs=opus',
+          bitsPerSecond: 128000,
+        },
+      });
+
+      await recording.startAsync();
+      recordingStartedAtRef.current = Date.now();
+      recordingRef.current = recording;
+      recordingStartingRef.current = false;
+      setPhase('recording');
+      console.log('[VoiceCoach] recording started');
+
+      // onPressOut can occur before startAsync() resolves.
+      // Honor that release after the recorder is genuinely active.
+      if (recordingStopRequestedRef.current) {
+        setTimeout(() => {
+          void stopRecording();
+        }, 0);
+      }
+    } catch (err: any) {
+      console.error('[VoiceCoach] startRecording error:', err?.message);
+      returnToIdle();
+      Alert.alert('Recording Error', err?.message || 'Failed to start recording');
+    } finally {
+      recordingStartingRef.current = false;
+    }
+  }, [phase, stopAndUnloadSound, stopRecording, returnToIdle]);
 
   useEffect(() => {
     return () => {
@@ -846,14 +814,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       { role: 'assistant', content: greetingText },
     ]);
 
-    if (profile.voiceEnabled === false) {
-      setCurrentStatus('Ready to listen');
-      return;
-    }
-
-    console.log('[VoiceCoach] greeting TTS requested');
+    console.log('[VoiceCoach] greeting requested');
     await speakText(greetingText, 'greeting');
-  }, [profile.name, profile.voiceEnabled, trimConversation, speakText]);
+  }, [profile.name, trimConversation, speakText]);
 
   // Mount-only initialization. Dependencies are intentionally stable
   // (setPlaybackMode and stopAndUnloadSound never change identity) so this
@@ -872,7 +835,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         await restorePlaybackAudioSession();
       } catch {}
 
-      console.log('[VoiceCoach] init complete');
+      console.log('[VoiceCoach] initialized');
       setCurrentStatus('Ready to listen');
       // Deterministic greeting trigger: flip REAL state after permission +
       // playback-mode configuration so the greeting effect re-runs and
@@ -896,7 +859,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       void restorePlaybackAudioSession();
 
       recordingStartingRef.current = false;
-      recordingActiveRef.current = false;
       recordingStopRequestedRef.current = false;
       recordingStoppingRef.current = false;
       recordingStartedAtRef.current = 0;
