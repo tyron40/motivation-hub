@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -61,6 +61,10 @@ const voiceOptions = [
   },
 ] as const;
 
+// Absolute floors for a usable recording. Anything below is never uploaded.
+const MIN_RECORDING_DURATION_MS = 300;
+const MIN_RECORDING_SIZE_BYTES = 1000;
+
 function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
@@ -77,6 +81,9 @@ function VoiceCoachContent() {
   const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [hasGreeted, setHasGreeted] = useState(false);
+  // REAL state (not a ref) so the greeting effect re-runs deterministically
+  // once initialization has completed. A ref mutation can never trigger it.
+  const [initializationReady, setInitializationReady] = useState(false);
 
   const isRecording = phase === 'recording';
   const isProcessing = phase === 'processing';
@@ -237,8 +244,10 @@ function VoiceCoachContent() {
     });
   }, []);
 
+  // Single TTS pipeline for greeting AND AI replies: generateTTS ->
+  // temp file -> Sound.createAsync -> playAsync. `source` only labels logs.
   const speakText = useCallback(
-    async (spokenText: string) => {
+    async (spokenText: string, source: string = 'reply') => {
       if (!spokenText?.trim()) return;
 
       // Every spoken response takes a new generation. Late callbacks and
@@ -261,6 +270,12 @@ function VoiceCoachContent() {
         }
 
         const preferredVoice = profile.preferredVoice || 'alloy';
+        console.log('[VoiceCoach] TTS requested', {
+          source,
+          voice: preferredVoice,
+          textLength: spokenText.length,
+        });
+
         const tts = await generateTTS({
           text: spokenText,
           voice: preferredVoice as any,
@@ -328,6 +343,7 @@ function VoiceCoachContent() {
               // leave the coach stuck in "speaking". (A normal unload
               // fails the identity check below and is ignored.)
               if (createdSound && soundRef.current === createdSound) {
+                console.warn('[VoiceCoach] TTS playback error', { source });
                 soundRef.current = null;
                 void createdSound.unloadAsync().catch(() => {});
                 void cleanupTemporaryTtsFile();
@@ -348,6 +364,8 @@ function VoiceCoachContent() {
                 }
                 return;
               }
+
+              console.log('[VoiceCoach] TTS finished', { source });
 
               soundRef.current = null;
 
@@ -374,6 +392,7 @@ function VoiceCoachContent() {
         }
 
         soundRef.current = result.sound;
+        console.log('[VoiceCoach] TTS sound loaded', { source });
 
         // Proven lifecycle: creation and playback are separate operations.
         // Never rely on shouldPlay during sound creation on native iOS.
@@ -383,6 +402,7 @@ function VoiceCoachContent() {
 
         if (playbackStatus.isLoaded) {
           await result.sound.playAsync();
+          console.log('[VoiceCoach] TTS playAsync started', { source });
         } else {
           console.log(
             '[VoiceCoach] TTS audio not loaded immediately; retrying once'
@@ -405,9 +425,10 @@ function VoiceCoachContent() {
           }
 
           await result.sound.playAsync();
+          console.log('[VoiceCoach] TTS playAsync started (after retry)', { source });
         }
       } catch (err: any) {
-        console.error('[VoiceCoach] TTS playback error:', err);
+        console.error('[VoiceCoach] TTS playback error:', { source, message: err?.message });
 
         // A superseded turn must never unload a NEWER sound or reset its
         // UI — only the current generation performs cleanup.
@@ -488,7 +509,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
         await speakText(reply);
       } catch (err: any) {
-        console.error('âŒ coach reply error:', err);
+        console.error('[VoiceCoach] coach reply error:', err?.message);
         // Do not mask backend failures with canned speech — surface a
         // concise error and return the mic to a usable state.
         setPhase('idle');
@@ -604,6 +625,18 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       recordingActiveRef.current = true;
       setPhase('recording');
 
+      // Verify the recorder is genuinely capturing before trusting it.
+      try {
+        const startStatus = await recording.getStatusAsync();
+        console.log('[VoiceCoach] recorder started', {
+          isRecording: startStatus?.isRecording,
+          canRecord: startStatus?.canRecord,
+          durationMillis: startStatus?.durationMillis,
+        });
+      } catch (statusErr) {
+        console.warn('[VoiceCoach] post-start status check failed', statusErr);
+      }
+
       // onPressOut can occur before startAsync() resolves.
       // Honor that release after the recorder is genuinely active.
       if (recordingStopRequestedRef.current) {
@@ -612,7 +645,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         }, 0);
       }
     } catch (err: any) {
-      console.error('âŒ startRecording:', err);
+      console.error('[VoiceCoach] startRecording error:', err?.message);
       setPhase('idle');
       setCurrentStatus('Ready to listen');
       Alert.alert('Recording Error', err?.message || 'Failed to start recording');
@@ -644,8 +677,8 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
     recordingStoppingRef.current = true;
 
-    // OpenAI rejects extremely short recordings. Ensure the active recorder
-    // captures enough real audio before it is unloaded.
+    // OpenAI rejects extremely short recordings. While this wait runs the
+    // recorder IS active, so this is real captured audio — not a fake delay.
     const elapsedRecordingMs =
       recordingStartedAtRef.current > 0
         ? Date.now() - recordingStartedAtRef.current
@@ -714,11 +747,63 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         return;
       }
 
+      // Authoritative duration comes from the recorder itself, read
+      // BEFORE stopping (afterwards the file is unloaded).
+      let nativeDurationMs = 0;
+      try {
+        const preStopStatus = await recording.getStatusAsync();
+        nativeDurationMs = preStopStatus?.durationMillis ?? 0;
+        console.log('[VoiceCoach] pre-stop recorder status', {
+          isRecording: preStopStatus?.isRecording,
+          canRecord: preStopStatus?.canRecord,
+          durationMillis: nativeDurationMs,
+        });
+      } catch (statusErr) {
+        console.warn('[VoiceCoach] pre-stop status check failed', statusErr);
+      }
+
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       await setPlaybackMode();
 
       if (!uri) throw new Error('No audio captured');
+
+      // The REAL extension of the file the recorder actually wrote. The
+      // multipart filename/MIME must agree with this — never a guess.
+      const extension = uri.substring(uri.lastIndexOf('.')).toLowerCase();
+
+      let sizeBytes = 0;
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(uri);
+        sizeBytes = fileInfo.exists ? ((fileInfo as any).size ?? 0) : 0;
+      } catch (infoErr) {
+        console.warn('[VoiceCoach] recording file info failed', infoErr);
+      }
+
+      const durationMs =
+        nativeDurationMs > 0
+          ? nativeDurationMs
+          : recordingStartedAtRef.current > 0
+            ? Date.now() - recordingStartedAtRef.current
+            : 0;
+
+      console.log('[VoiceCoach] recording ready', {
+        durationMs,
+        extension,
+        sizeBytes,
+      });
+
+      // Never upload an effectively empty recording to STT.
+      if (durationMs < MIN_RECORDING_DURATION_MS || sizeBytes < MIN_RECORDING_SIZE_BYTES) {
+        console.warn('[VoiceCoach] recording too short or empty — skipping STT upload');
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        Alert.alert(
+          'Hold and Speak',
+          'That hold was too short to capture speech. Hold the button, speak for a couple of seconds, then release.'
+        );
+        return;
+      }
 
       const userText = (await transcribeAudioViaBackend(uri)).trim();
       if (!userText || userText === '.' || userText === '...') {
@@ -727,7 +812,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       await getCoachReply(userText);
     } catch (err: any) {
-      console.error('âŒ stopRecording:', err);
+      console.error('[VoiceCoach] stopRecording error:', err?.message);
       setPhase('idle');
       setCurrentStatus('Ready to listen');
       Alert.alert('Processing Error', err?.message || 'Failed to process speech');
@@ -770,6 +855,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     autoGreetDoneRef.current = true;
     setHasGreeted(true);
 
+    if (!mountedRef.current) {
+      console.warn('[VoiceCoach] greeting skipped — screen unmounted');
+      return;
+    }
+
     const userName = profile.name || 'friend';
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -789,14 +879,14 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       return;
     }
 
-    await speakText(greetingText);
-  }, [profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
+    console.log('[VoiceCoach] greeting TTS requested');
+    await speakText(greetingText, 'greeting');
+  }, [profile.name, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
 
   // Mount-only initialization. Dependencies are intentionally stable
   // (setPlaybackMode and stopAndUnloadSound never change identity) so this
   // cleanup only runs on a REAL unmount — never because the greeting or a
-  // profile change re-rendered the screen. (Historically proven lifecycle
-  // from the stable voice coach build.)
+  // profile change re-rendered the screen.
   useEffect(() => {
     const init = async () => {
       if (initDoneRef.current) return;
@@ -812,7 +902,12 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         await setPlaybackMode();
       } catch {}
 
+      console.log('[VoiceCoach] init complete');
       setCurrentStatus('Ready to listen');
+      // Deterministic greeting trigger: flip REAL state after permission +
+      // playback-mode configuration so the greeting effect re-runs and
+      // schedules the greeting. Never rely on a ref mutation for this.
+      setInitializationReady(true);
     };
 
     init();
@@ -838,20 +933,20 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     };
   }, [setPlaybackMode, stopAndUnloadSound]);
 
-  // Automatic greeting (historically proven lifecycle): a dedicated effect
-  // whose cleanup ONLY clears the timer. The greeting's own setHasGreeted
-  // update re-runs this effect but can never unload the greeting audio or
-  // disable mounted callbacks. A timer also gives permission/audio-mode
-  // initialization a moment to settle before the first TTS request.
+  // Automatic greeting, exactly once per screen entry. Gated on the
+  // initializationReady STATE (not a ref), so the effect is guaranteed to
+  // re-run after initialization completes. A short timer lets the audio
+  // session settle before the first TTS request.
   useEffect(() => {
-    if (!initDoneRef.current || hasGreeted) return;
+    if (!initializationReady || hasGreeted) return;
 
+    console.log('[VoiceCoach] greeting scheduled');
     const timer = setTimeout(() => {
       void doGreeting();
-    }, 220);
+    }, 300);
 
     return () => clearTimeout(timer);
-  }, [hasGreeted, doGreeting]);
+  }, [initializationReady, hasGreeted, doGreeting]);
 
 
   useEffect(() => {

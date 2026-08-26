@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,13 @@ import {
   Modal,
   ScrollView,
   Platform,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
-import { Mic, MicOff, User, Settings, Check, Sparkles } from 'lucide-react-native';
+import { Mic, MicOff, Check, Sparkles } from 'lucide-react-native';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { useIAP } from '@/hooks/iap-context';
@@ -24,762 +24,565 @@ import { useAuth } from '@/hooks/auth-context';
 import { generateTextToSpeech as generateTTS, sendChatMessage, transcribeAudioViaBackend } from '@/lib/api-client';
 import { API_ENDPOINTS } from '@/lib/config';
 
+type Role = 'user' | 'assistant';
+type Message = { role: Role; content: string };
+type Phase = 'idle' | 'greeting' | 'recording' | 'processing' | 'speaking';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
-
-const voiceCharacters = [
+const voiceOptions = [
   {
     id: 'alloy',
-    name: 'Jordan',
     voiceName: 'Alloy',
-    gender: 'male',
-    description: 'Calm, balanced, and encouraging.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+    description: 'Balanced and natural.',
   },
   {
     id: 'echo',
-    name: 'Daniel',
     voiceName: 'Echo',
-    gender: 'male',
-    description: 'Warm, confident, and conversational.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/46.jpg',
+    description: 'Warm and conversational.',
   },
   {
     id: 'fable',
-    name: 'Oliver',
     voiceName: 'Fable',
-    gender: 'male',
-    description: 'Expressive, thoughtful, and energetic.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/75.jpg',
+    description: 'Expressive and energetic.',
   },
   {
     id: 'onyx',
-    name: 'Marcus',
     voiceName: 'Onyx',
-    gender: 'male',
-    description: 'Deep, focused, powerful, and motivational.',
-    imageUrl: 'https://randomuser.me/api/portraits/men/22.jpg',
+    description: 'Deep and focused.',
   },
   {
     id: 'nova',
-    name: 'Maya',
     voiceName: 'Nova',
-    gender: 'female',
-    description: 'Energetic, upbeat, and supportive.',
-    imageUrl: 'https://randomuser.me/api/portraits/women/44.jpg',
+    description: 'Bright and friendly.',
   },
   {
     id: 'shimmer',
-    name: 'Sofia',
     voiceName: 'Shimmer',
-    gender: 'female',
-    description: 'Gentle, patient, and reassuring.',
-    imageUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
+    description: 'Soft and clear.',
   },
 ] as const;
+
+// Absolute floors for a usable recording. Anything below is never uploaded.
+const MIN_RECORDING_DURATION_MS = 300;
+const MIN_RECORDING_SIZE_BYTES = 1000;
 
 function VoiceCoachContent() {
   const { colors } = useTheme();
   const { profile, updateProfile } = useUserProfile();
 
-  const selectedCoach =
-    voiceCharacters.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
-    voiceCharacters[0];
+  const selectedVoice =
+    voiceOptions.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
+    voiceOptions[0];
   const { isAuthenticated } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
-  const [, setMessages] = useState<Message[]>([]);
-  const messagesRef = useRef<Message[]>([]);
-  const updateMessages = useCallback((next: Message[] | ((prev: Message[]) => Message[])) => {
-    setMessages(prev => {
-      const resolved = typeof next === 'function' ? next(prev) : next;
-      messagesRef.current = resolved;
-      return resolved;
-    });
-  }, []);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [currentStatus, setCurrentStatus] = useState('Initializing voice coach...');
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [hasGreeted, setHasGreeted] = useState(false);
+  // REAL state (not a ref) so the greeting effect re-runs deterministically
+  // once initialization has completed. A ref mutation can never trigger it.
+  const [initializationReady, setInitializationReady] = useState(false);
+
+  const isRecording = phase === 'recording';
+  const isProcessing = phase === 'processing';
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  // Native recording lifecycle must not depend on React render timing.
+  // A user can release the hold button while prepare/start is still awaiting.
+  const recordingStartingRef = useRef(false);
+  const recordingActiveRef = useRef(false);
+  const recordingStopRequestedRef = useRef(false);
+  const recordingStoppingRef = useRef(false);
+  const recordingStartedAtRef = useRef(0);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  // Generation counter for TTS playback: callbacks and error paths from
+  // an OLD sound must never modify, unload, or reset UI for a NEWER sound.
+  const soundEpochRef = useRef(0);
+  const temporaryTtsFileRef = useRef<string | null>(null);
+  // Guards UI updates from audio callbacks that fire after unmount.
+  const mountedRef = useRef(true);
+
+  // Independent layers make the voice sphere feel fluid instead of
+  // simply scaling one circle in and out.
+  const sphereBreathAnim = useRef(new Animated.Value(0)).current;
+  const sphereDriftXAnim = useRef(new Animated.Value(0)).current;
+  const sphereDriftYAnim = useRef(new Animated.Value(0)).current;
+  const sphereMorphAnim = useRef(new Animated.Value(0)).current;
+  const sphereGlowAnim = useRef(new Animated.Value(0)).current;
   const webRecorderRef = useRef<any | null>(null);
   const webStreamRef = useRef<any | null>(null);
   const webChunksRef = useRef<Blob[]>([]);
-  // Single authoritative TTS sound owner: a ref (not state) so async flows
-  // never act on a stale sound object, plus an epoch counter so late
-  // callbacks from an OLD sound can never unload/reset a NEWER response.
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const soundEpochRef = useRef(0);
-  const isPlayingRef = useRef(false);
-  // True while an AI turn (transcribe -> chat -> TTS) is in flight, so a
-  // finally-block never clobbers the "Coach is thinking..." status.
-  const aiTurnActiveRef = useRef(false);
-  const [currentStatus, setCurrentStatus] = useState<string>('Initializing voice coach...');
+  const actionLockRef = useRef(false);
+  const conversationRef = useRef<Message[]>([]);
+  const initDoneRef = useRef(false);
+  const autoGreetDoneRef = useRef(false);
 
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
-  const [hasGreeted, setHasGreeted] = useState(false);
-  const isInitializedRef = useRef(false);
-  const recordingStartTimeRef = useRef<number | null>(null);
-  const isStartingRef = useRef<boolean>(false);
-  const isStoppingRef = useRef<boolean>(false);
-  const [hasPermission, setHasPermission] = useState<boolean>(false);
-  
-  // Animation values
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  // Voice orb animation values (visual only - never touches audio logic)
-  const orbScale = useRef(new Animated.Value(1)).current;
-  const orbGlow = useRef(new Animated.Value(0.22)).current;
-  const orbRotate = useRef(new Animated.Value(0)).current;
-  const ripple1 = useRef(new Animated.Value(0)).current;
-  const ripple2 = useRef(new Animated.Value(0)).current;
-  
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
-  // -- Audio resource helpers (single owner for TTS sounds) -------------
-  /** Fully stops and unloads the current TTS sound, if any. */
-  const unloadCurrentSound = useCallback(async () => {
-    const current = soundRef.current;
-    soundRef.current = null;
-    if (!current) return;
-    try { await current.stopAsync(); } catch {}
-    try { await current.unloadAsync(); } catch {}
-  }, []);
-
-  /** Fully stops and unloads any leftover recorder, if any. */
-  const forceUnloadRecorder = useCallback(async () => {
-    const rec = recordingRef.current;
-    recordingRef.current = null;
-    if (!rec) return;
-    try {
-      const status = await rec.getStatusAsync();
-      if (status.canRecord || status.isRecording) {
-        await rec.stopAndUnloadAsync();
-      }
-    } catch {}
-  }, []);
-
-  // Ref mirror of isPlaying so async finally-blocks always read the
-  // CURRENT playing state, not a stale closure.
+  const trimConversation = useCallback((messages: Message[]) => messages.slice(-10), []);
   useEffect(() => {
-    isPlayingRef.current = isPlaying;
-  }, [isPlaying]);
+    const animations = [
+      sphereBreathAnim,
+      sphereDriftXAnim,
+      sphereDriftYAnim,
+      sphereMorphAnim,
+      sphereGlowAnim,
+    ];
 
+    animations.forEach(anim => {
+      anim.stopAnimation();
+      anim.setValue(0);
+    });
 
-  const speakMessage = useCallback(async (text: string) => {
-    try {
-      console.log('ðŸ”Š Speaking message:', text.substring(0, 50) + '...');
-      
-      // Check credits before TTS
-      if (usageStats.credits <= 0) {
-        Alert.alert(
-          'No Credits',
-          'You need credits to use voice features. The coach response is shown as text only.',
-          [{ text: 'OK' }]
-        );
-        setCurrentStatus('Ready to listen (text mode)');
-        return;
-      }
-      
-      // Every spoken response gets a new epoch: late callbacks from older
-      // sounds must never touch this (or a newer) turn.
-      const epoch = ++soundEpochRef.current;
-      aiTurnActiveRef.current = true;
+    const speaking = phase === 'speaking';
+    const recording = phase === 'recording';
+    const processing = phase === 'processing';
 
-      setIsPlaying(true);
-      setCurrentStatus('Coach is speaking...');
+    const breathDuration = speaking ? 620 : recording ? 760 : processing ? 1250 : 2100;
+    const driftXDuration = speaking ? 510 : recording ? 900 : processing ? 1450 : 2400;
+    const driftYDuration = speaking ? 690 : recording ? 820 : processing ? 1600 : 2700;
+    const morphDuration = speaking ? 430 : recording ? 720 : processing ? 1350 : 2300;
+    const glowDuration = speaking ? 540 : recording ? 800 : processing ? 1200 : 2000;
 
-      // Fully stop/unload the previous sound BEFORE anything else.
-      await unloadCurrentSound();
-      // Safety: fully unload any leftover recorder before playback.
-      await forceUnloadRecorder();
-
-      // Speaker playback mode + a short settle window so the iOS audio
-      // session fully leaves recording mode before TTS audio starts.
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-      await new Promise(resolve => setTimeout(resolve, 150));
-      
-      const preferredVoice = profile.preferredVoice || 'alloy';
-      console.log('ðŸŽµ Selected voice:', preferredVoice);
-      
-      console.log('ðŸ“¤ Calling TTS via Rork backend (optimized for speed)...');
-      const ttsStartTime = Date.now();
-      
-      try {
-        const result = await generateTTS({
-          text,
-          voice: preferredVoice as any,
-        });
-        
-        const ttsElapsed = Date.now() - ttsStartTime;
-        console.log(`âœ… TTS audio received in ${ttsElapsed}ms`);
-        
-        // A newer turn superseded this one - abandon silently.
-        if (epoch !== soundEpochRef.current) return;
-
-        // Deduct 1 credit for TTS
-        const creditUsed = await iapContext.useCredit();
-        if (creditUsed) {
-          console.log('ðŸ’³ 1 credit used for TTS (Voice Generation). Remaining:', iapContext.usageStats.credits - 1);
-        } else {
-          console.warn('âš ï¸ Failed to deduct credit for TTS');
-        }
-        
-        const audioUri = `data:${result.audio.mimeType};base64,${result.audio.base64Data}`;
-
-        // Create PAUSED - never depend on shouldPlay. The explicit
-        // playAsync below is the single point where playback starts.
-        let createdSound: Audio.Sound | null = null;
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: audioUri },
-          { shouldPlay: false },
-          (status: AVPlaybackStatus) => {
-            // Late callbacks from an OLD sound must never unload or
-            // reset a NEWER response.
-            if (epoch !== soundEpochRef.current) return;
-            if (status.isLoaded && status.didJustFinish) {
-              console.log('TTS playback finished');
-              setIsPlaying(false);
-              isPlayingRef.current = false;
-              aiTurnActiveRef.current = false;
-              setCurrentStatus('Ready to listen');
-              // Clean up ONLY the exact sound that finished.
-              if (createdSound && soundRef.current === createdSound) {
-                createdSound.unloadAsync().catch(() => {});
-                soundRef.current = null;
-              }
-            } else if (!status.isLoaded) {
-              // Load/playback error - never leave the coach stuck speaking.
-              console.warn('TTS playback error:', (status as any).error);
-              setIsPlaying(false);
-              isPlayingRef.current = false;
-              aiTurnActiveRef.current = false;
-              setCurrentStatus('Ready to listen');
-              if (createdSound && soundRef.current === createdSound) {
-                createdSound.unloadAsync().catch(() => {});
-                soundRef.current = null;
-              }
-            }
-          }
-        );
-        createdSound = newSound;
-        if (epoch === soundEpochRef.current) {
-          soundRef.current = newSound;
-        } else {
-          // Superseded while loading - discard immediately.
-          try { await newSound.unloadAsync(); } catch {}
-          return;
-        }
-
-        // Confirm the sound is loaded, then start playback explicitly.
-        // Retry ONCE if native audio had not finished loading yet.
-        const attemptPlay = async () => {
-          const st = await newSound.getStatusAsync();
-          if (!st.isLoaded) {
-            throw new Error('TTS sound not loaded');
-          }
-          await newSound.playAsync();
-        };
-        try {
-          await attemptPlay();
-        } catch (playError) {
-          console.warn('TTS playAsync failed, retrying once after settle...', playError);
-          await new Promise(resolve => setTimeout(resolve, 400));
-          if (epoch !== soundEpochRef.current) return;
-          try {
-            await attemptPlay();
-          } catch (finalError) {
-            console.error('TTS playback could not start:', finalError);
-            await unloadCurrentSound();
-            throw new Error('Audio playback could not start. Please try again.');
-          }
-        }
-        console.log('ðŸ”Š TTS playback started');
-      } catch (ttsError: any) {
-        console.error('âŒ TTS generation failed:', ttsError);
-        
-        let errorTitle = 'Voice Not Available';
-        let errorMessage = 'Text-to-speech is currently unavailable. You can continue using the voice coach in text mode.';
-        
-        if (ttsError?.message?.includes('API key')) {
-          errorMessage = 'The OpenAI API key needs to be configured on the server. You can continue using the voice coach in text mode.';
-        } else if (ttsError?.message?.includes('Cannot reach') || 
-                   ttsError?.message?.includes('Cannot connect') ||
-                   ttsError?.message?.includes('Network')) {
-          errorTitle = 'Connection Error';
-          errorMessage = ttsError.message;
-        }
-        
-        if (epoch !== soundEpochRef.current) return;
-        Alert.alert(errorTitle, errorMessage, [{ text: 'OK' }]);
-        
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        aiTurnActiveRef.current = false;
-        setCurrentStatus('Ready to listen (text mode)');
-      }
-    } catch (error) {
-      console.error('âŒ Error speaking message:', error);
-      console.error('âŒ Error type:', error?.constructor?.name);
-      console.error('âŒ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      let errorTitle = 'Voice Not Available';
-      let displayMessage = 'Text-to-speech is currently unavailable. You can continue using the voice coach in text mode.';
-      
-      if (errorMessage.includes('API key') || errorMessage.includes('401')) {
-        displayMessage = 'Please check the server configuration.';
-      } else if (errorMessage.includes('Cannot reach') || 
-                 errorMessage.includes('Cannot connect') ||
-                 errorMessage.includes('Network')) {
-        errorTitle = 'Connection Error';
-        displayMessage = errorMessage;
-      }
-      
-      Alert.alert(errorTitle, displayMessage, [{ text: 'OK' }]);
-      
-      if (!soundRef.current) {
-        // Don't clobber a newer turn that already started playing.
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        aiTurnActiveRef.current = false;
-        setCurrentStatus('Ready to listen (text mode)');
-      }
-      console.log('Speech synthesis failed, continuing in text mode');
-    }
-  }, [profile.preferredVoice, usageStats.credits, iapContext, unloadCurrentSound, forceUnloadRecorder]);
-
-  const handleInitialGreeting = useCallback(async () => {
-    if (hasGreeted) {
-      console.log('âš ï¸ Already greeted, skipping');
-      return;
-    }
-    
-    setHasGreeted(true);
-    
-    const userName = profile.name || 'friend';
-    const coachName = selectedCoach.name;
-    const timeOfDay = new Date().getHours();
-    let greeting = 'Hello';
-    if (timeOfDay < 12) greeting = 'Good morning';
-    else if (timeOfDay < 17) greeting = 'Good afternoon';
-    else greeting = 'Good evening';
-    
-    const greetingMessage: Message = {
-      role: 'assistant',
-      content: `${greeting}, ${userName}! I'm ${coachName}, your personal motivation coach. I'm fired up and ready to help you push past limits, build unstoppable confidence, and turn today's goals into wins. What's on your mind right now?`,
-      timestamp: Date.now(),
-    };
-    
-    console.log('ðŸ‘‹ Setting initial greeting message for:', userName);
-    updateMessages([greetingMessage]);
-    setCurrentStatus('Coach is greeting you...');
-    
-    console.log('ðŸ”Š Speaking initial greeting...');
-    console.log('ðŸ”Š Voice enabled:', profile.voiceEnabled !== false);
-    console.log('ðŸ”Š Selected voice:', profile.preferredVoice || 'alloy');
-    
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    try {
-      console.log('ðŸŽ¯ About to speak greeting message...');
-      await speakMessage(greetingMessage.content);
-      console.log('âœ… Initial greeting spoken successfully');
-    } catch (error) {
-      console.error('âŒ Failed to speak greeting:', error);
-      setCurrentStatus('Ready to listen');
-    }
-  }, [profile.name, profile.voiceEnabled, profile.preferredVoice, speakMessage, hasGreeted]);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const initializeVoiceCoach = async () => {
-      if (isInitializedRef.current) {
-        console.log('âš ï¸ Already initialized, skipping');
-        return;
-      }
-      
-      isInitializedRef.current = true;
-      
-      try {
-        console.log('ðŸ” Checking backend health...');
-        console.log('âœ… Using direct API calls, no backend health check needed');
-        
-        console.log('ðŸ” Requesting microphone permissions on startup...');
-        const permissionResponse = await Audio.requestPermissionsAsync();
-        console.log('ðŸ” Permission response:', JSON.stringify(permissionResponse));
-        
-        if (permissionResponse.status === 'granted') {
-          console.log('âœ… Microphone permission granted');
-          setHasPermission(true);
-        } else {
-          console.log('âš ï¸ Microphone permission not granted');
-          setHasPermission(false);
-        }
-        
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-        console.log('âœ… Audio mode initialized');
-        
-        await new Promise(resolve => setTimeout(resolve, 300));
-        setCurrentStatus('Ready to listen');
-      } catch (error) {
-        console.error('Error initializing voice coach:', error);
-        setCurrentStatus('Ready to listen');
-      }
-    };
-    
-    initializeVoiceCoach();
-    
-    return () => {
-      isMounted = false;
-      
-      const cleanup = async () => {
-        console.log('ðŸ§¹ Cleaning up audio resources...');
-        
-        try {
-          const currentSound = soundRef.current;
-          if (currentSound) {
-            await currentSound.stopAsync();
-            await currentSound.unloadAsync();
-            soundRef.current = null;
-          }
-        } catch (e) {
-          console.log('âš ï¸ Sound cleanup error:', e);
-        }
-        
-        try {
-          if (recordingRef.current) {
-            const status = await recordingRef.current.getStatusAsync();
-            if (status.canRecord || status.isRecording) {
-              await recordingRef.current.stopAndUnloadAsync();
-            }
-            recordingRef.current = null;
-            console.log('âœ… Recording cleaned up');
-          }
-        } catch (e) {
-          console.log('âš ï¸ Recording cleanup error:', e);
-        }
-        
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-          });
-          console.log('âœ… Audio mode reset on cleanup');
-        } catch (e) {
-          console.log('âš ï¸ Audio mode reset error:', e);
-        }
-      };
-      
-      cleanup();
-    };
-  }, []);
-
-  // Greeting effect: trigger once the user's profile name is loaded (or fallback after timeout)
-  useEffect(() => {
-    if (hasGreeted) return;
-
-    if (profile.name) {
-      const timer = setTimeout(() => {
-        handleInitialGreeting();
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-
-    // Wait briefly for profile name to load; otherwise greet with fallback
-    const timer = setTimeout(() => {
-      if (!hasGreeted) {
-        handleInitialGreeting();
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [profile.name, hasGreeted, handleInitialGreeting]);
-
-  // Pulse animation for recording
-  useEffect(() => {
-    if (isRecording) {
-      const pulse = Animated.loop(
+    const makeLoop = (
+      value: Animated.Value,
+      duration: number
+    ) =>
+      Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
+          Animated.timing(value, {
+            toValue: 1,
+            duration,
+            easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
+          Animated.timing(value, {
+            toValue: 0,
+            duration,
+            easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
         ])
       );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isRecording, pulseAnim]);
 
-  // ── Voice orb animation — visual only, never touches audio logic ──────
-  const orbPhase: 'idle' | 'listening' | 'thinking' | 'speaking' =
-    isPlaying ? 'speaking' : isRecording ? 'listening' : isProcessing ? 'thinking' : 'idle';
+    const loops = [
+      makeLoop(sphereBreathAnim, breathDuration),
+      makeLoop(sphereDriftXAnim, driftXDuration),
+      makeLoop(sphereDriftYAnim, driftYDuration),
+      makeLoop(sphereMorphAnim, morphDuration),
+      makeLoop(sphereGlowAnim, glowDuration),
+    ];
 
-  useEffect(() => {
-    const loops: Animated.CompositeAnimation[] = [];
+    loops.forEach(loop => loop.start());
 
-    if (orbPhase === 'speaking') {
-      // Organic, amplitude-like motion: irregular keyframe cycle.
-      orbGlow.setValue(0.45);
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbScale, { toValue: 1.1, duration: 260, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.03, duration: 190, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.12, duration: 300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.0, duration: 220, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.08, duration: 240, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.0, duration: 320, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          ])
-        )
-      );
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbGlow, { toValue: 0.7, duration: 350, useNativeDriver: true }),
-            Animated.timing(orbGlow, { toValue: 0.4, duration: 300, useNativeDriver: true }),
-          ])
-        )
-      );
-    } else if (orbPhase === 'listening') {
-      // Steady quick pulse + expanding ripple rings.
-      orbGlow.setValue(0.35);
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbScale, { toValue: 1.06, duration: 550, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.0, duration: 550, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          ])
-        )
-      );
-      const rippleCycle = (value: Animated.Value, delay: number) =>
-        Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(value, { toValue: 1, duration: 1400, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-            Animated.timing(value, { toValue: 0, duration: 0, useNativeDriver: true }),
-          ])
-        );
-      loops.push(rippleCycle(ripple1, 0));
-      loops.push(rippleCycle(ripple2, 700));
-    } else if (orbPhase === 'thinking') {
-      // Gentle breathing + a slowly orbiting dot.
-      orbGlow.setValue(0.3);
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbScale, { toValue: 1.04, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          ])
-        )
-      );
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbRotate, { toValue: 1, duration: 1800, easing: Easing.linear, useNativeDriver: true }),
-            Animated.timing(orbRotate, { toValue: 0, duration: 0, useNativeDriver: true }),
-          ])
-        )
-      );
-    } else {
-      // Idle: quiet, subtle breathing.
-      loops.push(
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(orbScale, { toValue: 1.03, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-            Animated.timing(orbScale, { toValue: 1.0, duration: 1600, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          ])
-        )
-      );
-      Animated.timing(orbGlow, { toValue: 0.22, duration: 500, useNativeDriver: true }).start();
-    }
-
-    loops.forEach((loop) => loop.start());
     return () => {
-      loops.forEach((loop) => loop.stop());
-      orbScale.setValue(1);
+      loops.forEach(loop => loop.stop());
     };
-  }, [orbPhase, orbScale, orbGlow, orbRotate, ripple1, ripple2]);
+  }, [
+    phase,
+    sphereBreathAnim,
+    sphereDriftXAnim,
+    sphereDriftYAnim,
+    sphereMorphAnim,
+    sphereGlowAnim,
+  ]);
 
-  const startRecording = async () => {
+
+  const lock = useCallback(() => {
+    if (actionLockRef.current) return false;
+    actionLockRef.current = true;
+    return true;
+  }, []);
+
+  const unlock = useCallback(() => {
+    actionLockRef.current = false;
+  }, []);
+
+  const cleanupTemporaryTtsFile = useCallback(async () => {
+    const uri = temporaryTtsFileRef.current;
+    temporaryTtsFileRef.current = null;
+
+    if (!uri || Platform.OS === 'web') {
+      return;
+    }
+
     try {
-      console.log('ðŸŽ¤ Starting recording...');
-      
-      if (isRecording || isProcessing || isStartingRef.current || isStoppingRef.current) {
-        console.log('âš ï¸ Cannot start recording - already busy');
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+    } catch (error) {
+      console.warn('[VoiceCoach] Temporary TTS cleanup failed', error);
+    }
+  }, []);
+
+  const stopAndUnloadSound = useCallback(async () => {
+    const s = soundRef.current;
+    soundRef.current = null;
+
+    if (s) {
+      try {
+        await s.stopAsync();
+      } catch {}
+
+      try {
+        await s.unloadAsync();
+      } catch {}
+    }
+
+    await cleanupTemporaryTtsFile();
+  }, [cleanupTemporaryTtsFile]);
+
+  const setPlaybackMode = useCallback(async () => {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  }, []);
+
+  // Single TTS pipeline for greeting AND AI replies: generateTTS ->
+  // temp file -> Sound.createAsync -> playAsync. `source` only labels logs.
+  const speakText = useCallback(
+    async (spokenText: string, source: string = 'reply') => {
+      if (!spokenText?.trim()) return;
+
+      // Every spoken response takes a new generation. Late callbacks and
+      // error paths from older sounds must never touch a newer response.
+      const epoch = ++soundEpochRef.current;
+
+      setPhase('speaking');
+      setCurrentStatus('Speaking...');
+
+      try {
+        await stopAndUnloadSound();
+
+        // Recording mode must be fully disabled before speaker playback.
+        await setPlaybackMode();
+
+        // Proven native behavior: allow the iOS/Android audio session to
+        // finish switching from microphone mode to speaker playback mode.
+        if (Platform.OS !== 'web') {
+          await new Promise(resolve => setTimeout(resolve, 400));
+        }
+
+        const preferredVoice = profile.preferredVoice || 'alloy';
+        console.log('[VoiceCoach] TTS requested', {
+          source,
+          voice: preferredVoice,
+          textLength: spokenText.length,
+        });
+
+        const tts = await generateTTS({
+          text: spokenText,
+          voice: preferredVoice as any,
+        });
+
+        // A newer turn superseded this one — abandon silently.
+        if (epoch !== soundEpochRef.current) return;
+
+        const base64Data = tts?.audio?.base64Data;
+        const mimeType = tts?.audio?.mimeType || 'audio/mpeg';
+
+        if (!base64Data) {
+          throw new Error('Voice service returned no audio data');
+        }
+
+        let playbackUri: string;
+
+        if (Platform.OS === 'web') {
+          playbackUri = `data:${mimeType};base64,${base64Data}`;
+        } else {
+          const cacheDirectory = FileSystem.cacheDirectory;
+
+          if (!cacheDirectory) {
+            throw new Error('Temporary audio storage is unavailable');
+          }
+
+          const extension =
+            mimeType.includes('wav') ? 'wav' :
+            mimeType.includes('m4a') ? 'm4a' :
+            'mp3';
+
+          const temporaryUri =
+            `${cacheDirectory}voice-coach-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2)}.${extension}`;
+
+          await FileSystem.writeAsStringAsync(
+            temporaryUri,
+            base64Data,
+            {
+              encoding: FileSystem.EncodingType.Base64,
+            }
+          );
+
+          temporaryTtsFileRef.current = temporaryUri;
+          playbackUri = temporaryUri;
+        }
+
+        let createdSound: Audio.Sound | null = null;
+
+        const result = await Audio.Sound.createAsync(
+          { uri: playbackUri },
+          {
+            shouldPlay: false,
+            volume: 1.0,
+            progressUpdateIntervalMillis: 150,
+          },
+          (status: AVPlaybackStatus) => {
+            // Late callbacks from an OLD sound must never unload or reset a
+            // NEWER response, and nothing may update an unmounted screen.
+            if (epoch !== soundEpochRef.current || !mountedRef.current) return;
+
+            if (!status.isLoaded) {
+              // A load/playback error on the CURRENT sound must never
+              // leave the coach stuck in "speaking". (A normal unload
+              // fails the identity check below and is ignored.)
+              if (createdSound && soundRef.current === createdSound) {
+                console.warn('[VoiceCoach] TTS playback error', { source });
+                soundRef.current = null;
+                void createdSound.unloadAsync().catch(() => {});
+                void cleanupTemporaryTtsFile();
+                setPhase('idle');
+                setCurrentStatus('Ready to listen');
+              }
+              return;
+            }
+
+            if (status.didJustFinish) {
+              const finishedSound = createdSound;
+
+              // A completion event from an older sound must never clear,
+              // unload, or change UI state for a newer coach response.
+              if (!finishedSound || soundRef.current !== finishedSound) {
+                if (finishedSound) {
+                  void finishedSound.unloadAsync().catch(() => {});
+                }
+                return;
+              }
+
+              console.log('[VoiceCoach] TTS finished', { source });
+
+              soundRef.current = null;
+
+              void finishedSound.unloadAsync().catch(() => {});
+              void cleanupTemporaryTtsFile();
+
+              setPhase('idle');
+              setCurrentStatus('Ready to listen');
+            }
+          }
+        );
+
+        createdSound = result.sound;
+
+        if (epoch !== soundEpochRef.current) {
+          // Superseded while loading — discard this sound immediately so
+          // it can never clobber or overlay a newer coach response.
+          await result.sound.unloadAsync().catch(() => {});
+          // Delete this turn's temp file ONLY if it is still ours.
+          if (temporaryTtsFileRef.current === playbackUri) {
+            await cleanupTemporaryTtsFile().catch(() => {});
+          }
+          return;
+        }
+
+        soundRef.current = result.sound;
+        console.log('[VoiceCoach] TTS sound loaded', { source });
+
+        // Proven lifecycle: creation and playback are separate operations.
+        // Never rely on shouldPlay during sound creation on native iOS.
+        let playbackStatus = await result.sound.getStatusAsync();
+
+        if (epoch !== soundEpochRef.current) return;
+
+        if (playbackStatus.isLoaded) {
+          await result.sound.playAsync();
+          console.log('[VoiceCoach] TTS playAsync started', { source });
+        } else {
+          console.log(
+            '[VoiceCoach] TTS audio not loaded immediately; retrying once'
+          );
+
+          await new Promise(resolve => setTimeout(resolve, 400));
+
+          // Make sure this sound was not superseded while waiting.
+          if (soundRef.current !== result.sound) {
+            await result.sound.unloadAsync().catch(() => {});
+            return;
+          }
+
+          playbackStatus = await result.sound.getStatusAsync();
+
+          if (!playbackStatus.isLoaded) {
+            throw new Error(
+              'Voice audio failed to load after retry'
+            );
+          }
+
+          await result.sound.playAsync();
+          console.log('[VoiceCoach] TTS playAsync started (after retry)', { source });
+        }
+      } catch (err: any) {
+        console.error('[VoiceCoach] TTS playback error:', { source, message: err?.message });
+
+        // A superseded turn must never unload a NEWER sound or reset its
+        // UI — only the current generation performs cleanup.
+        if (epoch !== soundEpochRef.current || !mountedRef.current) return;
+
+        await stopAndUnloadSound().catch(() => {});
+        await cleanupTemporaryTtsFile().catch(() => {});
+
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+
+        Alert.alert(
+          'Voice Error',
+          err?.message || 'Unable to play coach voice right now.'
+        );
+      }
+    },
+    [
+      profile.preferredVoice,
+      stopAndUnloadSound,
+      setPlaybackMode,
+      cleanupTemporaryTtsFile,
+    ]
+  );
+
+  const getCoachReply = useCallback(
+    async (userText: string) => {
+      if (!userText.trim()) {
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
         return;
       }
-      
-      isStartingRef.current = true;
-      
-      if (soundRef.current || isPlaying) {
-        try {
-          await unloadCurrentSound();
-          setIsPlaying(false);
-          isPlayingRef.current = false;
-        } catch (e) {
-          console.log('Error stopping playback:', e);
-        }
-        await new Promise(resolve => setTimeout(resolve, 300));
+
+      if (usageStats.credits <= 0) {
+        Alert.alert('No Credits', 'You need credits to talk with the AI coach.');
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        return;
       }
-      
-      if (recordingRef.current) {
-        try {
-          console.log('ðŸ§¹ Cleaning up existing recording...');
-          const status = await recordingRef.current.getStatusAsync();
-          if (status.canRecord || status.isRecording) {
-            await recordingRef.current.stopAndUnloadAsync();
-          }
-          console.log('âœ… Existing recording cleaned up');
-        } catch (e) {
-          console.log('âš ï¸ Error cleaning up existing recording:', e);
+
+      setPhase('processing');
+      setCurrentStatus('Thinking...');
+
+      try {
+        const userName = profile.name || 'friend';
+        const voiceDescription = selectedVoice.description;
+
+        const systemPrompt = `You are the user's AI motivation coach. ${voiceDescription}
+Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}" when natural.`;
+
+        const nextConversation = trimConversation([
+          ...conversationRef.current,
+          { role: 'user', content: userText },
+        ]);
+
+        const messages = [
+          { role: 'system' as const, content: systemPrompt },
+          ...nextConversation.map((m) => ({ role: m.role, content: m.content })),
+        ];
+
+        const result = await sendChatMessage({ messages });
+        const reply = result?.message?.trim();
+
+        if (!reply) throw new Error('Empty response from coach');
+
+        await iapContext.useCredit().catch(() => {});
+
+        conversationRef.current = trimConversation([
+          ...nextConversation,
+          { role: 'assistant', content: reply },
+        ]);
+
+        if (profile.voiceEnabled === false) {
+          setPhase('idle');
+          setCurrentStatus('Ready to listen');
+          return;
         }
-        recordingRef.current = null;
-        await new Promise(resolve => setTimeout(resolve, 300));
+
+        await speakText(reply);
+      } catch (err: any) {
+        console.error('[VoiceCoach] coach reply error:', err?.message);
+        // Do not mask backend failures with canned speech — surface a
+        // concise error and return the mic to a usable state.
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        Alert.alert('Coach Error', err?.message || 'The coach could not respond. Please try again.');
       }
-      
+    },
+    [usageStats.credits, profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, iapContext, speakText]
+  );
+
+  const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+
+  const startRecording = useCallback(async () => {
+    // Recording may interrupt a greeting or spoken response, but never an
+    // in-flight processing turn and never a second recorder.
+    if (phase === 'recording' || phase === 'processing') return;
+    if (recordingStartingRef.current || recordingActiveRef.current) return;
+    if (!lock()) return;
+
+    recordingStartingRef.current = true;
+    recordingStopRequestedRef.current = false;
+    recordingStoppingRef.current = false;
+
+    try {
+      // Pressing the mic while the coach speaks (or greets) must stop that
+      // audio immediately and never let it resume or play later.
+      soundEpochRef.current++;
+      await stopAndUnloadSound();
+      setCurrentStatus('Listening...');
+
       if (Platform.OS === 'web') {
-        try {
-          console.log('ðŸŒ Starting web recording via MediaRecorder');
-          
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error('Your browser does not support audio recording. Please use a modern browser like Chrome, Firefox, or Safari.');
-          }
-          
-          console.log('ðŸ” Requesting microphone access from browser...');
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            } 
-          });
-          console.log('âœ… Microphone access granted');
-          console.log('ðŸŽ¤ Audio tracks:', stream.getAudioTracks().length);
-          
-          webStreamRef.current = stream;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        webStreamRef.current = stream;
+        const MR = (window as any).MediaRecorder;
+        const mediaRecorder = new MR(stream, { mimeType: 'audio/webm;codecs=opus' });
+        webChunksRef.current = [];
 
-          const MrCtor = (window as any).MediaRecorder;
-          if (!MrCtor) {
-            throw new Error('MediaRecorder is not supported in your browser.');
-          }
-          
-          const mimeType = 'audio/webm;codecs=opus';
-          console.log('ðŸŽµ Creating MediaRecorder with mimeType:', mimeType);
-          const mr = new MrCtor(stream, { mimeType });
-          webChunksRef.current = [];
+        mediaRecorder.ondataavailable = (event: any) => {
+          if (event.data?.size > 0) webChunksRef.current.push(event.data);
+        };
 
-          mr.onstart = () => {
-            console.log('âœ… Web MediaRecorder started');
-            console.log('ðŸŽ¤ Recording state:', mr.state);
-          };
-          mr.ondataavailable = (e: any) => {
-            console.log('ðŸ“¦ Data available, size:', e.data?.size || 0);
-            if (e.data && e.data.size > 0) {
-              webChunksRef.current.push(e.data);
-            }
-          };
-          mr.onerror = (e: any) => {
-            console.error('âŒ MediaRecorder error:', e);
-            Alert.alert('Recording Error', 'An error occurred while recording. Please try again.');
-          };
+        webRecorderRef.current = mediaRecorder;
+        mediaRecorder.start();
+        recordingStartedAtRef.current = Date.now();
+        recordingStartingRef.current = false;
+        recordingActiveRef.current = true;
 
-          webRecorderRef.current = mr;
-          mr.start();
-          console.log('â–¶ï¸ MediaRecorder.start() called');
-
-          setIsRecording(true);
-          setCurrentStatus('Listening... Speak now!');
-          setHasPermission(true);
-          isStartingRef.current = false;
-          return;
-        } catch (webErr: any) {
-          console.error('âŒ Web recording error:', webErr);
-          console.error('âŒ Error name:', webErr?.name);
-          console.error('âŒ Error message:', webErr?.message);
-          isStartingRef.current = false;
-          
-          let errorMessage = 'Unable to access your microphone.';
-          
-          if (webErr.name === 'NotAllowedError' || webErr.name === 'PermissionDeniedError') {
-            errorMessage = 'Microphone permission was denied. Please allow microphone access in your browser settings and try again.';
-          } else if (webErr.name === 'NotFoundError' || webErr.name === 'DevicesNotFoundError') {
-            errorMessage = 'No microphone found. Please connect a microphone and try again.';
-          } else if (webErr.name === 'NotReadableError' || webErr.name === 'TrackStartError') {
-            errorMessage = 'Your microphone is already in use by another application. Please close other apps using the microphone and try again.';
-          } else if (webErr.message) {
-            errorMessage = webErr.message;
-          }
-          
-          Alert.alert('Microphone Error', errorMessage);
-          setHasPermission(false);
-          return;
-        }
-      }
-
-      console.log('ðŸ” Checking microphone permissions...');
-      let permissionResponse = await Audio.getPermissionsAsync();
-      console.log('ðŸ” Current permission status:', JSON.stringify(permissionResponse));
-      
-      if (permissionResponse.status !== 'granted') {
-        console.log('ðŸ” Permission not granted, requesting...');
-        permissionResponse = await Audio.requestPermissionsAsync();
-        console.log('ðŸ” Permission request result:', JSON.stringify(permissionResponse));
-        
-        if (permissionResponse.status !== 'granted') {
-          console.error('âŒ Microphone permission denied');
-          isStartingRef.current = false;
-          recordingStartTimeRef.current = null;
-          setHasPermission(false);
-          
-          const message = permissionResponse.canAskAgain 
-            ? 'Microphone access is required to use voice chat. Please grant permission when prompted.'
-            : 'Microphone permission was denied. Please enable it in your device Settings > Privacy > Microphone, then restart the app.';
-          
-          Alert.alert(
-            'Microphone Permission Required', 
-            message,
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-        
         setHasPermission(true);
-      }
-      
-      console.log('âœ… Microphone permission granted');
-      
-      await new Promise(resolve => setTimeout(resolve, 300));
+        setPhase('recording');
 
-      console.log('ðŸ”§ Setting up audio mode for recording...');
+        // If the user already released while startup was awaiting,
+        // stop immediately now that a real recorder exists.
+        if (recordingStopRequestedRef.current) {
+          setTimeout(() => {
+            void stopRecordingRef.current?.();
+          }, 0);
+        }
+
+        return;
+      }
+
+      let perm = await Audio.getPermissionsAsync();
+      if (perm.status !== 'granted') perm = await Audio.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        setHasPermission(false);
+        Alert.alert('Permission Needed', 'Please allow microphone access.');
+        setCurrentStatus('Ready to listen');
+        setPhase('idle');
+        return;
+      }
+
+      setHasPermission(true);
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -787,16 +590,9 @@ function VoiceCoachContent() {
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
-      
-      console.log('âœ… Audio mode configured for recording');
-      await new Promise(resolve => setTimeout(resolve, 150));
 
-      console.log('ðŸ†• Creating new recording instance...');
-      const recordingInstance = new Audio.Recording();
-      
-      console.log('ðŸ”§ Preparing recording...');
-      
-      const recordingOptions = {
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync({
         android: {
           extension: '.m4a',
           outputFormat: Audio.AndroidOutputFormat.MPEG_4,
@@ -820,604 +616,374 @@ function VoiceCoachContent() {
           mimeType: 'audio/webm;codecs=opus',
           bitsPerSecond: 128000,
         },
-      };
-      
-      await recordingInstance.prepareToRecordAsync(recordingOptions);
-      console.log('âœ… Recording prepared successfully');
-
-      console.log('â–¶ï¸ Starting recording...');
-      
-      recordingStartTimeRef.current = Date.now();
-      console.log('â±ï¸ Recording start time set:', recordingStartTimeRef.current);
-      
-      await recordingInstance.startAsync();
-      console.log('âœ… Recording.startAsync() completed');
-      
-      await new Promise(resolve => setTimeout(resolve, 150));
-      const recordingStatus = await recordingInstance.getStatusAsync();
-      console.log('ðŸ“Š Recording status after start:', JSON.stringify(recordingStatus));
-      console.log('ðŸ“Š Is recording:', recordingStatus.isRecording);
-      console.log('ðŸ“Š Duration so far:', recordingStatus.durationMillis, 'ms');
-      
-      if (!recordingStatus.isRecording) {
-        console.error('âŒ Recording failed to start properly');
-        recordingStartTimeRef.current = null;
-        await recordingInstance.stopAndUnloadAsync();
-        throw new Error('Recording did not start. Please check microphone permissions and try again.');
-      }
-      
-      recordingRef.current = recordingInstance;
-      setIsRecording(true);
-      setCurrentStatus('Listening... Speak now!');
-      isStartingRef.current = false;
-      
-      console.log('âœ… Recording started successfully and verified');
-    } catch (error) {
-      console.error('âŒ Error starting recording:', error);
-      
-      recordingRef.current = null;
-      setIsRecording(false);
-      recordingStartTimeRef.current = null;
-      isStartingRef.current = false;
-      
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-      } catch (resetError) {
-        console.error('Error resetting audio mode:', resetError);
-      }
-      
-      const errorMessage = (error as Error).message;
-      const userMessage = errorMessage.includes('permission') 
-        ? 'Microphone permission is required. Please enable it in your device settings.'
-        : `Failed to start recording: ${errorMessage}`;
-      
-      Alert.alert('Recording Error', userMessage);
-    }
-  };
-
-  const stopRecording = async () => {
-    try {
-      console.log('ðŸ›‘ Stopping recording...');
-      
-      if (isStoppingRef.current) {
-        console.log('âš ï¸ Already stopping recording');
-        return;
-      }
-      
-      isStoppingRef.current = true;
-      
-      if (isStartingRef.current) {
-        console.log('â³ Waiting for recording to initialize before stopping...');
-        let waited = 0;
-        while (isStartingRef.current && waited < 800) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          waited += 50;
-        }
-      }
-      isStartingRef.current = false;
-
-      if (Platform.OS === 'web') {
-        try {
-          setIsRecording(false);
-          setCurrentStatus('Processing...');
-          const mr: any = webRecorderRef.current;
-          const stream: any = webStreamRef.current;
-          if (!mr) {
-            console.log('âš ï¸ No web MediaRecorder instance');
-            setCurrentStatus('Ready to listen');
-            isStoppingRef.current = false;
-            return;
-          }
-          const getBlob = new Promise<Blob>((resolve) => {
-            mr.onstop = () => {
-              const blob = new Blob(webChunksRef.current, { type: 'audio/webm' });
-              console.log('ðŸ“¦ Web recording blob size:', blob.size);
-              resolve(blob);
-            };
-          });
-          mr.stop();
-          const blob = await getBlob;
-          if (stream) {
-            stream.getTracks().forEach((t: any) => t.stop());
-            webStreamRef.current = null;
-          }
-          webRecorderRef.current = null;
-          await processWebTranscription(blob);
-          return;
-        } catch (e) {
-          console.error('âŒ Error stopping web recording:', e);
-          Alert.alert('Recording Error', 'Failed to capture audio from the browser.');
-          setCurrentStatus('Ready to listen');
-          isStoppingRef.current = false;
-          return;
-        }
-      }
-
-      if (!recordingRef.current) {
-        console.log('âš ï¸ No recording instance found');
-        setIsRecording(false);
-        isStoppingRef.current = false;
-        return;
-      }
-      
-      setIsRecording(false);
-      setCurrentStatus('Processing...');
-      
-      const startedAt = recordingStartTimeRef.current ?? null;
-      recordingStartTimeRef.current = null;
-      
-      let uri: string | null = null;
-      let status: any = null;
-      let recordingToProcess = recordingRef.current;
-      
-      try {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        status = await recordingToProcess.getStatusAsync();
-        console.log('ðŸ“Š Recording status:', JSON.stringify(status, null, 2));
-        console.log('ðŸ“Š Duration:', status.durationMillis, 'ms');
-        console.log('ðŸ“Š Is recording:', status.isRecording);
-        console.log('ðŸ“Š Can record:', status.canRecord);
-        
-        if (status.canRecord || status.isRecording) {
-          uri = recordingToProcess.getURI();
-          console.log('ðŸ“ Recording URI:', uri);
-          
-          await recordingToProcess.stopAndUnloadAsync();
-          console.log('âœ… Recording stopped and unloaded');
-        } else {
-          console.log('âš ï¸ Recording was not active, trying to get URI anyway');
-          try {
-            uri = recordingToProcess.getURI();
-            await recordingToProcess.stopAndUnloadAsync();
-          } catch (e) {
-            console.log('âš ï¸ Could not get URI from inactive recording:', e);
-          }
-        }
-      } catch (error) {
-        console.error('âŒ Error stopping recording:', error);
-        try {
-          uri = recordingToProcess.getURI();
-          console.log('ðŸ“ Got URI despite stop error:', uri);
-        } catch (uriError) {
-          console.error('âŒ Could not get URI:', uriError);
-        }
-      } finally {
-        recordingRef.current = null;
-      }
-      
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-        console.log('âœ… Audio mode reset');
-      } catch (error) {
-        console.error('âŒ Error resetting audio mode:', error);
-      }
-      
-      if (uri) {
-        console.log('ðŸŽµ Processing recording with URI:', uri);
-        
-        const elapsedMs = startedAt ? Date.now() - startedAt : null;
-        const MIN_DURATION_MS = 300;
-        
-        const nativeDurationMs = status?.durationMillis ?? null;
-        
-        console.log(`â±ï¸ Elapsed time (our timer): ${elapsedMs}ms`);
-        console.log(`â±ï¸ Native duration: ${nativeDurationMs}ms`);
-        
-        const actualDuration = Math.max(elapsedMs ?? 0, nativeDurationMs ?? 0);
-        console.log(`â±ï¸ Actual duration used: ${actualDuration}ms (${(actualDuration / 1000).toFixed(2)}s)`);
-        
-        if (actualDuration < MIN_DURATION_MS) {
-          console.log(`âš ï¸ Recording too short: ${actualDuration}ms (minimum: ${MIN_DURATION_MS}ms)`);
-          Alert.alert(
-            'Recording Too Short',
-            `Recording was only ${(actualDuration / 1000).toFixed(2)} seconds. Please hold the button longer while speaking clearly.`,
-            [{ text: 'Try Again' }]
-          );
-          setCurrentStatus('Ready to listen');
-          isStoppingRef.current = false;
-          return;
-        }
-        
-        await processAudioTranscription(uri);
-      } else {
-        console.log('âŒ No recording URI available');
-        Alert.alert('Recording Error', 'No audio was recorded. Please hold the button while speaking.');
-        setCurrentStatus('Ready to listen');
-        aiTurnActiveRef.current = false;
-      }
-    } catch (error) {
-      console.error('âŒ Error stopping recording:', error);
-      recordingRef.current = null;
-      setIsRecording(false);
-      recordingStartTimeRef.current = null;
-      Alert.alert('Recording Error', `Failed to process recording: ${(error as Error).message}`);
-    } finally {
-      isStoppingRef.current = false;
-    }
-  };
-
-  const processAudioTranscription = async (audioUri: string) => {
-    try {
-      setIsProcessing(true);
-      console.log('ðŸ”„ Processing audio transcription...');
-      console.log('ðŸ“ Audio URI:', audioUri);
-      
-      if (!audioUri || audioUri.trim().length === 0) {
-        throw new Error('Invalid audio URI - recording may have failed');
-      }
-      
-      console.log('ðŸš€ Sending transcription request to backend STT...');
-
-      const transcribedText = await transcribeAudioViaBackend(audioUri);
-      const text = transcribedText;
-      console.log('ðŸŽ¯ Transcribed text:', JSON.stringify(text), '| length:', text.length);
-      
-      if (text && typeof text === 'string' && text.trim().length > 0) {
-        const cleanedText = text.trim();
-        console.log('âœ… Valid transcribed text:', cleanedText);
-        console.log('ðŸ“ Cleaned text length:', cleanedText.length);
-        
-        const noisePatterns = ['.', '...', '', ' '];
-        
-        if (noisePatterns.includes(cleanedText) || cleanedText.length < 1) {
-          console.log('âš ï¸ Likely transcription error or noise:', cleanedText);
-          Alert.alert('Speech Not Clear', 'I couldn\'t understand that. Please speak more clearly and hold the button while talking.');
-          setCurrentStatus('Ready to listen');
-          return;
-        }
-        
-        const userMessage: Message = {
-          role: 'user',
-          content: cleanedText,
-          timestamp: Date.now(),
-        };
-        
-        console.log('ðŸ’¬ Adding user message:', userMessage);
-        
-        const updatedMessages = [...messagesRef.current, userMessage];
-        updateMessages(updatedMessages);
-        console.log('ðŸ“ Updated messages count:', updatedMessages.length);
-        void getAIResponse(updatedMessages);
-      } else {
-        console.log('âš ï¸ Empty or invalid transcription received:', {
-          text,
-          typeOfText: typeof text,
-          trimmed: text?.trim ? text.trim() : 'N/A',
-          length: text?.trim ? text.trim().length : 0,
-        });
-        Alert.alert(
-          'No Speech Detected', 
-          'I couldn\'t detect any speech. Please:\n\n1. Hold the microphone button while speaking\n2. Speak clearly into your device\n3. Check microphone permissions\n4. Ensure your microphone is not blocked',
-          [{ text: 'Try Again' }]
-        );
-      }
-    } catch (error) {
-      console.error('âŒ Error processing transcription:', error);
-      console.error('âŒ Error type:', error?.constructor?.name);
-      console.error('âŒ Error message:', (error as Error)?.message);
-      console.error('âŒ Error stack:', (error as Error)?.stack);
-      
-      if ((error as Error).name === 'AbortError') {
-        console.error('âŒ Request timed out after 30 seconds');
-        Alert.alert(
-          'Timeout Error', 
-          'Speech processing took too long. This could mean:\n\n1. Poor internet connection\n2. Audio file too large\n3. Service temporarily unavailable\n\nPlease try again with a shorter message.',
-          [{ text: 'OK' }]
-        );
-      } else if ((error as Error).message?.includes('Network request failed') || 
-                 (error as Error).message?.includes('Failed to fetch')) {
-        console.error('âŒ Network error - cannot reach STT service');
-        Alert.alert(
-          'Connection Error', 
-          'Cannot reach the speech-to-text service. Please check your internet connection and try again.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Processing Error', 
-          `Failed to process your voice: ${(error as Error).message}\n\nPlease try:\n1. Speaking more clearly\n2. Holding the button longer\n3. Checking your internet connection`,
-          [{ text: 'OK' }]
-        );
-      }
-    } finally {
-      setIsProcessing(false);
-      isStartingRef.current = false;
-      if (!isPlayingRef.current && !aiTurnActiveRef.current) {
-        setCurrentStatus('Ready to listen');
-      }
-    }
-  };
-
-  const processWebTranscription = async (blob: Blob) => {
-    try {
-      setIsProcessing(true);
-      console.log('ðŸ”„ Processing web audio transcription...');
-      console.log('ðŸ“¦ Blob size:', blob.size);
-
-      const formData = new FormData();
-      formData.append('audio', blob as any, 'recording.webm');
-
-      console.log('ðŸŒ Calling backend STT endpoint (web):', API_ENDPOINTS.stt);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const transcriptionResponse = await fetch(API_ENDPOINTS.stt, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-      console.log('ðŸ“¡ Transcription response status:', transcriptionResponse.status);
+      await recording.startAsync();
+      recordingStartedAtRef.current = Date.now();
+      recordingRef.current = recording;
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = true;
+      setPhase('recording');
 
-      if (!transcriptionResponse.ok) {
-        const errorText = await transcriptionResponse.text();
-        console.error('âŒ Transcription error response:', errorText.substring(0, 200));
-
-        if (errorText.includes('<!DOCTYPE html>') || errorText.includes('<html>')) {
-          throw new Error('Speech-to-text service is currently unavailable. The backend server may be down or restarting. Please try again in a moment.');
-        }
-
-        throw new Error(`Transcription failed: ${transcriptionResponse.status} - ${errorText.substring(0, 100)}`);
-      }
-
-      const data = await transcriptionResponse.json();
-      const text: string | undefined = data?.text;
-      console.log('ðŸŽ¯ Extracted text:', text);
-
-      if (!text || text.trim().length === 0) {
-        Alert.alert('No Speech Detected', 'Please try again and speak clearly.');
-        setCurrentStatus('Ready to listen');
-        return;
-      }
-
-      const userMessage: Message = { role: 'user', content: text.trim(), timestamp: Date.now() };
-      const updated = [...messagesRef.current, userMessage];
-      updateMessages(updated);
-      void getAIResponse(updated);
-    } catch (error) {
-      console.error('âŒ Web transcription error:', error);
-      Alert.alert('Processing Error', (error as Error).message);
-    } finally {
-      setIsProcessing(false);
-      if (!isPlayingRef.current && !aiTurnActiveRef.current) setCurrentStatus('Ready to listen');
-    }
-  };
-
-  const getAIResponse = async (conversationMessages: Message[]) => {
-    try {
-      console.log('ðŸ¤– Getting AI response...');
-      console.log('ðŸ“ Conversation messages:', conversationMessages.length);
-      
-      aiTurnActiveRef.current = true;
-
-      // Check credits before making AI request
-      if (usageStats.credits <= 0) {
-        Alert.alert(
-          'No Credits',
-          'You need credits to chat with the AI coach. You can purchase more credits in Settings.',
-          [{ text: 'OK' }]
-        );
-        const noCreditsMessage: Message = {
-          role: 'assistant',
-          content: 'I\'m sorry, but you\'ve run out of credits. Please purchase more credits to continue our conversation.',
-          timestamp: Date.now(),
-        };
-        updateMessages(prev => [...prev, noCreditsMessage]);
-        setCurrentStatus('Ready to listen');
-        aiTurnActiveRef.current = false;
-        return;
-      }
-      
-      setCurrentStatus('Coach is thinking...');
-      
-      const userName = profile.name || 'friend';
-      const coachName = selectedCoach.name;
-      const coachDescription = selectedCoach.description;
-      const systemPrompt = `You are an AI motivation coach named "${coachName}". ${coachDescription}. You provide personalized, inspiring advice to help people overcome challenges and achieve their goals.
-
-Key traits:
-- Warm, encouraging, and empathetic
-- Use the user's name when provided (${userName})
-- Provide actionable, practical advice
-- Keep responses conversational and natural (2-3 sentences max for faster responses)
-- Focus on building confidence, resilience, and positive mindset
-- Ask follow-up questions to better understand their situation
-- Share motivational insights or techniques
-
-IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow. Always end with encouragement.`;
-
-      console.log('ðŸ“¤ Calling chat via Rork backend...');
-      
-      const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
-        { role: 'system' as const, content: systemPrompt },
-        ...conversationMessages.slice(-10).map(msg => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        }))
-      ];
-
-      const result = await sendChatMessage({ messages });
-      const completion = result.message;
-
-      if (!completion || typeof completion !== 'string') {
-        throw new Error('Invalid response format from chat API');
-      }
-      
-      // Deduct 1 credit for chat message
-      const creditUsed = await iapContext.useCredit();
-      if (creditUsed) {
-        console.log('ðŸ’³ 1 credit used for AI Chat Message. Remaining:', iapContext.usageStats.credits - 1);
-      } else {
-        console.warn('âš ï¸ Failed to deduct credit for chat');
-      }
-      
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: completion,
-        timestamp: Date.now(),
-      };
-      
-      console.log('âœ… AI response received, starting TTS immediately...');
-      updateMessages(prev => [...prev, assistantMessage]);
-      
-      if (profile.voiceEnabled !== false) {
-        console.log('ðŸ”Š Starting TTS generation immediately (parallel)...');
-        setCurrentStatus('Coach is speaking...');
-        
-        speakMessage(completion).catch(error => {
-          console.error('âŒ Failed to speak AI response:', error);
-          setCurrentStatus('Ready to listen');
-        });
-      } else {
-        console.log('ðŸ”‡ Voice disabled, skipping speech');
-        setCurrentStatus('Ready to listen');
-      }
-    } catch (error) {
-      console.error('âŒ Error getting AI response:', error);
-      console.error('âŒ Error type:', error?.constructor?.name);
-      console.error('âŒ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      
-      const fallbackMessage: Message = {
-        role: 'assistant',
-        content: 'I\'m having trouble connecting right now, but I\'m still here to help! Could you try saying that again?',
-        timestamp: Date.now(),
-      };
-      
-      updateMessages(prev => [...prev, fallbackMessage]);
-      setCurrentStatus('Ready to listen');
-      aiTurnActiveRef.current = false;
-      
-      if (profile.voiceEnabled !== false) {
-        speakMessage(fallbackMessage.content).catch(() => {
-          console.log('Could not speak fallback message');
-        });
-      }
-    }
-  };
-
-  const stopSpeaking = async () => {
-    if (isPlaying) {
+      // Verify the recorder is genuinely capturing before trusting it.
       try {
-        if (Platform.OS !== 'web') {
-          const Speech = await import('expo-speech') as any;
-          await Speech.stop();
-        } else {
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
-            console.log('ðŸ”‡ Canceling Web Speech synthesis...');
-            window.speechSynthesis.cancel();
-          }
-        }
-        
-        await unloadCurrentSound();
-        
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        aiTurnActiveRef.current = false;
-        setCurrentStatus('Ready to listen');
-      } catch (e) {
-        console.log('âš ï¸ Error stopping speech:', e);
-        setIsPlaying(false);
-        setCurrentStatus('Ready to listen');
+        const startStatus = await recording.getStatusAsync();
+        console.log('[VoiceCoach] recorder started', {
+          isRecording: startStatus?.isRecording,
+          canRecord: startStatus?.canRecord,
+          durationMillis: startStatus?.durationMillis,
+        });
+      } catch (statusErr) {
+        console.warn('[VoiceCoach] post-start status check failed', statusErr);
       }
+
+      // onPressOut can occur before startAsync() resolves.
+      // Honor that release after the recorder is genuinely active.
+      if (recordingStopRequestedRef.current) {
+        setTimeout(() => {
+          void stopRecordingRef.current?.();
+        }, 0);
+      }
+    } catch (err: any) {
+      console.error('[VoiceCoach] startRecording error:', err?.message);
+      setPhase('idle');
+      setCurrentStatus('Ready to listen');
+      Alert.alert('Recording Error', err?.message || 'Failed to start recording');
+    } finally {
+      recordingStartingRef.current = false;
+      if (!recordingRef.current && !webRecorderRef.current) {
+        recordingActiveRef.current = false;
+      }
+      unlock();
     }
-  };
+  }, [phase, lock, unlock, stopAndUnloadSound]);
 
-  // Stop all TTS playback and recording immediately when navigating away from voice coach
-  useFocusEffect(
-    React.useCallback(() => {
-      return () => {
-        console.log('ðŸ§¹ Voice coach lost focus â€” stopping TTS, recording, and resetting state');
-        // Stop TTS playback and invalidate any in-flight TTS turn.
-        soundEpochRef.current++;
-        if (soundRef.current) {
-          soundRef.current.stopAsync().catch(() => {});
-          soundRef.current.unloadAsync().catch(() => {});
-          soundRef.current = null;
-        }
-        setIsPlaying(false);
-        isPlayingRef.current = false;
-        aiTurnActiveRef.current = false;
-        setIsProcessing(false);
+  const stopRecording = useCallback(async () => {
+    // onPressOut may fire before native/web recorder startup has finished.
+    // Record the user's release immediately and let startup complete.
+    recordingStopRequestedRef.current = true;
+
+    if (recordingStartingRef.current && !recordingActiveRef.current) {
+      return;
+    }
+
+    if (!recordingActiveRef.current) {
+      return;
+    }
+
+    if (recordingStoppingRef.current) {
+      return;
+    }
+
+    recordingStoppingRef.current = true;
+
+    // OpenAI rejects extremely short recordings. While this wait runs the
+    // recorder IS active, so this is real captured audio — not a fake delay.
+    const elapsedRecordingMs =
+      recordingStartedAtRef.current > 0
+        ? Date.now() - recordingStartedAtRef.current
+        : 0;
+
+    const minimumRecordingMs = 650;
+
+    if (elapsedRecordingMs < minimumRecordingMs) {
+      await new Promise(resolve =>
+        setTimeout(resolve, minimumRecordingMs - elapsedRecordingMs)
+      );
+    }
+
+    if (!lock()) {
+      recordingStoppingRef.current = false;
+      return;
+    }
+
+    try {
+      setPhase('processing');
+      setCurrentStatus('Processing...');
+
+      if (Platform.OS === 'web') {
+        const mr = webRecorderRef.current;
+        const stream = webStreamRef.current;
+        if (!mr) throw new Error('No active recorder');
+
+        const blobPromise = new Promise<Blob>((resolve) => {
+          mr.onstop = () => resolve(new Blob(webChunksRef.current, { type: 'audio/webm' }));
+        });
+
+        mr.stop();
+        const blob = await blobPromise;
+        stream?.getTracks?.().forEach((t: any) => t.stop());
+
+        webRecorderRef.current = null;
+        webStreamRef.current = null;
+        recordingActiveRef.current = false;
+
+        const formData = new FormData();
+        formData.append('audio', blob as any, 'recording.webm');
+
+        const response = await fetch(API_ENDPOINTS.stt, { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(`STT request failed (${response.status})`);
+
+        const data = await response.json();
+        const userText = (data?.text || '').trim();
+        if (!userText) throw new Error('No speech detected');
+
+        await getCoachReply(userText);
+        return;
+      }
+
+      const recording = recordingRef.current;
+
+      // Consume the active recorder before awaiting stop so no second
+      // release/event can attempt to unload the same Audio.Recording.
+      recordingRef.current = null;
+      recordingActiveRef.current = false;
+
+      if (!recording) {
+        // Startup/cleanup already consumed it. This is not a user-facing
+        // processing failure.
+        setPhase('idle');
         setCurrentStatus('Ready to listen');
+        return;
+      }
 
-        // Stop any active recording
-        if (recordingRef.current) {
-          try {
-            const rec = recordingRef.current;
-            rec.getStatusAsync().then((status: any) => {
-              if (status.canRecord || status.isRecording) {
-                rec.stopAndUnloadAsync().catch(() => {});
-              }
-            }).catch(() => {});
-          } catch {}
-          recordingRef.current = null;
-        }
-        setIsRecording(false);
-        isStartingRef.current = false;
-        isStoppingRef.current = false;
+      // Authoritative duration comes from the recorder itself, read
+      // BEFORE stopping (afterwards the file is unloaded).
+      let nativeDurationMs = 0;
+      try {
+        const preStopStatus = await recording.getStatusAsync();
+        nativeDurationMs = preStopStatus?.durationMillis ?? 0;
+        console.log('[VoiceCoach] pre-stop recorder status', {
+          isRecording: preStopStatus?.isRecording,
+          canRecord: preStopStatus?.canRecord,
+          durationMillis: nativeDurationMs,
+        });
+      } catch (statusErr) {
+        console.warn('[VoiceCoach] pre-stop status check failed', statusErr);
+      }
 
-        // Stop web recording
-        if (Platform.OS === 'web') {
-          if (webRecorderRef.current) {
-            try { webRecorderRef.current.stop(); } catch {}
-            webRecorderRef.current = null;
-          }
-          if (webStreamRef.current) {
-            try {
-              webStreamRef.current.getTracks().forEach((t: any) => t.stop());
-            } catch {}
-            webStreamRef.current = null;
-          }
-        }
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      await setPlaybackMode();
 
-        // Stop expo-speech if running
-        if (Platform.OS !== 'web') {
-          import('expo-speech').then((Speech: any) => {
-            Speech.stop().catch(() => {});
-          }).catch(() => {});
-        } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-        }
+      if (!uri) throw new Error('No audio captured');
 
-        // Reset audio mode
-        if (Platform.OS !== 'web') {
-          Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-          }).catch(() => {});
-        }
-      };
-    }, [])
-  );
+      // The REAL extension of the file the recorder actually wrote. The
+      // multipart filename/MIME must agree with this — never a guess.
+      const extension = uri.substring(uri.lastIndexOf('.')).toLowerCase();
 
-  const orbSpin = orbRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+      let sizeBytes = 0;
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(uri);
+        sizeBytes = fileInfo.exists ? ((fileInfo as any).size ?? 0) : 0;
+      } catch (infoErr) {
+        console.warn('[VoiceCoach] recording file info failed', infoErr);
+      }
+
+      const durationMs =
+        nativeDurationMs > 0
+          ? nativeDurationMs
+          : recordingStartedAtRef.current > 0
+            ? Date.now() - recordingStartedAtRef.current
+            : 0;
+
+      console.log('[VoiceCoach] recording ready', {
+        durationMs,
+        extension,
+        sizeBytes,
+      });
+
+      // Never upload an effectively empty recording to STT.
+      if (durationMs < MIN_RECORDING_DURATION_MS || sizeBytes < MIN_RECORDING_SIZE_BYTES) {
+        console.warn('[VoiceCoach] recording too short or empty — skipping STT upload');
+        setPhase('idle');
+        setCurrentStatus('Ready to listen');
+        Alert.alert(
+          'Hold and Speak',
+          'That hold was too short to capture speech. Hold the button, speak for a couple of seconds, then release.'
+        );
+        return;
+      }
+
+      const userText = (await transcribeAudioViaBackend(uri)).trim();
+      if (!userText || userText === '.' || userText === '...') {
+        throw new Error('Could not detect clear speech');
+      }
+
+      await getCoachReply(userText);
+    } catch (err: any) {
+      console.error('[VoiceCoach] stopRecording error:', err?.message);
+      setPhase('idle');
+      setCurrentStatus('Ready to listen');
+      Alert.alert('Processing Error', err?.message || 'Failed to process speech');
+    } finally {
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = false;
+      recordingStopRequestedRef.current = false;
+      recordingStoppingRef.current = false;
+      recordingStartedAtRef.current = 0;
+      unlock();
+    }
+  }, [lock, unlock, setPlaybackMode, getCoachReply]);
+
+  stopRecordingRef.current = stopRecording;
+
+  useEffect(() => {
+    return () => {
+      const activeSound = soundRef.current;
+      soundRef.current = null;
+
+      if (activeSound) {
+        void activeSound.stopAsync().catch(() => {});
+        void activeSound.unloadAsync().catch(() => {});
+      }
+
+      const temporaryUri = temporaryTtsFileRef.current;
+      temporaryTtsFileRef.current = null;
+
+      if (temporaryUri && Platform.OS !== 'web') {
+        void FileSystem.deleteAsync(
+          temporaryUri,
+          { idempotent: true }
+        ).catch(() => {});
+      }
+    };
+  }, []);
+
+  const doGreeting = useCallback(async () => {
+    if (autoGreetDoneRef.current || hasGreeted) return;
+    autoGreetDoneRef.current = true;
+    setHasGreeted(true);
+
+    if (!mountedRef.current) {
+      console.warn('[VoiceCoach] greeting skipped — screen unmounted');
+      return;
+    }
+
+    const userName = profile.name || 'friend';
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const greetingText = `${greeting}, ${userName}! I'm your AI Voice Coach. I'm ready to help you win today. What's on your mind?`;
+
+    conversationRef.current = trimConversation([
+      ...conversationRef.current,
+      { role: 'assistant', content: greetingText },
+    ]);
+
+    setPhase('greeting');
+    setCurrentStatus('Speaking...');
+
+    if (profile.voiceEnabled === false) {
+      setPhase('idle');
+      setCurrentStatus('Ready to listen');
+      return;
+    }
+
+    console.log('[VoiceCoach] greeting TTS requested');
+    await speakText(greetingText, 'greeting');
+  }, [profile.name, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
+
+  // Mount-only initialization. Dependencies are intentionally stable
+  // (setPlaybackMode and stopAndUnloadSound never change identity) so this
+  // cleanup only runs on a REAL unmount — never because the greeting or a
+  // profile change re-rendered the screen.
+  useEffect(() => {
+    const init = async () => {
+      if (initDoneRef.current) return;
+      initDoneRef.current = true;
+      try {
+        const perm = await Audio.requestPermissionsAsync();
+        setHasPermission(perm.status === 'granted');
+      } catch {
+        setHasPermission(false);
+      }
+
+      try {
+        await setPlaybackMode();
+      } catch {}
+
+      console.log('[VoiceCoach] init complete');
+      setCurrentStatus('Ready to listen');
+      // Deterministic greeting trigger: flip REAL state after permission +
+      // playback-mode configuration so the greeting effect re-runs and
+      // schedules the greeting. Never rely on a ref mutation for this.
+      setInitializationReady(true);
+    };
+
+    init();
+
+    return () => {
+      mountedRef.current = false;
+      stopAndUnloadSound();
+      const rec = recordingRef.current;
+      if (rec) {
+        rec.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
+      }
+
+      recordingStartingRef.current = false;
+      recordingActiveRef.current = false;
+      recordingStopRequestedRef.current = false;
+      recordingStoppingRef.current = false;
+      recordingStartedAtRef.current = 0;
+      const stream = webStreamRef.current;
+      stream?.getTracks?.().forEach((t: any) => t.stop());
+      webStreamRef.current = null;
+      webRecorderRef.current = null;
+    };
+  }, [setPlaybackMode, stopAndUnloadSound]);
+
+  // Automatic greeting, exactly once per screen entry. Gated on the
+  // initializationReady STATE (not a ref), so the effect is guaranteed to
+  // re-run after initialization completes. A short timer lets the audio
+  // session settle before the first TTS request.
+  useEffect(() => {
+    if (!initializationReady || hasGreeted) return;
+
+    console.log('[VoiceCoach] greeting scheduled');
+    const timer = setTimeout(() => {
+      void doGreeting();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [initializationReady, hasGreeted, doGreeting]);
+
+
+  useEffect(() => {
+    if (!isRecording) {
+      pulseAnim.setValue(1);
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [isRecording, pulseAnim]);
 
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
-        <Stack.Screen 
-          options={{ 
+        <Stack.Screen
+          options={{
             title: 'Voice Coach',
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.text,
-          }} 
+          }}
         />
         <View style={styles.accountRequiredContainer}>
           <View style={styles.accountRequiredIcon}>
@@ -1440,98 +1006,154 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           title: 'Voice Coach',
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => setShowVoiceModal(true)}
-              style={styles.headerButton}
-            >
-              <Settings size={24} color={colors.text} />
-            </TouchableOpacity>
-          ),
-        }} 
+        }}
       />
-      
+
       <View style={styles.content}>
         <View style={styles.avatarSection}>
-          <View style={styles.orbWrapper}>
+          <Animated.View
+            style={[
+              styles.voiceSphere,
+              {
+                transform: [
+                  {
+                    scale: sphereBreathAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange:
+                        phase === 'speaking'
+                          ? [0.965, 1.045]
+                          : phase === 'recording'
+                            ? [0.98, 1.035]
+                            : [0.99, 1.018],
+                    }),
+                  },
+                ],
+                opacity: sphereGlowAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.94, 1],
+                }),
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={[
+                '#FFFFFF',
+                '#F7FCFF',
+                '#DDF5FF',
+                '#67CFFF',
+                '#1595F5',
+              ]}
+              locations={[0, 0.32, 0.58, 0.8, 1]}
+              style={styles.voiceSphereGradient}
+            />
+
             <Animated.View
               style={[
-                styles.orbGlow,
+                styles.voiceSphereSoftLayer,
+                styles.voiceSphereUpperGlow,
                 {
-                  backgroundColor: colors.primary,
-                  opacity: orbGlow,
-                  transform: [{ scale: orbScale }],
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-5, 6],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [2, -6],
+                      }),
+                    },
+                    {
+                      scaleX: sphereMorphAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.93, 1.08],
+                      }),
+                    },
+                    {
+                      scaleY: sphereMorphAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1.06, 0.94],
+                      }),
+                    },
+                  ],
                 },
               ]}
             />
-            {isRecording && (
-              <>
-                <Animated.View
-                  style={[
-                    styles.orbRipple,
-                    {
-                      borderColor: colors.primary,
-                      opacity: ripple1.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
-                      transform: [{ scale: ripple1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
-                    },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.orbRipple,
-                    {
-                      borderColor: colors.primary,
-                      opacity: ripple2.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
-                      transform: [{ scale: ripple2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
-                    },
-                  ]}
-                />
-              </>
-            )}
-            {isProcessing && (
-              <Animated.View style={[styles.orbOrbit, { transform: [{ rotate: orbSpin }] }]}>
-                <View style={[styles.orbOrbitDot, { backgroundColor: colors.primary }]} />
-              </Animated.View>
-            )}
-            <Animated.View style={[styles.avatar, { transform: [{ scale: orbScale }] }]}>
-              <Image source={{ uri: selectedCoach.imageUrl }} style={styles.avatarImage} />
-            </Animated.View>
-          </View>
-          
-          <View style={styles.coachInfo}>
-            <Text style={[styles.coachName, { color: colors.text }]}>{selectedCoach.name}</Text>
-            <TouchableOpacity 
-              style={styles.changeCoachButton}
-              onPress={() => setShowVoiceModal(true)}
-            >
-              <Sparkles size={14} color={colors.primary} />
-              <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Coach</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <Text style={[styles.coachTitle, { color: colors.textSecondary }]}>{selectedCoach.description}</Text>
-          <Text style={[styles.voiceIndicator, { color: colors.primary }]}>
-            Speaking as: {selectedCoach.name} - {selectedCoach.voiceName}
-          </Text>
-        </View>
 
-        <View style={styles.messageSection}>
-          <Text style={[styles.statusMainText, { color: colors.primary }]}>
-            {currentStatus}
-          </Text>
-          {isPlaying && (
-            <TouchableOpacity 
-              style={styles.stopButton}
-              onPress={stopSpeaking}
-            >
-              <Text style={styles.stopButtonText}>Stop Speaking</Text>
-            </TouchableOpacity>
-          )}
+            <Animated.View
+              style={[
+                styles.voiceSphereSoftLayer,
+                styles.voiceSphereBlueLayer,
+                {
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [7, -5],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [5, -2],
+                      }),
+                    },
+                    {
+                      scale: sphereBreathAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange:
+                          phase === 'speaking'
+                            ? [0.9, 1.1]
+                            : [0.96, 1.04],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+
+            <Animated.View
+              style={[
+                styles.voiceSphereHighlight,
+                {
+                  opacity: sphereGlowAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.42, 0.72],
+                  }),
+                  transform: [
+                    {
+                      translateX: sphereDriftXAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-2, 4],
+                      }),
+                    },
+                    {
+                      translateY: sphereDriftYAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-3, 3],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </Animated.View>
+
+          <TouchableOpacity
+            testID="voice-settings-button"
+            style={styles.changeCoachButton}
+            onPress={() => setShowVoiceModal(true)}
+          >
+            <Sparkles size={14} color={colors.primary} />
+            <Text style={[styles.changeCoachText, { color: colors.primary }]}>Change Voice</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.controlsSection}>
@@ -1541,70 +1163,29 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
               style={[
                 styles.recordButton,
                 isRecording && styles.recordButtonActive,
-                (isProcessing || isPlaying) && styles.recordButtonDisabled,
+                isProcessing && styles.recordButtonDisabled,
               ]}
               onPressIn={startRecording}
               onPressOut={stopRecording}
-              disabled={isProcessing || isPlaying}
+              disabled={isProcessing}
               activeOpacity={0.8}
             >
-              {isRecording ? (
-                <MicOff size={40} color="white" />
-              ) : (
-                <Mic size={40} color="white" />
-              )}
+              {isRecording ? <MicOff size={40} color="white" /> : <Mic size={40} color="white" />}
             </TouchableOpacity>
           </Animated.View>
 
-          <View style={styles.statusIndicator}>
-            {isRecording && (
-              <View style={styles.recordingIndicator}>
-                <View style={styles.recordingDot} />
-                <Text style={styles.recordingText}>Listening...</Text>
-              </View>
-            )}
-            {isProcessing && (
-              <Text style={[styles.statusText, { color: colors.primary }]}>Processing...</Text>
-            )}
-            {isPlaying && (
-              <Text style={[styles.statusText, { color: colors.primary }]}>Speaking...</Text>
-            )}
-          </View>
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>{currentStatus}</Text>
+          {!hasPermission && <Text style={styles.permissionText}>Microphone access needed</Text>}
         </View>
 
-        <View style={styles.instructionsSection}>
-          <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
-            {hasPermission 
-              ? 'Hold the microphone button to speak with your coach'
-              : 'Microphone permission required - tap the button to enable'}
-          </Text>
-          {!hasPermission && (
-            <Text style={styles.warningText}>
-              Grant microphone access to use voice features
-            </Text>
-          )}
-          <TouchableOpacity 
-            testID="voice-settings-button"
-            style={styles.voiceSettingsButton}
-            onPress={() => setShowVoiceModal(true)}
-          >
-            <Text style={[styles.voiceSettingsText, { color: colors.primary }]}>
-              Voice: {selectedCoach.name} - {selectedCoach.voiceName}</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      <Modal
-        visible={showVoiceModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowVoiceModal(false)}
-      >
+      <Modal visible={showVoiceModal} animationType="slide" transparent onRequestClose={() => setShowVoiceModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Your Voice Coach</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Voice</Text>
             <ScrollView style={styles.voiceList}>
-              {voiceCharacters.map((voice) => (
+              {voiceOptions.map((voice) => (
                 <TouchableOpacity
                   key={voice.id}
                   style={[
@@ -1613,36 +1194,27 @@ IMPORTANT: Keep responses concise (2-3 sentences) for natural conversation flow.
                     profile.preferredVoice === voice.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                   ]}
                   onPress={async () => {
-                    console.log('ðŸŽ¤ Selecting voice:', voice.id);
                     await updateProfile({ preferredVoice: voice.id as any });
-                    console.log('âœ… Voice updated to:', voice.id);
-                    Alert.alert('Voice Updated', `Voice changed to ${voice.name} - ${voice.voiceName}`);
+                    Alert.alert('Voice Updated', `Voice changed to ${voice.voiceName}`);
                     setShowVoiceModal(false);
                   }}
                 >
-                  <Image
-                    source={{ uri: voice.imageUrl }}
-                    style={styles.voicePortrait}
-                  />
                   <View style={styles.voiceInfo}>
-                    <Text style={[
-                      styles.voiceName,
-                      { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
-                    ]}>
-                      {voice.name} - {voice.voiceName}
+                    <Text
+                      style={[
+                        styles.voiceName,
+                        { color: profile.preferredVoice === voice.id ? colors.primary : colors.text },
+                      ]}
+                    >
+                      {voice.voiceName}
                     </Text>
                     <Text style={[styles.voiceDescription, { color: colors.textSecondary }]}>{voice.description}</Text>
                   </View>
-                  {profile.preferredVoice === voice.id && (
-                    <Check size={24} color={colors.primary} />
-                  )}
+                  {profile.preferredVoice === voice.id && <Check size={24} color={colors.primary} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <TouchableOpacity
-              style={[styles.modalCloseButton, { backgroundColor: colors.primary }]}
-              onPress={() => setShowVoiceModal(false)}
-            >
+            <TouchableOpacity style={[styles.modalCloseButton, { backgroundColor: colors.primary }]} onPress={() => setShowVoiceModal(false)}>
               <Text style={styles.modalCloseText}>Done</Text>
             </TouchableOpacity>
           </View>
@@ -1656,311 +1228,207 @@ export default function VoiceCoachScreen() {
   return <VoiceCoachContent />;
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'space-between',
-  },
-  avatarSection: {
-    alignItems: 'center',
-    paddingTop: 40,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary + '10',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: colors.primary,
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  orbWrapper: {
-    width: 120,
-    height: 120,
-    marginBottom: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  orbGlow: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    opacity: 0.22,
-  },
-  orbRipple: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-  },
-  orbOrbit: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-  },
-  orbOrbitDot: {
-    position: 'absolute',
-    top: -5,
-    alignSelf: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  coachInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  changeCoachButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: colors.primary + '10',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary + '40',
-  },
-  changeCoachText: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-  },
-  coachName: {
-    fontSize: 24,
-    fontWeight: 'bold' as const,
-    marginBottom: 4,
-  },
-  coachTitle: {
-    fontSize: 16,
-    textAlign: 'center' as const,
-  },
-  voiceIndicator: {
-    fontSize: 12,
-    textAlign: 'center' as const,
-    marginTop: 4,
-    fontStyle: 'italic' as const,
-  },
-  messageSection: {
-    flex: 1,
-    justifyContent: 'center' as const,
-    paddingHorizontal: 20,
-  },
-  statusMainText: {
-    fontSize: 20,
-    textAlign: 'center' as const,
-    lineHeight: 28,
-    fontWeight: '600' as const,
-    marginBottom: 16,
-  },
-  stopButton: {
-    backgroundColor: 'rgba(231, 76, 60, 0.2)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: '#e74c3c',
-  },
-  stopButtonText: {
-    color: '#e74c3c',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  controlsSection: {
-    alignItems: 'center' as const,
-    paddingVertical: 40,
-  },
-  recordButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    elevation: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  recordButtonActive: {
-    backgroundColor: '#e74c3c',
-  },
-  recordButtonDisabled: {
-    backgroundColor: '#7f8c8d',
-    opacity: 0.6,
-  },
-  statusIndicator: {
-    marginTop: 20,
-    height: 30,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  recordingIndicator: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-  },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#e74c3c',
-    marginRight: 8,
-  },
-  recordingText: {
-    color: '#e74c3c',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  instructionsSection: {
-    paddingBottom: 20,
-  },
-  instructionsText: {
-    fontSize: 14,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-  },
-  warningText: {
-    fontSize: 12,
-    color: '#F59E0B',
-    textAlign: 'center' as const,
-    marginTop: 4,
-  },
-  voiceSettingsButton: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.primary + '10',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.primary + '40',
-    alignSelf: 'center' as const,
-  },
-  voiceSettingsText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-  },
-  recordButtonContainer: {
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-end' as const,
-  },
-  modalContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    maxHeight: '70%',
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold' as const,
-    textAlign: 'center' as const,
-    marginBottom: 24,
-    paddingHorizontal: 20,
-  },
-  voiceList: {
-    paddingHorizontal: 20,
-  },
-  voiceOption: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  voicePortrait: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      marginRight: 12,
-      backgroundColor: colors.card,
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    avatarSection: {
+      alignItems: 'center',
+    },
+    voiceSphere: {
+      width: 164,
+      height: 164,
+      borderRadius: 82,
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#48B8FF',
+      shadowOpacity: 0.42,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 12,
+    },
+    voiceSphereGradient: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 82,
+    },
+    voiceSphereSoftLayer: {
+      position: 'absolute',
+      borderRadius: 100,
+    },
+    voiceSphereUpperGlow: {
+      width: 132,
+      height: 104,
+      top: 7,
+      backgroundColor: 'rgba(255,255,255,0.72)',
+    },
+    voiceSphereBlueLayer: {
+      width: 146,
+      height: 96,
+      bottom: -18,
+      backgroundColor: 'rgba(0,149,255,0.33)',
+    },
+    voiceSphereHighlight: {
+      position: 'absolute',
+      width: 92,
+      height: 66,
+      top: 18,
+      left: 27,
+      borderRadius: 46,
+      backgroundColor: 'rgba(255,255,255,0.62)',
+    },
+    changeCoachButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 6,
+      marginTop: 36,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: colors.primary + '10',
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.primary + '40',
+    },
+    changeCoachText: {
+      fontSize: 13,
+      fontWeight: '600' as const,
+    },
+    controlsSection: {
+      alignItems: 'center' as const,
+      marginTop: 56,
+    },
+    recordButton: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: colors.primary,
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      elevation: 8,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+    },
+    recordButtonActive: {
+      backgroundColor: '#e74c3c',
+    },
+    recordButtonDisabled: {
+      backgroundColor: '#7f8c8d',
+      opacity: 0.6,
+    },
+    recordButtonContainer: {},
+    statusText: {
+      fontSize: 13,
+      fontWeight: '500' as const,
+      marginTop: 20,
+      minHeight: 18,
+      textAlign: 'center' as const,
+    },
+    permissionText: {
+      fontSize: 12,
+      color: '#e74c3c',
+      marginTop: 6,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      justifyContent: 'flex-end' as const,
+    },
+    modalContent: {
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 24,
+      paddingBottom: 40,
+      maxHeight: '70%',
+    },
+    modalTitle: {
+      fontSize: 24,
+      fontWeight: 'bold' as const,
+      textAlign: 'center' as const,
+      marginBottom: 24,
+      paddingHorizontal: 20,
+    },
+    voiceList: {
+      paddingHorizontal: 20,
+    },
+    voiceOption: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginBottom: 12,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
     voiceInfo: {
-    flex: 1,
-  },
-  voiceName: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    marginBottom: 4,
-  },
-  voiceDescription: {
-    fontSize: 14,
-  },
-  modalCloseButton: {
-    marginTop: 24,
-    marginHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center' as const,
-  },
-  modalCloseText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600' as const,
-  },
-  headerButton: {
-    marginRight: 16,
-  },
-  accountRequiredContainer: {
-    flex: 1,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: 40,
-  },
-  accountRequiredIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary + '15',
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    marginBottom: 24,
-  },
-  accountRequiredTitle: {
-    fontSize: 22,
-    fontWeight: '700' as const,
-    marginBottom: 12,
-    textAlign: 'center' as const,
-  },
-  accountRequiredText: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center' as const,
-    marginBottom: 28,
-  },
-  accountRequiredButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 25,
-  },
-  accountRequiredButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-});
+      flex: 1,
+    },
+    voiceName: {
+      fontSize: 18,
+      fontWeight: '600' as const,
+      marginBottom: 4,
+    },
+    voiceDescription: {
+      fontSize: 14,
+    },
+    modalCloseButton: {
+      marginTop: 24,
+      marginHorizontal: 20,
+      paddingVertical: 16,
+      borderRadius: 12,
+      alignItems: 'center' as const,
+    },
+    modalCloseText: {
+      color: 'white',
+      fontSize: 18,
+      fontWeight: '600' as const,
+    },
+    accountRequiredContainer: {
+      flex: 1,
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      paddingHorizontal: 40,
+    },
+    accountRequiredIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.primary + '15',
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      marginBottom: 24,
+    },
+    accountRequiredTitle: {
+      fontSize: 22,
+      fontWeight: '700' as const,
+      marginBottom: 12,
+      textAlign: 'center' as const,
+    },
+    accountRequiredText: {
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: 'center' as const,
+      marginBottom: 28,
+    },
+    accountRequiredButton: {
+      paddingHorizontal: 32,
+      paddingVertical: 14,
+      borderRadius: 25,
+    },
+    accountRequiredButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: '600' as const,
+    },
+  });
