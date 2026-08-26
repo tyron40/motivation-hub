@@ -792,6 +792,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     await speakText(greetingText);
   }, [profile.name, profile.preferredVoice, profile.voiceEnabled, trimConversation, hasGreeted, speakText]);
 
+  // Mount-only initialization. Dependencies are intentionally stable
+  // (setPlaybackMode and stopAndUnloadSound never change identity) so this
+  // cleanup only runs on a REAL unmount — never because the greeting or a
+  // profile change re-rendered the screen. (Historically proven lifecycle
+  // from the stable voice coach build.)
   useEffect(() => {
     const init = async () => {
       if (initDoneRef.current) return;
@@ -808,13 +813,6 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       } catch {}
 
       setCurrentStatus('Ready to listen');
-
-      // Automatically greet the user after Voice Coach initializes.
-      // Calling this here is reliable because changing initDoneRef
-      // does not itself trigger a React render.
-      setTimeout(() => {
-        void doGreeting();
-      }, 220);
     };
 
     init();
@@ -838,7 +836,22 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       webStreamRef.current = null;
       webRecorderRef.current = null;
     };
-  }, [setPlaybackMode, stopAndUnloadSound, doGreeting]);
+  }, [setPlaybackMode, stopAndUnloadSound]);
+
+  // Automatic greeting (historically proven lifecycle): a dedicated effect
+  // whose cleanup ONLY clears the timer. The greeting's own setHasGreeted
+  // update re-runs this effect but can never unload the greeting audio or
+  // disable mounted callbacks. A timer also gives permission/audio-mode
+  // initialization a moment to settle before the first TTS request.
+  useEffect(() => {
+    if (!initDoneRef.current || hasGreeted) return;
+
+    const timer = setTimeout(() => {
+      void doGreeting();
+    }, 220);
+
+    return () => clearTimeout(timer);
+  }, [hasGreeted, doGreeting]);
 
 
   useEffect(() => {
