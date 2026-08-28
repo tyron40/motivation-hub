@@ -1,9 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_ENDPOINTS } from '@/lib/config';
+import {
+  DiscoveryProfile,
+  discoveryKeyForCategory,
+  getDiscoveryProfile,
+  pickDailyQueries,
+  rankAndMixDiscovery,
+} from '@/lib/category-discovery';
 
-const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 3; // 3 hours
+// Daily discovery cache policy (Part 9): a category's inventory is served
+// from cache until it is 24 hours old; only then is fresh YouTube discovery
+// run. Bounded by the daily fetch budget below for quota protection.
+const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 24; // 24 hours
 // Two backend YouTube quota pools are available.
 const MAX_FETCHES_PER_DAY = 60;
+
+// Backend calls per category refresh: 1 category endpoint + 2 rotated
+// profile queries. Every other request is served from cache.
+const SEARCH_QUERIES_PER_REFRESH = 2;
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',
@@ -34,6 +48,10 @@ export interface CachedVideo {
   viewCount: number;
   category: string;
 }
+
+// One in-flight refresh per category (Part 14): if 20 users (or 20 screens)
+// request a stale category simultaneously, only ONE refresh sequence runs.
+const inflightRefreshes = new Map<string, Promise<CachedVideo[]>>();
 
 function getTodayDateString(): string {
   const now = new Date();
@@ -83,8 +101,8 @@ async function shouldRefresh(category: string): Promise<boolean> {
     const shouldDo = elapsed >= REFRESH_INTERVAL_MS;
 
     if (!shouldDo) {
-      const minutesUntil = Math.round((REFRESH_INTERVAL_MS - elapsed) / 60000);
-      console.log(`Skipping refresh for "${category}" – next in ${minutesUntil} min`);
+      const hoursUntil = Math.round((REFRESH_INTERVAL_MS - elapsed) / 3600000);
+      console.log(`Skipping refresh for "${category}" – next in ${hoursUntil}h`);
     }
 
     return shouldDo;
@@ -101,26 +119,41 @@ async function markRefreshed(category: string): Promise<void> {
   }
 }
 
-async function getCachedVideos(category: string): Promise<CachedVideo[] | null> {
+async function readCache(category: string): Promise<CachedVideoData | null> {
   try {
     const stored = await AsyncStorage.getItem(`${STORAGE_KEYS.VIDEO_CACHE}${category}`);
     if (!stored) return null;
-
     const cached: CachedVideoData = JSON.parse(stored);
-    const age = Date.now() - cached.timestamp;
-    const maxAge = 1000 * 60 * 60 * 24; // 24 hours
-
-    if (age > maxAge) {
-      console.log(`Cache expired for "${category}" (${Math.round(age / 3600000)}h old)`);
-      return null;
-    }
-
-    console.log(`Serving ${cached.videos.length} cached videos for "${category}"`);
-    return cached.videos;
+    if (!cached || !Array.isArray(cached.videos)) return null;
+    return cached;
   } catch (error) {
     console.error('Error reading video cache:', error);
     return null;
   }
+}
+
+/** Fresh cache only (<= 24h old). */
+async function getCachedVideos(category: string): Promise<CachedVideo[] | null> {
+  const cached = await readCache(category);
+  if (!cached) return null;
+
+  const age = Date.now() - cached.timestamp;
+  if (age > REFRESH_INTERVAL_MS) {
+    console.log(`Cache expired for "${category}" (${Math.round(age / 3600000)}h old)`);
+    return null;
+  }
+
+  console.log(`Serving ${cached.videos.length} cached videos for "${category}"`);
+  return cached.videos;
+}
+
+/** ANY previously cached inventory regardless of age — used for the
+ * proven-content mix and as the failure fallback (Part 15): a failed daily
+ * refresh NEVER empties a category. */
+async function getStaleCache(category: string): Promise<CachedVideo[] | null> {
+  const cached = await readCache(category);
+  if (!cached || cached.videos.length === 0) return null;
+  return cached.videos;
 }
 
 async function setCachedVideos(category: string, videos: CachedVideo[]): Promise<void> {
@@ -222,16 +255,32 @@ async function mergeDedupVideos(...groups: CachedVideo[][]): Promise<CachedVideo
   return merged;
 }
 
-async function fetchCategoryFromBackend(category: string, limit: number): Promise<CachedVideo[]> {
-  const [categoryPrimary, categorySearchFallback] = await Promise.all([
+/**
+ * Fresh discovery for one category (Parts 5/7/9/14):
+ * - the backend category endpoint (which runs its own query profile)
+ * - PLUS a daily-rotating window of profile queries via backend search so
+ *   the pool keeps finding NEW speeches every day within quota
+ *   (1 + SEARCH_QUERIES_PER_REFRESH backend calls per refresh).
+ */
+async function fetchCategoryFromBackend(
+  category: string,
+  profile: DiscoveryProfile,
+  limit: number
+): Promise<CachedVideo[]> {
+  const dailyQueries = pickDailyQueries(profile.queries, SEARCH_QUERIES_PER_REFRESH);
+
+  const [categoryPrimary, ...queryResults] = await Promise.all([
     fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit }),
-    fetchFromBackend(API_ENDPOINTS.youtubeSearch, {
-      query: category,
-      limit: Math.min(limit, 50),
-    }),
+    ...dailyQueries.map(query =>
+      fetchFromBackend(API_ENDPOINTS.youtubeSearch, {
+        query,
+        limit: Math.min(limit, 50),
+      })
+    ),
   ]);
-  const merged = await mergeDedupVideos(categoryPrimary, categorySearchFallback);
-  return merged.slice(0, limit);
+
+  const merged = await mergeDedupVideos(categoryPrimary, ...queryResults);
+  return merged;
 }
 
 async function fetchSearchFromBackend(query: string, limit: number): Promise<CachedVideo[]> {
@@ -267,7 +316,7 @@ export const YouTubeContentManager = {
       }
 
       // A request for a larger category should be visible immediately,
-      // rather than returning the old smaller cache for another 3 hours.
+      // rather than returning the old smaller cache for another day.
       if (cacheIsUndersized) {
         return await this.fetchAndCacheCategory(normalizedCategory, limit);
       }
@@ -280,27 +329,56 @@ export const YouTubeContentManager = {
   },
 
   async fetchAndCacheCategory(category: string, limit: number = 50): Promise<CachedVideo[]> {
-    const canFetch = await canFetchMore();
-    if (!canFetch) {
-      const cached = await getCachedVideos(category);
-      if (cached) return cached.slice(0, limit);
-      return [];
+    // In-flight guard: concurrent requests for the same stale category share
+    // ONE refresh sequence (Part 14).
+    const existing = inflightRefreshes.get(category);
+    if (existing) {
+      return existing;
     }
 
-    console.log(`Fetching category "${category}" via backend (limit: ${limit})`);
-    const videos = await fetchCategoryFromBackend(category, limit);
-    const unique = videos
-      .map(v => ({ ...v, category }))
-      .filter((v, i, arr) => arr.findIndex(x => x.id === v.id) === i)
-      .slice(0, limit);
+    const job = this.performCategoryRefresh(category, limit).finally(() => {
+      inflightRefreshes.delete(category);
+    });
 
-    if (unique.length > 0) {
-      await setCachedVideos(category, unique);
-      await markRefreshed(category);
-      await recordFetch();
+    inflightRefreshes.set(category, job);
+    return job;
+  },
+
+  async performCategoryRefresh(category: string, limit: number = 50): Promise<CachedVideo[]> {
+    const profile = getDiscoveryProfile(discoveryKeyForCategory(category));
+
+    // Previous inventory = proven anchor (mix) + failure fallback (Part 15).
+    const previous = await getStaleCache(category);
+    const previousIds = new Set((previous ?? []).map(v => v.id));
+
+    if (!(await canFetchMore())) {
+      return (previous ?? []).slice(0, limit);
     }
 
-    return unique;
+    console.log(`Fetching category "${category}" via backend (profile queries: daily-rotated)`);
+    let videos: CachedVideo[] = [];
+    try {
+      const raw = await fetchCategoryFromBackend(category, profile, limit);
+      videos = rankAndMixDiscovery(profile, raw, previousIds, limit).map(v => ({
+        ...v,
+        category,
+      }));
+    } catch (error) {
+      console.error(`Discovery refresh failed for "${category}":`, error);
+    }
+
+    // Failure fallback: never empty a category — keep the previous
+    // inventory and let a later request retry the refresh (Part 15).
+    if (videos.length === 0) {
+      console.warn(`[Discovery] "${category}" refresh produced no valid results – serving previous inventory`);
+      return (previous ?? []).slice(0, limit);
+    }
+
+    await setCachedVideos(category, videos);
+    await markRefreshed(category);
+    await recordFetch();
+
+    return videos;
   },
 
   async refreshCategoryInBackground(category: string, limit: number = 50): Promise<void> {
@@ -329,7 +407,7 @@ export const YouTubeContentManager = {
   async fetchAndCacheTrending(limit: number = 20): Promise<CachedVideo[]> {
     const canFetch = await canFetchMore();
     if (!canFetch) {
-      const cached = await getCachedVideos('_trending');
+      const cached = await getStaleCache('_trending');
       if (cached) return cached.slice(0, limit);
       return [];
     }

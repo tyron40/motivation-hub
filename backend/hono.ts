@@ -56,16 +56,15 @@ app.get("/api", (c: Context) => {
 
 app.get("/health", (c: Context) => {
   console.log("[Hono] Health check (no /api prefix)");
-  return c.json({ 
+  return c.json({
     ok: true,
-    status: "healthy", 
+    status: "healthy",
     timestamp: new Date().toISOString(),
     env: {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
       hasYouTubeKey: !!(process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY),
-      youTubeKeyCount: YOUTUBE_API_KEYS.length,
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -77,16 +76,15 @@ app.get("/health", (c: Context) => {
 
 app.get("/api/health", (c: Context) => {
   console.log("[Hono] Health check (with /api prefix)");
-  return c.json({ 
+  return c.json({
     ok: true,
-    status: "healthy", 
+    status: "healthy",
     timestamp: new Date().toISOString(),
     env: {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
       hasSupabaseKey: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
       hasYouTubeKey: !!(process.env.YOUTUBE_API_KEY || process.env.EXPO_PUBLIC_YOUTUBE_API_KEY),
-      youTubeKeyCount: YOUTUBE_API_KEYS.length,
     }
   }, 200, {
     'Access-Control-Allow-Origin': '*',
@@ -99,15 +97,15 @@ app.get("/api/health", (c: Context) => {
 app.all('/api/cron/youtube-batch', async (c: Context) => {
   try {
     console.log('🕐 Cron job triggered: Running daily YouTube batch fetch');
-    
+
     const authHeader = c.req.header('authorization');
     const cronSecret = process.env.CRON_SECRET;
-    
+
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       console.error('❌ Unauthorized cron request');
       return c.json({ error: 'Unauthorized' }, 401);
     }
-    
+
     const fakeRequest = new Request('https://example.com/api/trpc/content.runDailyBatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -116,19 +114,19 @@ app.all('/api/cron/youtube-batch', async (c: Context) => {
         forceRefresh: false,
       }),
     });
-    
-    const context = await createContext({ 
+
+    const context = await createContext({
       req: fakeRequest,
       resHeaders: new Headers(),
       info: {} as any,
     });
     const caller = appRouter.createCaller(context);
-    
+
     const result = await caller.content.runDailyBatch({
       videosPerQuery: 5,
       forceRefresh: false,
     });
-    
+
     console.log('✅ Daily batch completed:', result);
     return c.json(result);
   } catch (error: unknown) {
@@ -142,7 +140,7 @@ const handleTTS = async (c: Context) => {
     console.log("[Hono] TTS request received");
     console.log("[Hono] Request URL:", c.req.url);
     console.log("[Hono] Request path:", c.req.path);
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -182,9 +180,9 @@ const handleTTS = async (c: Context) => {
     });
   } catch (error) {
     console.error("[Hono] TTS error:", error);
-    return c.json({ 
-      error: "TTS generation failed", 
-      details: error instanceof Error ? error.message : String(error) 
+    return c.json({
+      error: "TTS generation failed",
+      details: error instanceof Error ? error.message : String(error)
     }, 500);
   }
 };
@@ -192,140 +190,105 @@ const handleTTS = async (c: Context) => {
 app.post("/api/tts", handleTTS);
 app.post("/tts", handleTTS);
 
-const handleSTT = async (c: Context) => {
+const handleChat = async (c: Context) => {
   try {
-    console.log("[Hono] STT request received");
+    console.log("[Hono] Chat request received");
+    console.log("[Hono] Request URL:", c.req.url);
+    console.log("[Hono] Request path:", c.req.path);
 
-    const apiKey = await getOpenAIKey();
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
       return c.json({ error: "OpenAI API key not configured" }, 500);
     }
 
-    const contentType = c.req.header('content-type') || '';
-    if (!contentType.toLowerCase().includes('multipart/form-data')) {
-      return c.json({
-        error: "Content-Type must be multipart/form-data"
-      }, 400);
+    const body = await c.req.json();
+    const { messages } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return c.json({ error: "Messages array is required" }, 400);
     }
 
-    const formData = await c.req.formData();
-    const audioPart = formData.get('audio');
-
-    if (!audioPart) {
-      return c.json({
-        error: "Audio file is required in 'audio' field"
-      }, 400);
-    }
-
-    if (!(audioPart instanceof File)) {
-      console.error(
-        "[Hono] STT audio field was not a File:",
-        typeof audioPart
-      );
-
-      return c.json({
-        error: "Invalid audio upload",
-        details: "The 'audio' multipart field must contain a file."
-      }, 400);
-    }
-
-    if (audioPart.size <= 0) {
-      return c.json({
-        error: "Audio file is empty"
-      }, 400);
-    }
-
-    const mimeType = audioPart.type || 'application/octet-stream';
-
-    const fileExt =
-      mimeType.includes('mp4') || mimeType.includes('m4a')
-        ? 'm4a'
-        : mimeType.includes('mpeg') || mimeType.includes('mp3')
-          ? 'mp3'
-          : mimeType.includes('webm')
-            ? 'webm'
-            : mimeType.includes('wav')
-              ? 'wav'
-              : 'm4a';
-
-    const safeName =
-      audioPart.name && audioPart.name.includes('.')
-        ? audioPart.name
-        : `recording.${fileExt}`;
-
-    // Recreate the File only when a usable filename is missing.
-    const audioFile =
-      safeName === audioPart.name
-        ? audioPart
-        : new File(
-            [await audioPart.arrayBuffer()],
-            safeName,
-            { type: mimeType }
-          );
-
-    console.log(
-      "[Hono] STT audio received:",
-      safeName,
-      "size:",
-      audioFile.size,
-      "type:",
-      mimeType
-    );
+    console.log("[Hono] Sending chat request to OpenAI...");
+    console.log("[Hono] Messages count:", messages.length);
 
     const openai = new OpenAI({ apiKey });
 
-    console.log("[Hono] Sending audio to OpenAI transcription API...");
-
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: "en",
-      response_format: "json",
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: messages as any,
     });
 
-    const text =
-      typeof transcription?.text === 'string'
-        ? transcription.text.trim()
-        : '';
+    const message = completion.choices[0]?.message?.content;
 
-    if (!text) {
-      console.warn("[Hono] STT completed but returned empty text");
-
-      return c.json({
-        text: ""
-      });
+    if (!message) {
+      throw new Error("No response from OpenAI");
     }
 
-    console.log(
-      "[Hono] STT transcription received, text length:",
-      text.length
-    );
+    console.log("[Hono] Chat response received, length:", message.length);
 
-    return c.json({ text });
-  } catch (error: any) {
-    const status =
-      typeof error?.status === 'number'
-        ? error.status
-        : 500;
+    return c.json({ message });
+  } catch (error) {
+    console.error("[Hono] Chat error:", error);
+    return c.json({
+      error: "Chat request failed",
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
+};
 
-    const message =
-      error?.error?.message ||
-      error?.message ||
-      String(error);
+app.post("/api/chat", handleChat);
+app.post("/chat", handleChat);
 
-    console.error(
-      "[Hono] STT error:",
-      "status:",
-      status,
-      "message:",
-      message
-    );
+const handleSTT = async (c: Context) => {
+  try {
+    console.log("[Hono] STT request received");
 
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error("[Hono] OpenAI API key not configured");
+      return c.json({ error: "OpenAI API key not configured" }, 500);
+    }
+
+    const formData = await c.req.formData();
+    const audioFile = formData.get('audio');
+
+    if (!audioFile || !(audioFile instanceof File)) {
+      return c.json({ error: "Audio file is required" }, 400);
+    }
+
+    console.log("[Hono] STT audio file received:", audioFile.name, "size:", audioFile.size);
+
+    const openaiFormData = new FormData();
+    openaiFormData.append('file', audioFile, audioFile.name || 'recording.wav');
+    openaiFormData.append('model', 'whisper-1');
+    openaiFormData.append('language', 'en');
+
+    console.log("[Hono] Sending to OpenAI Whisper API...");
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: openaiFormData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Hono] OpenAI Whisper error:", response.status, errorText);
+      return c.json({ error: "Transcription failed", details: errorText.substring(0, 200) }, 500);
+    }
+
+    const data = await response.json();
+    console.log("[Hono] STT transcription received, text length:", data.text?.length);
+
+    return c.json({ text: data.text || '' });
+  } catch (error) {
+    console.error("[Hono] STT error:", error);
     return c.json({
       error: "STT transcription failed",
-      details: String(message).substring(0, 400)
-    }, status >= 400 && status < 600 ? status : 500);
+      details: error instanceof Error ? error.message : String(error)
+    }, 500);
   }
 };
 
@@ -335,7 +298,7 @@ app.post("/stt", handleSTT);
 const handleImageGenerate = async (c: Context) => {
   try {
     console.log("[Hono] Image generation request received");
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -384,57 +347,7 @@ const handleImageGenerate = async (c: Context) => {
 app.post("/api/image-generate", handleImageGenerate);
 app.post("/image-generate", handleImageGenerate);
 
-const handleChat = async (c: Context) => {
-  try {
-    console.log("[Hono] Chat request received");
-    console.log("[Hono] Request URL:", c.req.url);
-    console.log("[Hono] Request path:", c.req.path);
-    
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      console.error("[Hono] OpenAI API key not configured");
-      return c.json({ error: "OpenAI API key not configured" }, 500);
-    }
-
-    const body = await c.req.json();
-    const { messages } = body;
-
-    if (!messages || !Array.isArray(messages)) {
-      return c.json({ error: "Messages array is required" }, 400);
-    }
-
-    console.log("[Hono] Sending chat request to OpenAI...");
-    console.log("[Hono] Messages count:", messages.length);
-
-    const openai = new OpenAI({ apiKey });
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: messages as any,
-    });
-
-    const message = completion.choices[0]?.message?.content;
-
-    if (!message) {
-      throw new Error("No response from OpenAI");
-    }
-
-    console.log("[Hono] Chat response received, length:", message.length);
-
-    return c.json({ message });
-  } catch (error) {
-    console.error("[Hono] Chat error:", error);
-    return c.json({ 
-      error: "Chat request failed", 
-      details: error instanceof Error ? error.message : String(error) 
-    }, 500);
-  }
-};
-
-app.post("/api/chat", handleChat);
-app.post("/chat", handleChat);
-
-import { YOUTUBE_API_KEYS, getNextYouTubeKey, getYouTubeKeyByIndex, markYouTubeKeyIssue, isQuotaError } from './lib/youtube-keys';
+import { YOUTUBE_API_KEYS, getNextYouTubeKey, markYouTubeKeyIssue, isQuotaError } from './lib/youtube-keys';
 
 const REQUEST_CACHE = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 1000 * 60 * 60 * 12;
@@ -449,7 +362,6 @@ const ADMIN_DATA_STORE: Record<string, any> = {
 
 import { supabaseBackend } from './lib/supabase';
 
-import { getOpenAIKey } from './lib/supabase';
 const ADMIN_SUPABASE_TABLE = 'admin_content';
 
 async function loadAdminDataFromSupabase(): Promise<void> {
@@ -522,80 +434,58 @@ async function ensureAdminDataLoaded(): Promise<void> {
   }
 }
 
+/**
+ * Each app category maps to exactly 3 YouTube search queries.
+ * This ensures every category consumes the same amount of YouTube API quota
+ * (3 search calls + 3 video-details calls per category page visit).
+ * Queries are tailored to each category's topic so results are always relevant.
+ */
 const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
   motivation: [
     'motivational speech 2024',
     'david goggins motivation',
     'best motivational speech',
-    'powerful motivation',
-    'morning motivation speech',
   ],
   success: [
     'success mindset speech',
     'entrepreneur motivation',
     'business success speech',
-    'wealth mindset',
-    'success principles',
   ],
   mindset: [
     'growth mindset speech',
     'mental toughness',
     'champion mindset',
-    'positive thinking speech',
-    'mindset transformation',
   ],
-  inspiration: [
-    'inspirational speech',
-    'life changing speech',
-    'inspiring stories',
-    'overcome adversity',
-    'never give up speech',
+  fitness: [
+    'fitness motivation speech',
+    'workout motivation',
+    'gym training motivation',
   ],
   study: [
     'study motivation',
     'focus and concentration',
-    'academic success',
-    'learning motivation',
     'student motivation',
   ],
-  'high energy': [
-    'high energy motivation',
-    'pump up speech',
-    'workout motivation',
-    'intense motivation',
-    'energy boost speech',
-  ],
-  'daily motivation': [
-    'daily motivation speech',
-    'morning routine motivation',
-    'daily inspiration',
-    'start your day right',
-    'daily mindset',
-  ],
-  'powerful speeches': [
-    'powerful motivational speech',
-    'life changing speech',
-    'greatest speeches',
-    'legendary speeches',
-    'iconic motivational speech',
+  'christian motivation': [
+    'christian motivation speech church',
+    'sermon inspiration faith encouragement',
+    'bible motivation jesus gospel testimony',
   ],
   'athlete pump up': [
     'athlete pump up motivation',
     'pregame motivation speech',
     'sports motivation beast mode',
-    'championship mindset speech',
-    'game day motivation football basketball',
   ],
 };
 
 function parseDuration(duration: string): number {
   const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;
-  
+
   const hours = parseInt(match[1] || '0');
   const minutes = parseInt(match[2] || '0');
   const seconds = parseInt(match[3] || '0');
-  
+
   return hours * 3600 + minutes * 60 + seconds;
 }
 
@@ -755,19 +645,8 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10, prefer
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
-    const requestedIndex =
-      (startIndex + attempt) % YOUTUBE_API_KEYS.length;
-
-    // Assign parallel searches to a specific independent quota pool first.
-    // If that pool is unavailable, later attempts can use another key.
-    const key =
-      preferKeyIndex !== undefined
-        ? getYouTubeKeyByIndex(requestedIndex)
-        : getNextYouTubeKey(requestedIndex);
-
-    if (!key) {
-      continue;
-    }
+    const key = getNextYouTubeKey(startIndex);
+    if (!key) break;
 
     try {
       const { videos } = await fetchYouTubeVideosWithKey(query, maxResults, key);
@@ -785,6 +664,7 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10, prefer
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       console.warn(`[YouTube] ⚠️ Attempt ${attempt + 1} failed with key ${key.substring(0, 10)}...: ${lastError.message}`);
+      startIndex = (YOUTUBE_API_KEYS.indexOf(key) + 1) % YOUTUBE_API_KEYS.length;
     }
   }
 
@@ -811,8 +691,8 @@ const handleYouTubeCategory = async (c: Context) => {
     const categoryKey = category.toLowerCase();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
 
-    // Use multiple keys + multiple queries to fetch a richer set while spreading quota
-    const queriesToRun = searchQueries.slice(0, Math.max(1, YOUTUBE_API_KEYS.length || 1));
+    // Always run ALL category queries — key rotation happens inside fetchYouTubeVideos.
+    const queriesToRun = searchQueries;
     const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
 
     console.log(`[YouTube] Fetching category: ${category}, queries: ${queriesToRun.length}, per-query limit: ${perQueryLimit}, keys: ${YOUTUBE_API_KEYS.length}`);
@@ -880,132 +760,6 @@ const handleYouTubeSearch = async (c: Context) => {
     }, 500);
   }
 };
-
-
-const handleYouTubeVideoDetails = async (c: Context) => {
-  const videoId = c.req.param('videoId')?.trim();
-
-  if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) {
-    return c.json({ error: 'Valid YouTube videoId is required' }, 400);
-  }
-
-  if (YOUTUBE_API_KEYS.length === 0) {
-    return c.json({ error: 'YouTube API key not configured' }, 500);
-  }
-
-  let lastError = 'Video metadata request failed';
-
-  for (let attempt = 0; attempt < YOUTUBE_API_KEYS.length; attempt++) {
-    const apiKey =
-      getYouTubeKeyByIndex(attempt) ||
-      getNextYouTubeKey(attempt);
-
-    if (!apiKey) {
-      continue;
-    }
-
-    try {
-      const detailsUrl =
-        new URL('https://www.googleapis.com/youtube/v3/videos');
-
-      detailsUrl.searchParams.set(
-        'part',
-        'snippet,contentDetails,statistics,status'
-      );
-      detailsUrl.searchParams.set('id', videoId);
-      detailsUrl.searchParams.set('key', apiKey);
-
-      const response = await fetch(detailsUrl.toString());
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        lastError = responseText || `YouTube API error ${response.status}`;
-
-        if (isQuotaError(response.status, responseText)) {
-          markYouTubeKeyIssue(apiKey, true);
-        } else {
-          markYouTubeKeyIssue(apiKey, false);
-        }
-
-        console.warn(
-          '[YouTube] Video metadata key attempt failed:',
-          attempt + 1,
-          'status:',
-          response.status
-        );
-
-        continue;
-      }
-
-      let data: any;
-
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        lastError = 'Invalid response from YouTube';
-        continue;
-      }
-
-      const video = data?.items?.[0];
-
-      if (!video) {
-        return c.json({ error: 'Video not found' }, 404);
-      }
-
-      const embeddable = video.status?.embeddable !== false;
-
-      if (!embeddable) {
-        return c.json({
-          error: 'Video is not embeddable'
-        }, 409);
-      }
-
-      return c.json({
-        video: {
-          id: video.id,
-          title: video.snippet?.title || '',
-          description: video.snippet?.description || '',
-          thumbnail:
-            video.snippet?.thumbnails?.high?.url ||
-            video.snippet?.thumbnails?.medium?.url ||
-            video.snippet?.thumbnails?.default?.url ||
-            '',
-          channelTitle: video.snippet?.channelTitle || '',
-          duration: video.contentDetails?.duration || 'PT0S',
-          viewCount: Number(video.statistics?.viewCount || 0),
-          publishedAt: video.snippet?.publishedAt || '',
-          embeddable,
-        }
-      });
-    } catch (error) {
-      lastError =
-        error instanceof Error
-          ? error.message
-          : String(error);
-
-      console.warn(
-        '[YouTube] Video metadata request attempt failed:',
-        attempt + 1,
-        lastError
-      );
-    }
-  }
-
-  console.error(
-    '[YouTube] All metadata key attempts failed:',
-    lastError
-  );
-
-  return c.json({
-    error: 'Failed to fetch YouTube video metadata',
-    details: lastError
-  }, 502);
-};
-
-app.get(
-  "/api/youtube/video/:videoId",
-  handleYouTubeVideoDetails
-);
 
 const handleYouTubeTrending = async (c: Context) => {
   try {
@@ -1211,10 +965,10 @@ app.notFound((c: Context) => {
 
 app.onError((err: Error, c: Context) => {
   console.error("[Hono] Unhandled error:", err);
-  return c.json({ 
-    error: "Internal Server Error", 
+  return c.json({
+    error: "Internal Server Error",
     message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   }, 500);
 });
 

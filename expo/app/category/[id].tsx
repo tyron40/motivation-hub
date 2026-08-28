@@ -27,70 +27,7 @@ import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
-  const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
-    motivation: [
-      'motivational speech inspiration discipline perseverance',
-      'powerful motivation speech never give up',
-    ],
-    success: [
-      'success motivational speech entrepreneurship achievement goals',
-      'business success leadership ambition motivational speech',
-    ],
-    mindset: [
-      'mindset motivational speech mental toughness focus habits',
-      'growth mindset discipline confidence motivational speech',
-    ],
-    fitness: [
-      'fitness motivation gym workout training strength speech',
-      'workout motivation bodybuilding fitness discipline speech',
-    ],
-    study: [
-      'study motivation productivity focus student education speech',
-      'exam study motivation concentration discipline students',
-    ],
-    church: [
-      'Christian motivational sermon faith Jesus God Bible',
-      'Christian motivation church sermon inspirational message',
-      'faith motivation Jesus scripture sermon',
-    ],
-    athlete: [
-      'athlete motivation sports pregame pump up speech',
-      'sports motivational speech championship training athlete',
-    ],
-  };
-
-  const CATEGORY_KEYWORDS: Record<string, string[]> = {
-    motivation: [
-      'motivation', 'motivational', 'inspiration', 'inspirational',
-      'discipline', 'perseverance', 'never give up',
-    ],
-    success: [
-      'success', 'successful', 'achievement', 'goals', 'entrepreneur',
-      'business', 'leadership', 'wealth', 'ambition',
-    ],
-    mindset: [
-      'mindset', 'mental toughness', 'growth mindset', 'focus',
-      'confidence', 'habits', 'psychology', 'self belief',
-    ],
-    fitness: [
-      'fitness', 'gym', 'workout', 'training', 'bodybuilding',
-      'strength', 'exercise', 'muscle',
-    ],
-    study: [
-      'study', 'student', 'school', 'exam', 'education',
-      'productivity', 'concentration', 'learning',
-    ],
-    church: [
-      'christian', 'church', 'jesus', 'christ', 'god', 'lord',
-      'faith', 'bible', 'scripture', 'gospel', 'prayer',
-      'worship', 'sermon', 'pastor', 'holy spirit',
-    ],
-    athlete: [
-      'athlete', 'athletic', 'sports', 'pregame', 'game day',
-      'championship', 'football', 'basketball', 'soccer',
-      'training', 'competition',
-    ],
-  };
+import { getDiscoveryProfile } from '@/lib/category-discovery';
 
   const getCategorySearchKey = (id: string, name: string) => {
     const normalizedId = id.trim().toLowerCase();
@@ -263,8 +200,10 @@ if (isMotivationCategory) {
       setCategoryError(null);
 
       const searchKey = getCategorySearchKey(categoryId, category.name);
-      const searchQueries = CATEGORY_SEARCH_QUERIES[searchKey] ?? CATEGORY_SEARCH_QUERIES.motivation;
-      const requiredKeywords = CATEGORY_KEYWORDS[searchKey] ?? CATEGORY_KEYWORDS.motivation;
+      const discoveryProfile = getDiscoveryProfile(searchKey);
+      const searchQueries = discoveryProfile.queries;
+      const requiredKeywords = discoveryProfile.positiveTerms;
+      const negativeTerms = discoveryProfile.negativeTerms;
 
       console.log('[Category] search key:', searchKey);
       console.log('[Category] queries:', searchQueries);
@@ -291,6 +230,15 @@ if (isMotivationCategory) {
           for (const keyword of requiredKeywords) {
             if (haystack.includes(keyword)) {
               score += keyword.includes(' ') ? 3 : 2;
+            }
+          }
+
+          // Strongly deprioritize off-category content (meditation/low-energy
+          // for athlete, music-only for church) — never let it outrank
+          // genuinely relevant speeches.
+          for (const negative of negativeTerms) {
+            if (haystack.includes(negative)) {
+              score -= 5;
             }
           }
 

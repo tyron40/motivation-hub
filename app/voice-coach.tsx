@@ -237,7 +237,7 @@ function VoiceCoachContent() {
   // Single TTS pipeline for greeting AND AI replies: generateTTS ->
   // temp file -> Sound.createAsync -> playAsync. `source` only labels logs.
   const speakText = useCallback(
-    async (spokenText: string, source: string = 'reply') => {
+    async (spokenText: string, source: string = 'reply', releaseAt: number = 0) => {
       if (!spokenText?.trim()) return;
 
       // Every spoken response takes a new generation. Late callbacks and
@@ -251,13 +251,13 @@ function VoiceCoachContent() {
         await stopAndUnloadSound();
 
         // Recording mode must be fully disabled before speaker playback.
+        // The session was restored right after recorder unload (or at init);
+        // the TTS network roundtrip below gives it ample settle time — no
+        // artificial sleeps before network work.
         await restorePlaybackAudioSession();
 
-        // Proven native behavior: allow the iOS/Android audio session to
-        // finish switching from microphone mode to speaker playback mode.
-        if (Platform.OS !== 'web') {
-          await new Promise(resolve => setTimeout(resolve, 400));
-        }
+        const ttsStart = performance.now();
+        console.log('[VoiceCoach Timing] TTS request started');
 
         const preferredVoice = profile.preferredVoice || 'alloy';
         console.log('[VoiceCoach] TTS requested', {
@@ -273,6 +273,8 @@ function VoiceCoachContent() {
 
         // A newer turn superseded this one — abandon silently.
         if (epoch !== soundEpochRef.current) return;
+
+        console.log(`[VoiceCoach Timing] TTS: ${Math.round(performance.now() - ttsStart)}ms`);
 
         const base64Data = tts?.audio?.base64Data;
         const mimeType = tts?.audio?.mimeType || 'audio/mpeg';
@@ -394,6 +396,11 @@ function VoiceCoachContent() {
         if (playbackStatus.isLoaded) {
           await result.sound.playAsync();
           console.log('[VoiceCoach] TTS playAsync started', { source });
+          if (releaseAt > 0) {
+            console.log(
+              `[VoiceCoach Timing] total release-to-audio: ${Math.round(performance.now() - releaseAt)}ms`
+            );
+          }
         } else {
           console.log(
             '[VoiceCoach] TTS audio not loaded immediately; retrying once'
@@ -417,6 +424,11 @@ function VoiceCoachContent() {
 
           await result.sound.playAsync();
           console.log('[VoiceCoach] TTS playAsync started (after retry)', { source });
+          if (releaseAt > 0) {
+            console.log(
+              `[VoiceCoach Timing] total release-to-audio: ${Math.round(performance.now() - releaseAt)}ms`
+            );
+          }
         }
       } catch (err: any) {
         console.error('[VoiceCoach] TTS playback error:', { source, message: err?.message });
@@ -445,7 +457,7 @@ function VoiceCoachContent() {
   );
 
   const getCoachReply = useCallback(
-    async (userText: string) => {
+    async (userText: string, releaseAt: number = 0) => {
       if (!userText.trim()) {
         returnToIdle();
         return;
@@ -466,8 +478,8 @@ function VoiceCoachContent() {
         const userName = profile.name || 'friend';
         const voiceDescription = selectedVoice.description;
 
-        const systemPrompt = `You are the user's AI motivation coach. ${voiceDescription}
-Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}" when natural.`;
+        const systemPrompt = `You are a motivational voice coach having a spoken conversation with ${userName}. ${voiceDescription}
+Respond naturally and directly. Keep most responses concise enough to speak in roughly 10-25 seconds unless the user explicitly asks for more detail. Avoid long lists and essays. Sound encouraging, energetic, and conversational. Call the user by name when natural.`;
 
         const nextConversation = trimConversation([
           ...conversationRef.current,
@@ -480,8 +492,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
         ];
 
         console.log('[VoiceCoach] chat requested');
+        const chatStart = performance.now();
 
         const result = await sendChatMessage({ messages });
+
+        console.log(`[VoiceCoach Timing] Chat: ${Math.round(performance.now() - chatStart)}ms`);
         console.log('[VoiceCoach] chat result received');
         const reply = result?.message?.trim();
 
@@ -494,7 +509,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           { role: 'assistant', content: reply },
         ]);
 
-        await speakText(reply, 'response');
+        await speakText(reply, 'response', releaseAt);
       } catch (err: any) {
         console.error('[VoiceCoach] chat failed:', err?.message);
         returnToIdle();
@@ -521,6 +536,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
     }
 
     recordingStoppingRef.current = true;
+
+    const releaseAt = performance.now();
+    console.log('[VoiceCoach Timing] recording stopped');
 
     try {
       setPhase('processing');
@@ -554,7 +572,7 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
           throw new Error('No speech detected. Hold the microphone and speak clearly.');
         }
 
-        await getCoachReply(userText);
+        await getCoachReply(userText, releaseAt);
         return;
       }
 
@@ -589,11 +607,11 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
 
-      // Immediately return the global session to playback mode, then let
-      // it settle before any upload/synthesis — the recorder's category
-      // must never leak into STT/TTS or the rest of the app.
+      // Immediately return the global session to playback mode — the
+      // recorder's category must never leak into STT/TTS or the rest of
+      // the app. STT network work starts RIGHT AWAY: no artificial settle
+      // sleeps; the audio session settles during the network roundtrips.
       await restorePlaybackAudioSession();
-      await new Promise(resolve => setTimeout(resolve, 250));
 
       if (!uri) throw new Error('No audio captured');
 
@@ -635,7 +653,9 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
 
       console.log('[VoiceCoach] STT requested');
 
+      const sttStart = performance.now();
       const userText = (await transcribeAudioViaBackend(uri)).trim();
+      console.log(`[VoiceCoach Timing] STT: ${Math.round(performance.now() - sttStart)}ms`);
 
       console.log(
         '[VoiceCoach] STT result:',
@@ -804,10 +824,13 @@ Keep answers practical, warm, and short (2-3 sentences). Call user "${userName}"
       return;
     }
 
-    const userName = profile.name || 'friend';
+    const savedName = profile.name?.trim() || '';
     const hour = new Date().getHours();
-    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-    const greetingText = `${greeting}, ${userName}! I'm your AI Voice Coach. I'm ready to help you win today. What's on your mind?`;
+    const timeGreeting =
+      hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const greetingText = savedName
+      ? `${timeGreeting}, ${savedName}! I'm your AI Voice Coach. What's on your mind today?`
+      : `Hey there! I'm your AI Voice Coach. What's on your mind today?`;
 
     conversationRef.current = trimConversation([
       ...conversationRef.current,

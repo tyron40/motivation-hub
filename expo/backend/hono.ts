@@ -56,9 +56,9 @@ app.get("/api", (c: Context) => {
 
 app.get("/health", (c: Context) => {
   console.log("[Hono] Health check (no /api prefix)");
-  return c.json({ 
+  return c.json({
     ok: true,
-    status: "healthy", 
+    status: "healthy",
     timestamp: new Date().toISOString(),
     env: {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
@@ -76,9 +76,9 @@ app.get("/health", (c: Context) => {
 
 app.get("/api/health", (c: Context) => {
   console.log("[Hono] Health check (with /api prefix)");
-  return c.json({ 
+  return c.json({
     ok: true,
-    status: "healthy", 
+    status: "healthy",
     timestamp: new Date().toISOString(),
     env: {
       hasSupabaseUrl: !!process.env.EXPO_PUBLIC_SUPABASE_URL,
@@ -97,15 +97,15 @@ app.get("/api/health", (c: Context) => {
 app.all('/api/cron/youtube-batch', async (c: Context) => {
   try {
     console.log('🕐 Cron job triggered: Running daily YouTube batch fetch');
-    
+
     const authHeader = c.req.header('authorization');
     const cronSecret = process.env.CRON_SECRET;
-    
+
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       console.error('❌ Unauthorized cron request');
       return c.json({ error: 'Unauthorized' }, 401);
     }
-    
+
     const fakeRequest = new Request('https://example.com/api/trpc/content.runDailyBatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -114,19 +114,19 @@ app.all('/api/cron/youtube-batch', async (c: Context) => {
         forceRefresh: false,
       }),
     });
-    
-    const context = await createContext({ 
+
+    const context = await createContext({
       req: fakeRequest,
       resHeaders: new Headers(),
       info: {} as any,
     });
     const caller = appRouter.createCaller(context);
-    
+
     const result = await caller.content.runDailyBatch({
       videosPerQuery: 5,
       forceRefresh: false,
     });
-    
+
     console.log('✅ Daily batch completed:', result);
     return c.json(result);
   } catch (error: unknown) {
@@ -140,7 +140,7 @@ const handleTTS = async (c: Context) => {
     console.log("[Hono] TTS request received");
     console.log("[Hono] Request URL:", c.req.url);
     console.log("[Hono] Request path:", c.req.path);
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -180,9 +180,9 @@ const handleTTS = async (c: Context) => {
     });
   } catch (error) {
     console.error("[Hono] TTS error:", error);
-    return c.json({ 
-      error: "TTS generation failed", 
-      details: error instanceof Error ? error.message : String(error) 
+    return c.json({
+      error: "TTS generation failed",
+      details: error instanceof Error ? error.message : String(error)
     }, 500);
   }
 };
@@ -195,7 +195,7 @@ const handleChat = async (c: Context) => {
     console.log("[Hono] Chat request received");
     console.log("[Hono] Request URL:", c.req.url);
     console.log("[Hono] Request path:", c.req.path);
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -230,9 +230,9 @@ const handleChat = async (c: Context) => {
     return c.json({ message });
   } catch (error) {
     console.error("[Hono] Chat error:", error);
-    return c.json({ 
-      error: "Chat request failed", 
-      details: error instanceof Error ? error.message : String(error) 
+    return c.json({
+      error: "Chat request failed",
+      details: error instanceof Error ? error.message : String(error)
     }, 500);
   }
 };
@@ -243,7 +243,7 @@ app.post("/chat", handleChat);
 const handleSTT = async (c: Context) => {
   try {
     console.log("[Hono] STT request received");
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -298,7 +298,7 @@ app.post("/stt", handleSTT);
 const handleImageGenerate = async (c: Context) => {
   try {
     console.log("[Hono] Image generation request received");
-    
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error("[Hono] OpenAI API key not configured");
@@ -481,11 +481,11 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
 function parseDuration(duration: string): number {
   const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;
-  
+
   const hours = parseInt(match[1] || '0');
   const minutes = parseInt(match[2] || '0');
   const seconds = parseInt(match[3] || '0');
-  
+
   return hours * 3600 + minutes * 60 + seconds;
 }
 
@@ -965,10 +965,10 @@ app.notFound((c: Context) => {
 
 app.onError((err: Error, c: Context) => {
   console.error("[Hono] Unhandled error:", err);
-  return c.json({ 
-    error: "Internal Server Error", 
+  return c.json({
+    error: "Internal Server Error",
     message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   }, 500);
 });
 
