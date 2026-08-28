@@ -71,12 +71,12 @@ const MIN_RECORDING_SIZE_BYTES = 1000;
 
 function VoiceCoachContent() {
   const { colors } = useTheme();
-  const { profile, updateProfile } = useUserProfile();
+  const { profile, updateProfile, isLoading: isProfileLoading } = useUserProfile();
 
   const selectedVoice =
     voiceOptions.find((voice) => voice.id === (profile.preferredVoice || 'alloy')) ||
     voiceOptions[0];
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const iapContext = useIAP();
   const { usageStats } = iapContext;
 
@@ -475,7 +475,11 @@ function VoiceCoachContent() {
       setCurrentStatus('Thinking...');
 
       try {
-        const userName = profile.name || 'friend';
+        const userName =
+          profile.name?.trim() ||
+          user?.user_metadata?.name?.trim() ||
+          user?.email?.split('@')[0]?.trim() ||
+          'friend';
         const voiceDescription = selectedVoice.description;
 
         const systemPrompt = `You are a motivational voice coach having a spoken conversation with ${userName}. ${voiceDescription}
@@ -516,7 +520,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
         Alert.alert('Coach Response Failed', 'Coach response failed. Please try again.');
       }
     },
-    [usageStats.credits, profile.name, profile.preferredVoice, trimConversation, iapContext, speakText, returnToIdle]
+    [usageStats.credits, profile.name, profile.preferredVoice, user?.user_metadata?.name, user?.email, trimConversation, iapContext, speakText, returnToIdle]
   );
 
   const stopRecording = useCallback(async () => {
@@ -824,7 +828,11 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
       return;
     }
 
-    const savedName = profile.name?.trim() || '';
+    const savedName =
+      profile.name?.trim() ||
+      user?.user_metadata?.name?.trim() ||
+      user?.email?.split('@')[0]?.trim() ||
+      '';
     const hour = new Date().getHours();
     const timeGreeting =
       hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -839,7 +847,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
 
     console.log('[VoiceCoach] greeting requested');
     await speakText(greetingText, 'greeting');
-  }, [profile.name, trimConversation, speakText]);
+  }, [profile.name, user?.user_metadata?.name, user?.email, trimConversation, speakText]);
 
   // Mount-only initialization. Dependencies are intentionally stable
   // (setPlaybackMode and stopAndUnloadSound never change identity) so this
@@ -897,7 +905,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
   // re-run after initialization completes. A short timer lets the audio
   // session settle before the first TTS request.
   useEffect(() => {
-    if (!initializationReady) return;
+    if (!initializationReady || isProfileLoading) return;
     if (autoGreetDoneRef.current) return;
 
     console.log('[VoiceCoach] greeting scheduled');
@@ -906,7 +914,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [initializationReady, doGreeting]);
+  }, [initializationReady, isProfileLoading, doGreeting]);
 
 
   useEffect(() => {
@@ -1204,9 +1212,9 @@ const createStyles = (colors: any) =>
       alignItems: 'center',
     },
     voiceSphere: {
-      width: 164,
-      height: 164,
-      borderRadius: 82,
+      width: 210,
+      height: 210,
+      borderRadius: 105,
       overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
@@ -1218,31 +1226,31 @@ const createStyles = (colors: any) =>
     },
     voiceSphereGradient: {
       ...StyleSheet.absoluteFillObject,
-      borderRadius: 82,
+      borderRadius: 105,
     },
     voiceSphereSoftLayer: {
       position: 'absolute',
       borderRadius: 100,
     },
     voiceSphereUpperGlow: {
-      width: 132,
-      height: 104,
-      top: 7,
+      width: 169,
+      height: 133,
+      top: 9,
       backgroundColor: 'rgba(255,255,255,0.72)',
     },
     voiceSphereBlueLayer: {
-      width: 146,
-      height: 96,
-      bottom: -18,
+      width: 187,
+      height: 123,
+      bottom: -23,
       backgroundColor: 'rgba(0,149,255,0.33)',
     },
     voiceSphereHighlight: {
       position: 'absolute',
-      width: 92,
-      height: 66,
-      top: 18,
-      left: 27,
-      borderRadius: 46,
+      width: 118,
+      height: 85,
+      top: 23,
+      left: 35,
+      borderRadius: 59,
       backgroundColor: 'rgba(255,255,255,0.62)',
     },
     changeCoachButton: {

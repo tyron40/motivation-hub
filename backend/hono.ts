@@ -261,7 +261,7 @@ const handleSTT = async (c: Context) => {
 
     const openaiFormData = new FormData();
     openaiFormData.append('file', audioFile, audioFile.name || 'recording.wav');
-    openaiFormData.append('model', 'whisper-1');
+    openaiFormData.append('model', 'gpt-4o-mini-transcribe');
     openaiFormData.append('language', 'en');
 
     console.log("[Hono] Sending to OpenAI Whisper API...");
