@@ -464,52 +464,6 @@ class AppodealManager {
 
   // ─── Interstitial ─────────────────────────────────────────────
 
-  /**
-   * Appodeal is the primary provider. If an interstitial is not already
-   * available, give Appodeal a short bounded opportunity to fill before
-   * the caller falls back to AdMob.
-   */
-  async prepareInterstitial(timeoutMs = 6000): Promise<boolean> {
-    if (!this.active) return false;
-
-    const elapsed = Date.now() - this.lastInterstitialShownAt;
-    if (elapsed < INTERSTITIAL_COOLDOWN_MS) return false;
-
-    try {
-      if (
-        this.interstitialReady ||
-        Boolean(Appodeal.isLoaded(AdType.INTERSTITIAL))
-      ) {
-        this.interstitialReady = true;
-        return true;
-      }
-
-      debugLog('[Ads] PRIMARY request: APPODEAL');
-      Appodeal.cache(AdType.INTERSTITIAL);
-      debugLog('[Appodeal] interstitial cache requested');
-
-      const deadline = Date.now() + timeoutMs;
-
-      while (Date.now() < deadline) {
-        if (Boolean(Appodeal.isLoaded(AdType.INTERSTITIAL))) {
-          this.interstitialReady = true;
-          return true;
-        }
-
-        await this.delay(250);
-      }
-    } catch (error: any) {
-      debugLog(
-        `[Appodeal] interstitial preparation failed: ${error?.message ?? 'unknown'}`
-      );
-    }
-
-    debugLog(
-      '[Ads] Appodeal unavailable/no-fill/timeout -> ADMOB FALLBACK'
-    );
-    return false;
-  }
-
   private resolveInterstitialClose(shown: boolean) {
     if (this.interstitialCloseTimeout) {
       clearTimeout(this.interstitialCloseTimeout);
@@ -549,48 +503,6 @@ class AppodealManager {
   }
 
   // ─── Rewarded video ───────────────────────────────────────────
-
-  /**
-   * Give Appodeal the first bounded opportunity to supply a rewarded ad
-   * before the caller falls back to AdMob.
-   */
-  async prepareRewarded(timeoutMs = 6000): Promise<boolean> {
-    if (!this.active) return false;
-
-    try {
-      if (
-        this.rewardedReady ||
-        Boolean(Appodeal.isLoaded(AdType.REWARDED_VIDEO))
-      ) {
-        this.rewardedReady = true;
-        return true;
-      }
-
-      debugLog('[Ads] PRIMARY request: APPODEAL');
-      Appodeal.cache(AdType.REWARDED_VIDEO);
-      debugLog('[Appodeal] rewarded cache requested');
-
-      const deadline = Date.now() + timeoutMs;
-
-      while (Date.now() < deadline) {
-        if (Boolean(Appodeal.isLoaded(AdType.REWARDED_VIDEO))) {
-          this.rewardedReady = true;
-          return true;
-        }
-
-        await this.delay(250);
-      }
-    } catch (error: any) {
-      debugLog(
-        `[Appodeal] rewarded preparation failed: ${error?.message ?? 'unknown'}`
-      );
-    }
-
-    debugLog(
-      '[Ads] Appodeal unavailable/no-fill/timeout -> ADMOB FALLBACK'
-    );
-    return false;
-  }
 
   private resolveRewardedClose(shown: boolean) {
     if (this.rewardedCloseTimeout) {
