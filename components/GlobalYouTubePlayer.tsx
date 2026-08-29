@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
+import { usePathname } from 'expo-router';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { restorePlaybackAudioSession } from '@/lib/audio-session';
@@ -16,6 +17,8 @@ export default function GlobalYouTubePlayer() {
     currentSpeech,
     currentPlaylist,
     setIsPlaying,
+    setIsMinimized,
+    setCurrentSpeech,
     setCurrentTime,
     setDuration,
     skipToNext,
@@ -30,6 +33,7 @@ export default function GlobalYouTubePlayer() {
     isShowingAd,
   } = useAdMob();
 
+  const pathname = usePathname();
   const localPlayerRef = useRef<AudioOnlyVideoPlayerRef>(null);
   const midpointAdShownRef = useRef(false);
   const quarterAdShownRef = useRef(false);
@@ -47,6 +51,35 @@ export default function GlobalYouTubePlayer() {
     },
     [audioPlayerRef],
   );
+
+  // Short Clips owns its own audio/video playback.
+  // Completely stop and remove any persistent speech before clips play.
+  useEffect(() => {
+    if (pathname !== '/short-clips' || !currentSpeech) {
+      return;
+    }
+
+    console.log('[Global Player] Short Clips opened - closing speech');
+
+    try {
+      localPlayerRef.current?.pause();
+    } catch (error) {
+      console.warn(
+        '[Global Player] Failed to pause speech before closing:',
+        error,
+      );
+    }
+
+    setIsPlaying(false);
+    setIsMinimized(false);
+    setCurrentSpeech(null);
+  }, [
+    pathname,
+    currentSpeech,
+    setCurrentSpeech,
+    setIsMinimized,
+    setIsPlaying,
+  ]);
 
   // ── Reset ad tracking when speech changes ──────────────────────────────
   useEffect(() => {

@@ -38,7 +38,6 @@ import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
 import { useAdMob } from '@/hooks/admob-context';
-import { useSpeechContext } from '@/hooks/speech-context';
 import { fallbackShortClips } from '@/mocks/shortClips';
 
 let NativeYoutubePlayer: any = null;
@@ -74,13 +73,6 @@ export default function ShortClipsScreen() {
   const initialVideoId = params.initialVideoId ? String(params.initialVideoId) : null;
   const { isAdmin, customVideos, addVideo, removeVideo } = useAdmin();
   const { showInterstitialAd, canShowAds } = useAdMob();
-  const {
-    currentSpeech,
-    isMinimized,
-    setIsMinimized,
-    setCurrentSpeech,
-    setIsPlaying: setSpeechIsPlaying,
-  } = useSpeechContext();
   const clipViewCountRef = useRef(0);
 
   const [clips, setClips] = useState<ClipItem[]>([]);
@@ -96,23 +88,6 @@ export default function ShortClipsScreen() {
   const flatListRef = useRef<FlatList>(null);
   const likeAnimations = useRef<Record<string, Animated.Value>>({}).current;
   const saveAnimations = useRef<Record<string, Animated.Value>>({}).current;
-
-  useEffect(() => {
-    if (!currentSpeech || !isMinimized) {
-      return;
-    }
-
-    console.log('[Short Clips] Closing minimized speech player');
-    setSpeechIsPlaying(false);
-    setIsMinimized(false);
-    setCurrentSpeech(null);
-  }, [
-    currentSpeech,
-    isMinimized,
-    setCurrentSpeech,
-    setIsMinimized,
-    setSpeechIsPlaying,
-  ]);
 
   const getOrCreateAnim = useCallback((map: Record<string, Animated.Value>, key: string) => {
     if (!map[key]) {
