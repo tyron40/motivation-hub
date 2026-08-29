@@ -493,10 +493,6 @@ const getStyles = (_colors: any) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playerWrapper: {
-    width: '100%',
-    alignItems: 'center',
-  },
   imageContainer: {
     width: '85%',
     aspectRatio: 1,
