@@ -561,28 +561,6 @@ const getStyles = (_colors: any) => StyleSheet.create({
     marginBottom: 12,
     lineHeight: 32,
   },
-  speaker: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '500',
-    opacity: 0.8,
-    marginBottom: 16,
-  },
-  categoryBadge: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  categoryText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    opacity: 0.9,
-  },
   progressSection: {
     width: '100%',
     marginBottom: 20,
