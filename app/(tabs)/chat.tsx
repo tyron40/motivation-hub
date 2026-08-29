@@ -415,29 +415,6 @@ function ChatScreenContent() {
         await updateProfile({ name });
       }
 
-      if (!isSuggestion) {
-        const creditUsed = await deductCredit();
-        if (!creditUsed) {
-          console.log('âŒ Failed to deduct credit');
-          if (Platform.OS !== 'web') {
-            Alert.alert(
-              'No Credits',
-              'You need credits to use the AI chat feature. Purchase credits to continue.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Get Credits', onPress: () => setShowPaywall(true) },
-              ]
-            );
-          } else {
-            console.error('You need credits to use the AI chat feature.');
-          }
-          return;
-        }
-        console.log('âœ… Credit deducted. Remaining credits:', usageStats.credits - 1);
-      } else {
-        console.log('âœ… Suggested question - no credit needed');
-      }
-
       setMessages(prev => ([
         ...prev,
         userMessage,
@@ -528,6 +505,36 @@ function ChatScreenContent() {
         console.log('âš ï¸ Ignoring stale chat response for requestId:', currentRequestId);
         return;
       }
+
+      // Charge only after the backend returned a real AI response.
+      // Failed, timed-out, empty, or stale requests do not consume a chat credit.
+      if (!isSuggestion && completion) {
+        const creditUsed = await deductCredit();
+
+        if (!creditUsed) {
+          console.log('[Credits] Unable to consume chat credit after response');
+
+          if (Platform.OS !== 'web') {
+            Alert.alert(
+              'No Credits',
+              'You need credits to use the AI chat feature. Purchase credits to continue.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Get Credits', onPress: () => setShowPaywall(true) },
+              ]
+            );
+          } else {
+            console.error('You need credits to use the AI chat feature.');
+          }
+
+          return;
+        }
+
+        console.log('[Credits] Chat credit deducted after successful response.');
+      } else if (isSuggestion) {
+        console.log('[Credits] Suggested question - no chat credit needed');
+      }
+
 
       console.log(
         'ðŸ“¥ Assistant parse result | completion length:',

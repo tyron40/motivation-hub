@@ -27,10 +27,10 @@ interface PaywallModalProps {
 }
 
 const PRICE_MAP: Record<string, string> = {
-  'mh_credits_100': '$0.99',
-  'mh_credits_500': '$0.99',
-  'mh_credits_1000': '$0.99',
-  'mh_premium_monthly': '$99.99/month',
+  'mh_credits_100': '$4.99',
+  'mh_credits_500': '$19.99',
+  'mh_credits_1000': '$34.99',
+  'mh_premium_monthly': '$9.99/month',
   'mh_premium_annual': '$99.99/year',
 };
 

@@ -1,6 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import Purchases, { LOG_LEVEL, PurchasesPackage, CustomerInfo } from 'react-native-purchases';
 import Constants from 'expo-constants';
@@ -37,6 +37,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
   const { isAuthenticated, user } = useAuth();
   const storageKey = useMemo(() => `entitlements:${user?.id ?? 'guest'}`, [user?.id]);
   const [entitlements, setEntitlements] = useState<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
+  const entitlementsRef = useRef<Entitlements>(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
@@ -175,42 +176,68 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
   useEffect(() => {
     setEntitlements(DEFAULT_ENTITLEMENTS_AUTHENTICATED);
+    entitlementsRef.current = DEFAULT_ENTITLEMENTS_AUTHENTICATED;
     loadEntitlements();
   }, [loadEntitlements, isAuthenticated, user?.id]);
 
+  useEffect(() => {
+    entitlementsRef.current = entitlements;
+  }, [entitlements]);
+
   const saveEntitlements = useCallback(async (newEntitlements: Entitlements) => {
     try {
-      await AsyncStorage.setItem(storageKey, JSON.stringify(newEntitlements));
+      // Update the live balance immediately so later credit operations use
+      // the newest value instead of a stale React render.
+      entitlementsRef.current = newEntitlements;
       setEntitlements(newEntitlements);
-      console.log('✅ Entitlements saved:', newEntitlements);
+
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newEntitlements));
+      console.log('[IAP] Entitlements saved:', newEntitlements);
     } catch (error) {
-      console.error('❌ Error saving entitlements:', error);
+      console.error('[IAP] Error saving entitlements:', error);
+      throw error;
     }
   }, [storageKey]);
 
   const addCredits = useCallback(async (amount: number) => {
-    const newEntitlements = {
-      ...entitlements,
-      credits: entitlements.credits + amount,
-    };
-    await saveEntitlements(newEntitlements);
-  }, [entitlements, saveEntitlements]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
 
-  const useCredit = useCallback(async () => {
-    if (entitlements.credits <= 0) {
+    const current = entitlementsRef.current;
+
+    const newEntitlements = {
+      ...current,
+      credits: current.credits + amount,
+    };
+
+    await saveEntitlements(newEntitlements);
+  }, [saveEntitlements]);
+
+  const useCredit = useCallback(async (amount: number = 1) => {
+    if (!Number.isFinite(amount) || amount <= 0) {
       return false;
     }
+
+    const normalizedAmount = Math.floor(amount);
+    const current = entitlementsRef.current;
+
+    if (current.credits < normalizedAmount) {
+      return false;
+    }
+
     const newEntitlements = {
-      ...entitlements,
-      credits: entitlements.credits - 1,
+      ...current,
+      credits: current.credits - normalizedAmount,
     };
+
     await saveEntitlements(newEntitlements);
     return true;
-  }, [entitlements, saveEntitlements]);
+  }, [saveEntitlements]);
 
   const setPremium = useCallback(async (expiresAt: number) => {
     const newEntitlements = {
-      ...entitlements,
+      ...entitlementsRef.current,
       isPremium: true,
       premiumExpiresAt: expiresAt,
     };
@@ -231,7 +258,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     }
 
     const merged: Entitlements = {
-      ...entitlements,
+      ...entitlementsRef.current,
       isPremium: premiumActive,
       premiumExpiresAt: premiumActive ? expiresAt : null,
     };
@@ -261,7 +288,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
 
-      let updated = { ...entitlements };
+      let updated = { ...entitlementsRef.current };
 
       if (productId === IAP_PRODUCT_IDS.CREDITS_100) updated.credits += 100;
       if (productId === IAP_PRODUCT_IDS.CREDITS_500) updated.credits += 500;
