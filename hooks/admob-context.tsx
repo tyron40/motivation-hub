@@ -117,18 +117,37 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Appodeal mediation takes priority when active; otherwise AdMob serves.
-    if (appodeal.active && appodeal.rewardedLoaded) {
-      try {
-        logProvider('APPODEAL');
-        beginAdDisplay();
-        const shown = await appodeal.showRewarded();
-        endAdDisplay();
-        return shown;
-      } catch (error: any) {
-        console.error('❌ Error showing Appodeal rewarded ad:', error);
-        endAdDisplay();
-        return false;
+    // Appodeal is the primary rewarded provider.
+    // Give it a bounded opportunity before using AdMob as fallback.
+    if (appodeal.active) {
+      const appodealReady = await appodeal.prepareRewarded();
+
+      if (appodealReady) {
+        try {
+          logProvider('APPODEAL');
+          beginAdDisplay();
+
+          const shown = await appodeal.showRewarded();
+
+          endAdDisplay();
+
+          if (shown) {
+            return true;
+          }
+
+          if (ADS_DEBUG) {
+            console.log(
+              '[Ads] Appodeal unavailable/no-fill/timeout -> ADMOB FALLBACK'
+            );
+          }
+        } catch (error: any) {
+          endAdDisplay();
+
+          console.warn(
+            '[Ads] Appodeal rewarded failed -> ADMOB FALLBACK',
+            error
+          );
+        }
       }
     }
 
@@ -167,30 +186,38 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Appodeal gets first opportunity, but must never block AdMob.
-    if (appodeal.active && appodeal.canShowInterstitial()) {
-      try {
-        logProvider('APPODEAL');
-        beginAdDisplay();
+    // Appodeal is the primary interstitial provider.
+    // Give it a bounded opportunity before using AdMob as fallback.
+    if (appodeal.active) {
+      const appodealReady = await appodeal.prepareInterstitial();
 
-        const shown = await appodeal.showInterstitial();
+      if (appodealReady && appodeal.canShowInterstitial()) {
+        try {
+          logProvider('APPODEAL');
+          beginAdDisplay();
 
-        endAdDisplay();
+          const shown = await appodeal.showInterstitial();
 
-        if (shown) {
-          return true;
+          endAdDisplay();
+
+          if (shown) {
+            return true;
+          }
+
+          if (ADS_DEBUG) {
+            console.log(
+              '[Ads] Appodeal unavailable/no-fill/timeout -> ADMOB FALLBACK'
+            );
+          }
+        } catch (error: any) {
+          endAdDisplay();
+
+          console.warn(
+            '[Ads] Appodeal interstitial failed -> ADMOB FALLBACK',
+            error
+          );
         }
-
-        console.log('[Ads] Appodeal did not show - trying AdMob fallback');
-      } catch (error: any) {
-        endAdDisplay();
-        console.warn(
-          '[Ads] Appodeal interstitial failed - trying AdMob fallback',
-          error
-        );
       }
-    } else if (appodeal.active) {
-      console.log('[Ads] Appodeal not ready - trying AdMob fallback');
     }
 
     try {
@@ -222,34 +249,40 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       return false;
     }
 
-    // Appodeal gets first opportunity when it is genuinely ready.
-    if (appodeal.active && appodeal.canShowInterstitial()) {
-      try {
-        logProvider('APPODEAL');
-        beginAdDisplay();
+    // Appodeal is the primary transition provider.
+    // Give it a bounded opportunity before using AdMob as fallback.
+    if (appodeal.active) {
+      const appodealReady = await appodeal.prepareInterstitial();
 
-        const shown = await appodeal.showInterstitial();
+      if (appodealReady && appodeal.canShowInterstitial()) {
+        try {
+          logProvider('APPODEAL');
+          beginAdDisplay();
 
-        endAdDisplay();
+          const shown = await appodeal.showInterstitial();
 
-        if (shown) {
-          // AdManager owns transition frequency, even when Appodeal serves.
-          manager.resetInteractionCount();
-          return true;
+          endAdDisplay();
+
+          if (shown) {
+            // AdManager owns transition frequency, even when Appodeal serves.
+            manager.resetInteractionCount();
+            return true;
+          }
+
+          if (ADS_DEBUG) {
+            console.log(
+              '[Ads] Appodeal unavailable/no-fill/timeout -> ADMOB FALLBACK'
+            );
+          }
+        } catch (error: any) {
+          endAdDisplay();
+
+          console.warn(
+            '[Ads] Appodeal transition failed -> ADMOB FALLBACK',
+            error
+          );
         }
-
-        console.log('[Ads] Appodeal did not show - trying AdMob fallback');
-      } catch (error: any) {
-        endAdDisplay();
-        console.warn(
-          '[Ads] Appodeal transition ad failed - trying AdMob fallback',
-          error
-        );
       }
-    } else if (appodeal.active) {
-      console.log(
-        '[Ads] Appodeal transition ad not ready - trying AdMob fallback'
-      );
     }
 
     // Active-but-empty Appodeal must never block AdMob.
