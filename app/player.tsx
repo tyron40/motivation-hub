@@ -273,10 +273,6 @@ export default function PlayerScreen() {
 
           <View style={styles.info}>
             <Text style={styles.title} numberOfLines={2}>{currentSpeech.title}</Text>
-            <Text style={styles.speaker}>{currentSpeech.speaker}</Text>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{(currentSpeech.category || '').toUpperCase()}</Text>
-            </View>
           </View>
 
           <View style={styles.progressSection}>
