@@ -7,7 +7,6 @@ import {
   Image,
   SafeAreaView,
   Animated,
-  Share,
   Platform,
   Alert,
   Modal,
@@ -16,7 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Slider from '@react-native-community/slider';
-import { ChevronDown, Heart, Share2, Plus, Play, Pause, SkipForward, SkipBack, RotateCcw, RotateCw } from 'lucide-react-native';
+import { ChevronDown, Heart, Plus, Play, Pause, SkipForward, SkipBack, RotateCcw, RotateCw } from 'lucide-react-native';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
@@ -192,25 +191,6 @@ export default function PlayerScreen() {
     }
   }, [currentSpeech, playlists, addToPlaylist]);
 
-  const handleShare = async () => {
-    if (!currentSpeech) return;
-    try {
-      const message = `Check out "${currentSpeech.title}" by ${currentSpeech.speaker} on Motivation Fuel!`;
-      const url = currentSpeech.youtubeId 
-        ? `https://youtube.com/watch?v=${currentSpeech.youtubeId}` 
-        : undefined;
-      
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-          await navigator.share({ title: currentSpeech.title, text: message, url });
-        }
-      } else {
-        await Share.share({ message, url });
-      }
-    } catch (error) {
-      console.error('Error sharing:', error);
-    }
-  };
 
   useEffect(() => {
     Animated.parallel([
@@ -380,10 +360,6 @@ export default function PlayerScreen() {
               <Plus color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
               <Text style={styles.actionLabel}>Playlist</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={handleShare}>
-              <Share2 color="rgba(255,255,255,0.8)" size={22} strokeWidth={1.8} />
-              <Text style={styles.actionLabel}>Share</Text>
-            </TouchableOpacity>
           </View>
         </Animated.View>
         <Modal
@@ -528,7 +504,7 @@ const getStyles = (_colors: any) => StyleSheet.create({
     maxHeight: 340,
     borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 48,
+    marginBottom: 24,
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -550,7 +526,7 @@ const getStyles = (_colors: any) => StyleSheet.create({
   },
   info: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 24,
     paddingHorizontal: 20,
   },
   title: {
