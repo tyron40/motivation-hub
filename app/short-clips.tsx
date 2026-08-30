@@ -75,8 +75,17 @@ export default function ShortClipsScreen() {
   const { showInterstitialAd, canShowAds } = useAdMob();
   const clipViewCountRef = useRef(0);
 
-  const [clips, setClips] = useState<ClipItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [clips, setClips] = useState<ClipItem[]>(() =>
+    fallbackShortClips.map(c => ({
+      id: c.id,
+      youtubeId: c.youtubeId,
+      title: c.title,
+      channelTitle: c.speaker,
+      thumbnail: c.imageUrl,
+      duration: c.duration,
+    }))
+  );
+  const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [likedClips, setLikedClips] = useState<Set<string>>(new Set());
   const [savedClips, setSavedClips] = useState<Set<string>>(new Set());
@@ -116,8 +125,7 @@ export default function ShortClipsScreen() {
     const fetchClips = async () => {
       try {
         console.log('Fetching motivational short clips...');
-        setIsLoading(true);
-
+        // Keep existing clips visible while fresh YouTube content loads.
         const [searchResults, trending] = await Promise.all([
           searchVideos('motivational short clips inspiration', 30),
           getTrendingVideos(30),

@@ -1391,7 +1391,7 @@ const ChatHistoryModal = ({ visible, onClose, sessions, currentSessionId, onSele
                       {session.title}
                     </Text>
                     <Text style={styles.historyItemDate}>
-                      {formatDate(session.updatedAt)} â€¢ {session.messages.length} messages
+                      {formatDate(session.updatedAt)} {'\u2022'} {session.messages.length} messages
                     </Text>
                   </View>
                   <TouchableOpacity

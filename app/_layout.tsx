@@ -22,7 +22,6 @@ import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { LoadingScreen } from '@/components/LoadingScreen';
 
 
 // Prevent splash screen from auto-hiding with error handling
@@ -150,8 +149,19 @@ function AudioPlayerWrapper() {
 function RootLayoutNav() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Keep the real native splash visible until auth initialization finishes.
+  useEffect(() => {
+    if (isLoading || Platform.OS === 'web') {
+      return;
+    }
+
+    void SplashScreen.hideAsync().catch((error) => {
+      console.warn('Failed to hide native splash:', error);
+    });
+  }, [isLoading]);
+
   if (isLoading) {
-    return <LoadingScreen message="Loading your motivational coach..." />;
+    return null;
   }
 
   return (
@@ -252,7 +262,6 @@ export default function RootLayout() {
   const [initError, setInitError] = React.useState<string | null>(null);
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
     
     const prepare = async () => {
       try {
@@ -276,14 +285,6 @@ export default function RootLayout() {
         
         setIsReady(true);
         
-        // Hide splash screen after a short delay
-        timeoutId = setTimeout(() => {
-          if (Platform.OS !== 'web') {
-            SplashScreen.hideAsync().catch((splashError) => {
-              console.warn('âš ï¸ Failed to hide splash screen:', splashError);
-            });
-          }
-        }, 500);
         
         console.log('âœ… App initialization completed');
       } catch (error) {
@@ -301,9 +302,6 @@ export default function RootLayout() {
 
     void prepare();
     
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
   }, []);
 
   if (!isReady) {

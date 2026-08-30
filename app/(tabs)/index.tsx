@@ -108,7 +108,16 @@ export default function HomeScreen() {
     const loadYouTubeSpeeches = async () => {
       try {
         console.log('🔄 Loading YouTube speeches from Motivation Fuel channel...');
-        const videos = await getTrendingVideos(35);
+        let videos = await getTrendingVideos(35);
+
+        // A cold start can briefly return an empty inventory while
+        // backend/cache initialization finishes. Retry once before
+        // leaving the bundled fallback speeches on the Home screen.
+        if (videos.length === 0) {
+          console.log('[Home] Empty YouTube result on cold start - retrying once');
+          await new Promise<void>(resolve => setTimeout(resolve, 1500));
+          videos = await getTrendingVideos(35);
+        }
         console.log(`✅ Loaded ${videos.length} YouTube videos`);
         
         const speeches = videos.map(video => {
@@ -158,8 +167,10 @@ export default function HomeScreen() {
       }
     };
     
-    void loadYouTubeSpeeches();
-    void loadShortClips();
+    // Give the main speech inventory startup priority.
+    void loadYouTubeSpeeches().finally(() => {
+      void loadShortClips();
+    });
   }, []);
   
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext ?? {};
