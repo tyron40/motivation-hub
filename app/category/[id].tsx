@@ -47,7 +47,7 @@ const motivationHeroImage = require('@/assets/images/run club.jpeg');
 export default function CategoryScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
-  const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist, getSpeechesByCategory } = useSpeechContext();
+  const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = useSpeechContext();
 
   const rawId = Array.isArray(id) ? id[0] : id;
   const categoryId = String(rawId ?? '');
@@ -122,10 +122,6 @@ export default function CategoryScreen() {
 
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === categoryId);
-  const contextSpeeches = useMemo(
-    () => (category ? getSpeechesByCategory(category.name).filter(s => s.duration > 60) : []),
-    [category, getSpeechesByCategory]
-  );
   const TARGET_CATEGORY_COUNT = 40;
   const isChristianCategory =
     category?.id === 'church' ||
@@ -146,11 +142,10 @@ export default function CategoryScreen() {
   };
 
   const categorySpeeches = useMemo(() => {
-    const base = youtubeSpeeches.length > 0 ? youtubeSpeeches : contextSpeeches;
     const unique: Speech[] = [];
     const seen = new Set<string>();
 
-    for (const s of [...base, ...contextSpeeches]) {
+    for (const s of youtubeSpeeches) {
       if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
       if (requireChristianContent && !isChristianContent(s)) continue;
 
@@ -159,7 +154,7 @@ export default function CategoryScreen() {
       if (unique.length >= TARGET_CATEGORY_COUNT) break;
     }
     return unique;
-  }, [youtubeSpeeches, contextSpeeches, requireChristianContent]);
+  }, [youtubeSpeeches, requireChristianContent]);
 
   const banner: CategoryBanner | null = category ? getBannerForCategory(categoryId, category.name) : null;
 
@@ -294,24 +289,6 @@ if (isMotivationCategory) {
           if (unique.length >= TARGET_CATEGORY_COUNT) break;
         }
 
-        if (unique.length < TARGET_CATEGORY_COUNT) {
-          for (const speech of contextSpeeches) {
-            if (!speech?.id || seenIds.has(speech.id)) continue;
-
-            const score = scoreSpeechRelevance(speech);
-
-            if (searchKey === 'church' && !isChristianContent(speech)) {
-              continue;
-            }
-
-            if (score < strictThreshold) continue;
-
-            seenIds.add(speech.id);
-            unique.push(speech);
-
-            if (unique.length >= TARGET_CATEGORY_COUNT) break;
-          }
-        }
 
         console.log(
           '[Category] strict matched count:',
@@ -341,7 +318,7 @@ if (isMotivationCategory) {
 
     console.log('[Category] page loaded, category:', category?.name);
     void handleLoadOnlineSpeeches();
-  }, [category, categoryId, hasLoadedOnline, contextSpeeches, isChristianCategory, requireChristianContent]);
+  }, [category, categoryId, hasLoadedOnline, isChristianCategory, requireChristianContent]);
 
   const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);

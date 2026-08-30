@@ -506,7 +506,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
 
         if (!reply) throw new Error('Empty response from coach');
 
-        await iapContext.useCredit().catch(() => {});
+        void iapContext.useCredit().catch(() => {});
 
         conversationRef.current = trimConversation([
           ...nextConversation,
@@ -615,7 +615,7 @@ Respond naturally and directly. Keep most responses concise enough to speak in r
       // recorder's category must never leak into STT/TTS or the rest of
       // the app. STT network work starts RIGHT AWAY: no artificial settle
       // sleeps; the audio session settles during the network roundtrips.
-      await restorePlaybackAudioSession();
+      void restorePlaybackAudioSession().catch(() => {});
 
       if (!uri) throw new Error('No audio captured');
 

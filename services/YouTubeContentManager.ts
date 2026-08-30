@@ -139,8 +139,8 @@ async function getCachedVideos(category: string): Promise<CachedVideo[] | null> 
 
   const age = Date.now() - cached.timestamp;
   if (age > REFRESH_INTERVAL_MS) {
-    console.log(`Cache expired for "${category}" (${Math.round(age / 3600000)}h old)`);
-    return null;
+    console.log(`Serving stale cached videos for "${category}" (${Math.round(age / 3600000)}h old) while refreshing`);
+    return cached.videos;
   }
 
   console.log(`Serving ${cached.videos.length} cached videos for "${category}"`);
@@ -315,12 +315,10 @@ export const YouTubeContentManager = {
         return cached.slice(0, limit);
       }
 
-      // A request for a larger category should be visible immediately,
-      // rather than returning the old smaller cache for another day.
-      if (cacheIsUndersized) {
-        return await this.fetchAndCacheCategory(normalizedCategory, limit);
-      }
-
+      // Never block visible content on a network refresh.
+      // Previously fetched online inventory must be returned immediately,
+      // even when the caller requests more items than are currently cached.
+      // Fill/refresh the cache in the background instead.
       this.refreshCategoryInBackground(normalizedCategory, limit).catch(() => {});
       return cached.slice(0, limit);
     }
