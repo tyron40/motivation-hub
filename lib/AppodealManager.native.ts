@@ -163,6 +163,7 @@ class AppodealManager {
   /** One-time SDK init for interstitial, banner and rewarded video. */
   initialize(): void {
     if (this.initialized) return;
+    console.log('[Appodeal] initialize requested');
     if (!this.available) {
       debugLog(
         `[Appodeal] unavailable (${
@@ -177,6 +178,16 @@ class AppodealManager {
       this.wireEvents();
       const adTypes = AdType.INTERSTITIAL | AdType.BANNER | AdType.REWARDED_VIDEO;
       Appodeal.initialize(APPODEAL_APP_KEY, adTypes);
+
+      // Explicitly request inventory so the first fill never depends on
+      // native autocache timing alone.
+      try {
+        Appodeal.cache(AdType.INTERSTITIAL);
+        Appodeal.cache(AdType.REWARDED_VIDEO);
+      } catch (cacheError: any) {
+        debugLog(`[Appodeal] explicit cache request failed: ${cacheError?.message ?? 'unknown'}`);
+      }
+
       debugLog(`[Appodeal] initializing (app key present, never logged) | test mode: setTesting() never called → off`);
       try {
         debugLog(`[Appodeal] SDK version: ${Appodeal.getVersion?.() ?? 'unknown'}`);
@@ -208,7 +219,8 @@ class AppodealManager {
     add(SdkEvents.INITIALIZED, () => {
       debugLog('[Appodeal] SDK initialized');
       debugLog(`[Appodeal] active: ${this.active}`);
-      this.log('SDK initialized');
+      this.syncLoadedState();
+      this.log('initialized/active');
     });
 
     add(InterstitialEvents.LOADED, () => {
@@ -450,6 +462,31 @@ class AppodealManager {
   }
 
   // ─── Frequency (identical caps to AdManager) ──────────────────
+
+  /**
+   * Reconciles the JS readiness flags with the native SDK ground truth.
+   * Native load events can be missed during early startup (bridge timing),
+   * leaving the flags stuck false while the SDK actually holds inventory.
+   * The React-side poll calls this on every tick so Appodeal readiness
+   * self-heals instead of staying "not ready" forever.
+   */
+  syncLoadedState(): void {
+    if (!this.available) return;
+    try {
+      const interstitial = Boolean(Appodeal.isLoaded(AdType.INTERSTITIAL));
+      if (interstitial !== this.interstitialReady) {
+        this.interstitialReady = interstitial;
+        debugLog(`[Appodeal] interstitial ${interstitial ? 'loaded' : 'not loaded'} (native sync)`);
+      }
+    } catch {}
+    try {
+      const rewarded = Boolean(Appodeal.isLoaded(AdType.REWARDED_VIDEO));
+      if (rewarded !== this.rewardedReady) {
+        this.rewardedReady = rewarded;
+        debugLog(`[Appodeal] rewarded ${rewarded ? 'loaded' : 'not loaded'} (native sync)`);
+      }
+    } catch {}
+  }
 
   recordInteraction(): boolean {
     this.interactionCount += 1;

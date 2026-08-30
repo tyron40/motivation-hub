@@ -35,6 +35,10 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
   useEffect(() => {
     const reportAdState = () => {
+      // Reconcile against the native SDK before reading flags so a missed
+      // native load event can never leave the UI permanently "not ready".
+      appodeal.syncLoadedState();
+
       setIsRewardedAdLoaded(
         appodeal.active && appodeal.rewardedLoaded
       );
@@ -112,6 +116,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     try {
       logProvider();
       beginAdDisplay();
+      console.log('[Ads] Appodeal rewarded show requested');
 
       const shown = await appodeal.showRewarded();
 
@@ -149,6 +154,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     try {
       logProvider();
       beginAdDisplay();
+      console.log('[Ads] Appodeal interstitial show requested');
 
       const shown = await appodeal.showInterstitial();
 
@@ -190,6 +196,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     try {
       logProvider();
       beginAdDisplay();
+      console.log('[Ads] Appodeal interstitial show requested');
 
       const shown = await appodeal.showInterstitial();
 

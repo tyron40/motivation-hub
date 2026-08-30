@@ -106,30 +106,37 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     const loadYouTubeSpeeches = async () => {
-      try {
-        console.log('🔄 Loading YouTube speeches from Motivation Fuel channel...');
-        let videos = await getTrendingVideos(35);
+      // Cold starts can return an empty inventory while the backend/cache
+      // warms up. Retry in the background (bounded) so fresh content
+      // replaces the bundled fallback on the ALREADY-MOUNTED screen —
+      // no close/reopen required.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`🔄 Loading YouTube speeches from Motivation Fuel channel (attempt ${attempt})...`);
+          const videos = await getTrendingVideos(35);
 
-        // A cold start can briefly return an empty inventory while
-        // backend/cache initialization finishes. Retry once before
-        // leaving the bundled fallback speeches on the Home screen.
-        if (videos.length === 0) {
-          console.log('[Home] Empty YouTube result on cold start - retrying once');
-          await new Promise<void>(resolve => setTimeout(resolve, 1500));
-          videos = await getTrendingVideos(35);
+          if (videos.length > 0) {
+            console.log(`✅ Loaded ${videos.length} YouTube videos`);
+            const speeches = videos.map(video => {
+              const speech = convertVideoToSpeech(video);
+              const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
+              return { ...speech, category: assignedCategory };
+            });
+            setYoutubeSpeeches(speeches);
+            return;
+          }
+
+          console.log('[Home] Empty YouTube result on cold start');
+        } catch (error) {
+          console.error('❌ Failed to load YouTube speeches:', error);
         }
-        console.log(`✅ Loaded ${videos.length} YouTube videos`);
-        
-        const speeches = videos.map(video => {
-          const speech = convertVideoToSpeech(video);
-          const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
-          return { ...speech, category: assignedCategory };
-        });
-        
-        setYoutubeSpeeches(speeches);
-      } catch (error) {
-        console.error('❌ Failed to load YouTube speeches:', error);
+
+        if (attempt < 3) {
+          await new Promise<void>(resolve => setTimeout(resolve, 5000));
+        }
       }
+
+      console.log('[Home] YouTube inventory unavailable - keeping fallback content');
     };
 
     const loadShortClips = async () => {
@@ -167,10 +174,10 @@ export default function HomeScreen() {
       }
     };
     
-    // Give the main speech inventory startup priority.
-    void loadYouTubeSpeeches().finally(() => {
-      void loadShortClips();
-    });
+    // Render immediately from fallbacks; both loads refresh the UI in place
+    // as their state updates land.
+    void loadYouTubeSpeeches();
+    void loadShortClips();
   }, []);
   
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext ?? {};

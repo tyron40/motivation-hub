@@ -58,36 +58,56 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           }
         }
 
-        let validSession = session;
-
         if (session?.user) {
-          try {
-            const { data: { user }, error: userError } = await auth.getCurrentUser();
-            if (userError || !user) {
-              console.log('🔐 Session exists but user validation failed, clearing session');
-              await auth.clearSession();
-              validSession = null;
-            }
-          } catch (validateError) {
-            console.log('🔐 Could not validate user, clearing session');
-            await auth.clearSession();
-            validSession = null;
+          // Fast path: trust the locally cached session immediately so the
+          // native splash never waits on a network user lookup. Server-side
+          // validation continues in the background and corrects the visible
+          // state as soon as it resolves (no close/reopen required).
+          if (isMounted) {
+            setAuthState({
+              user: session.user,
+              session,
+              isLoading: false,
+              isAuthenticated: true,
+            });
+            console.log('✅ User authenticated (cached session):', session.user.email);
           }
+
+          void (async () => {
+            try {
+              const { data: { user }, error: userError } = await auth.getCurrentUser();
+              if (!isMounted) return;
+              if (userError || !user) {
+                console.log('🔐 Session exists but user validation failed, clearing session');
+                await auth.clearSession();
+                if (isMounted) {
+                  setAuthState({
+                    user: null,
+                    session: null,
+                    isLoading: false,
+                    isAuthenticated: false,
+                  });
+                }
+              }
+            } catch (validateError) {
+              // A network hiccup during validation is NOT proof of an invalid
+              // session — keep the cached session; the auth state listener
+              // corrects it if it is genuinely invalid.
+              console.log('🔐 Could not validate user (background) - keeping cached session');
+            }
+          })();
+
+          return;
         }
 
         if (isMounted) {
           setAuthState({
-            user: validSession?.user || null,
-            session: validSession || null,
+            user: null,
+            session: null,
             isLoading: false,
-            isAuthenticated: !!validSession?.user,
+            isAuthenticated: false,
           });
-          
-          if (validSession?.user) {
-            console.log('✅ User authenticated:', validSession.user.email);
-          } else {
-            console.log('👤 No authenticated user - redirecting to login');
-          }
+          console.log('👤 No authenticated user - redirecting to login');
         }
       } catch (error) {
         console.error('❌ Error initializing auth:', error);
