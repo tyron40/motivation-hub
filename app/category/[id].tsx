@@ -457,7 +457,7 @@ if (isMotivationCategory) {
                   {'"'}{banner.quote}{'"'}
                 </Text>
                 <View style={[styles.bannerAccentLine, { backgroundColor: category.color }]} />
-                <Text style={styles.bannerAuthor}>â€” {banner.author}</Text>
+                <Text style={styles.bannerAuthor}>- {banner.author}</Text>
               </View>
             </View>
           )}
@@ -467,7 +467,7 @@ if (isMotivationCategory) {
           </View>
 
           <View style={styles.speechList}>
-            {categoryLoading ? (
+            {categoryLoading && categorySpeeches.length === 0 ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={category.color} />
                 <Text style={styles.loadingText}>Loading {category.name} content...</Text>
