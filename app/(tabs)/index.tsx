@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Quote, Sun, ChevronRight, Film, ImageIcon } from 'lucide-react-native';
 import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
-import { featuredSpeech, categories, popularSpeeches, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
@@ -106,37 +106,27 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     const loadYouTubeSpeeches = async () => {
-      // Cold starts can return an empty inventory while the backend/cache
-      // warms up. Retry in the background (bounded) so fresh content
-      // replaces the bundled fallback on the ALREADY-MOUNTED screen —
-      // no close/reopen required.
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          console.log(`🔄 Loading YouTube speeches from Motivation Fuel channel (attempt ${attempt})...`);
-          const videos = await getTrendingVideos(35);
+      try {
+        // ContentManager is cache-first. Previously fetched online inventory
+        // returns immediately; a real network fetch only occurs when needed.
+        console.log('Loading fetched YouTube speeches...');
+        const videos = await getTrendingVideos(35);
 
-          if (videos.length > 0) {
-            console.log(`✅ Loaded ${videos.length} YouTube videos`);
-            const speeches = videos.map(video => {
-              const speech = convertVideoToSpeech(video);
-              const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
-              return { ...speech, category: assignedCategory };
-            });
-            setYoutubeSpeeches(speeches);
-            return;
-          }
-
-          console.log('[Home] Empty YouTube result on cold start');
-        } catch (error) {
-          console.error('❌ Failed to load YouTube speeches:', error);
+        if (videos.length > 0) {
+          console.log(`Loaded ${videos.length} fetched YouTube videos`);
+          const speeches = videos.map(video => {
+            const speech = convertVideoToSpeech(video);
+            const assignedCategory = classifyVideoToCategory(speech.title, speech.description);
+            return { ...speech, category: assignedCategory };
+          });
+          setYoutubeSpeeches(speeches);
+          return;
         }
 
-        if (attempt < 3) {
-          await new Promise<void>(resolve => setTimeout(resolve, 5000));
-        }
+        console.log('[Home] No fetched YouTube inventory available');
+      } catch (error) {
+        console.error('Failed to load fetched YouTube speeches:', error);
       }
-
-      console.log('[Home] YouTube inventory unavailable - keeping fallback content');
     };
 
     const loadShortClips = async () => {
@@ -182,9 +172,9 @@ export default function HomeScreen() {
   
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext ?? {};
 
-  const displaySpeeches = youtubeSpeeches.length > 0 ? youtubeSpeeches.filter(s => s.duration > 60) : popularSpeeches.filter(s => s.duration > 60);
+  const displaySpeeches = youtubeSpeeches.filter(s => s.duration > 60);
   const displayFeatured = React.useMemo(() => {
-    if (displaySpeeches.length === 0) return featuredSpeech;
+    if (displaySpeeches.length === 0) return null;
     const today = new Date();
     const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
     const index = dayOfYear % displaySpeeches.length;
@@ -335,15 +325,17 @@ export default function HomeScreen() {
             </LinearGradient>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitleCentered}>Today&apos;s Featured</Text>
-            <SpeechCard
-              speech={displayFeatured}
-              variant="featured"
-              onPress={() => handleSpeechPress(displayFeatured)}
-              onFavorite={() => toggleFavorite(displayFeatured.id)}
-            />
-          </View>
+          {displayFeatured && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitleCentered}>Today&apos;s Featured</Text>
+              <SpeechCard
+                speech={displayFeatured}
+                variant="featured"
+                onPress={() => handleSpeechPress(displayFeatured)}
+                onFavorite={() => toggleFavorite(displayFeatured.id)}
+              />
+            </View>
+          )}
 
           <View style={styles.section}>
             <TouchableOpacity style={styles.sectionHeaderRow} onPress={() => router.push('/flyers')} activeOpacity={0.7}>

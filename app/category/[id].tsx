@@ -204,11 +204,41 @@ if (isMotivationCategory) {
       console.log('[Category] queries:', searchQueries);
 
       try {
-        const settled = await Promise.allSettled(
-          searchQueries.map(query =>
-            getVideosByCategory(query, TARGET_CATEGORY_COUNT)
-          )
+        // Start every discovery request together, but do NOT wait for every
+        // query before showing content. The first usable online batch is
+        // rendered immediately; the complete merged inventory follows.
+        const pendingQueries = searchQueries.map(query =>
+          getVideosByCategory(query, TARGET_CATEGORY_COUNT)
         );
+
+        let firstBatchShown = false;
+
+        pendingQueries.forEach(request => {
+          void request.then(videos => {
+            if (firstBatchShown || !Array.isArray(videos) || videos.length === 0) return;
+
+            const immediate = videos
+              .map(video => convertVideoToSpeech(video))
+              .filter(
+                speech =>
+                  speech &&
+                  speech.id &&
+                  speech.duration > 60 &&
+                  (!requireChristianContent || isChristianContent(speech))
+              )
+              .slice(0, TARGET_CATEGORY_COUNT);
+
+            if (immediate.length > 0) {
+              firstBatchShown = true;
+              setYoutubeSpeeches(immediate);
+              setCategoryLoading(false);
+              setCategoryError(null);
+              console.log('[Category] showing first fetched batch:', immediate.length);
+            }
+          }).catch(() => {});
+        });
+
+        const settled = await Promise.allSettled(pendingQueries);
 
         const rawVideos = settled.flatMap(result =>
           result.status === 'fulfilled' && Array.isArray(result.value)
