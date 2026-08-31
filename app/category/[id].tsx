@@ -21,27 +21,13 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, convertVideoToSpeech } from '@/services/youtubeService';
+import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
-import { getDiscoveryProfile } from '@/lib/category-discovery';
 
-  const getCategorySearchKey = (id: string, name: string) => {
-    const normalizedId = id.trim().toLowerCase();
-    const normalizedName = name.trim().toLowerCase();
-
-    if (normalizedId === 'church' || normalizedName.includes('christian')) return 'church';
-    if (normalizedId === 'athlete' || normalizedName.includes('athlete')) return 'athlete';
-    if (normalizedName.includes('success')) return 'success';
-    if (normalizedName.includes('mindset')) return 'mindset';
-    if (normalizedName.includes('fitness')) return 'fitness';
-    if (normalizedName.includes('study')) return 'study';
-
-    return 'motivation';
-  };
 const motivationHeroImage = require('@/assets/images/run club.jpeg');
 
 export default function CategoryScreen() {
@@ -194,57 +180,53 @@ if (isMotivationCategory) {
       setCategoryLoading(true);
       setCategoryError(null);
 
-      const searchKey = getCategorySearchKey(categoryId, category.name);
-      const discoveryProfile = getDiscoveryProfile(searchKey);
-      const searchQueries = discoveryProfile.queries;
-      const requiredKeywords = discoveryProfile.positiveTerms;
-      const negativeTerms = discoveryProfile.negativeTerms;
+      const christianQueries = [
+        'Christian motivational sermon faith Jesus God church inspirational speech',
+        'Christian motivational sermon',
+        'faith motivation Jesus sermon',
+        'church motivational message',
+      ];
 
-      console.log('[Category] search key:', searchKey);
-      console.log('[Category] queries:', searchQueries);
+      const query = isChristianCategory ? christianQueries[0] : category.name;
+      console.log('[Category] query:', query);
 
       try {
-        // Start every discovery request together, but do NOT wait for every
-        // query before showing content. The first usable online batch is
-        // rendered immediately; the complete merged inventory follows.
-        const pendingQueries = searchQueries.map(query =>
-          getVideosByCategory(query, TARGET_CATEGORY_COUNT)
-        );
-
-        let firstBatchShown = false;
-
-        pendingQueries.forEach(request => {
-          void request.then(videos => {
-            if (firstBatchShown || !Array.isArray(videos) || videos.length === 0) return;
-
-            const immediate = videos
-              .map(video => convertVideoToSpeech(video))
-              .filter(
-                speech =>
-                  speech &&
-                  speech.id &&
-                  speech.duration > 60 &&
-                  (!requireChristianContent || isChristianContent(speech))
+        const results = await Promise.allSettled([
+          isChristianCategory
+            ? Promise.all(
+                christianQueries.map(q =>
+                  getVideosByCategory(q, TARGET_CATEGORY_COUNT)
+                )
               )
-              .slice(0, TARGET_CATEGORY_COUNT);
+            : getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
+          getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
+          isChristianCategory
+            ? Promise.resolve([])
+            : getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
+        ]);
 
-            if (immediate.length > 0) {
-              firstBatchShown = true;
-              setYoutubeSpeeches(immediate);
-              setCategoryLoading(false);
-              setCategoryError(null);
-              console.log('[Category] showing first fetched batch:', immediate.length);
-            }
-          }).catch(() => {});
-        });
+        const primaryRaw =
+          results[0].status === 'fulfilled' ? results[0].value : [];
+        const trendingRaw =
+          results[1].status === 'fulfilled' ? results[1].value : [];
+        const fallbackRaw =
+          results[2].status === 'fulfilled' ? results[2].value : [];
 
-        const settled = await Promise.allSettled(pendingQueries);
+        if (results[0].status === 'rejected') {
+          console.log('[Category] error source: primary', results[0].reason);
+        }
+        if (results[1].status === 'rejected') {
+          console.log('[Category] error source: trending', results[1].reason);
+        }
+        if (results[2].status === 'rejected') {
+          console.log('[Category] error source: fallback', results[2].reason);
+        }
 
-        const rawVideos = settled.flatMap(result =>
-          result.status === 'fulfilled' && Array.isArray(result.value)
-            ? result.value
-            : []
-        );
+        const categoryNameLower = category.name.toLowerCase();
+        const categoryWords = categoryNameLower
+          .split(/[^a-z0-9]+/i)
+          .map(w => w.trim())
+          .filter(Boolean);
 
         const scoreSpeechRelevance = (speech: Speech) => {
           const haystack =
@@ -252,19 +234,10 @@ if (isMotivationCategory) {
 
           let score = 0;
 
-          for (const keyword of requiredKeywords) {
-            if (haystack.includes(keyword)) {
-              score += keyword.includes(' ') ? 3 : 2;
-            }
-          }
+          if (haystack.includes(categoryNameLower)) score += 4;
 
-          // Strongly deprioritize off-category content (meditation/low-energy
-          // for athlete, music-only for church) — never let it outrank
-          // genuinely relevant speeches.
-          for (const negative of negativeTerms) {
-            if (haystack.includes(negative)) {
-              score -= 5;
-            }
+          for (const word of categoryWords) {
+            if (word.length > 2 && haystack.includes(word)) score += 1;
           }
 
           const assigned = classifyVideoToCategory(
@@ -272,68 +245,99 @@ if (isMotivationCategory) {
             speech.description
           );
 
-          if (
-            assigned &&
-            assigned.toLowerCase() === category.name.toLowerCase()
-          ) {
-            score += 4;
-          }
+          if (assigned === category.name) score += 3;
 
           return score;
         };
 
-        const strictThreshold =
-          searchKey === 'church' ? 2 :
-          searchKey === 'motivation' ? 2 :
-          3;
+        const primaryArr = Array.isArray(primaryRaw) ? primaryRaw : [];
 
-        const onlineSpeeches = rawVideos
+        const primarySpeeches: Speech[] = primaryArr
+          .flatMap(video => (Array.isArray(video) ? video : [video]))
           .map(video => convertVideoToSpeech(video))
-          .filter(
-            speech =>
-              speech &&
-              speech.id &&
-              speech.duration > 60
-          )
           .map(speech => ({
             speech,
             score: scoreSpeechRelevance(speech),
           }))
-          .filter(item => item.score >= strictThreshold)
           .sort((a, b) => b.score - a.score)
           .map(item => item.speech);
 
-        const unique: Speech[] = [];
+        const channelSpeeches: Speech[] = (
+          Array.isArray(trendingRaw) ? trendingRaw : []
+        )
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({
+            speech,
+            score: scoreSpeechRelevance(speech),
+          }))
+          .filter(item => item.score >= 3)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+        const fallbackSpeeches: Speech[] = (
+          Array.isArray(fallbackRaw) ? fallbackRaw : []
+        )
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({
+            speech,
+            score: scoreSpeechRelevance(speech),
+          }))
+          .filter(item => item.score >= 1)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+        console.log('[Category] primary count:', primarySpeeches.length);
+        console.log('[Category] trending count:', channelSpeeches.length);
+        console.log('[Category] fallback count:', fallbackSpeeches.length);
+
         const seenIds = new Set<string>();
+        const merged: Speech[] = [];
 
-        for (const speech of onlineSpeeches) {
-          if (seenIds.has(speech.id)) continue;
+        const pushUnique = (items: Speech[]) => {
+          for (const speech of items) {
+            if (!speech || !speech.id || seenIds.has(speech.id)) continue;
 
-          if (searchKey === 'church' && !isChristianContent(speech)) {
-            continue;
+            seenIds.add(speech.id);
+            merged.push(speech);
+
+            if (merged.length >= TARGET_CATEGORY_COUNT) return;
           }
+        };
 
-          seenIds.add(speech.id);
-          unique.push(speech);
+        const passChristian = (speech: Speech) =>
+          !requireChristianContent || isChristianContent(speech);
 
-          if (unique.length >= TARGET_CATEGORY_COUNT) break;
+        const preferred = [
+          ...primarySpeeches,
+          ...channelSpeeches,
+          ...fallbackSpeeches,
+        ]
+          .filter(passChristian)
+          .filter(speech => speech.duration > 60);
+
+        pushUnique(preferred);
+
+        if (merged.length < TARGET_CATEGORY_COUNT) {
+          const anyDuration = [
+            ...primarySpeeches,
+            ...channelSpeeches,
+            ...fallbackSpeeches,
+          ]
+            .filter(passChristian)
+            .filter(speech => !seenIds.has(speech.id));
+
+          pushUnique(anyDuration);
         }
 
+        console.log('[Category] merged count:', merged.length);
 
-        console.log(
-          '[Category] strict matched count:',
-          unique.length,
-          'for',
-          category.name
-        );
-
-        if (unique.length > 0) {
-          setYoutubeSpeeches(unique);
+        if (merged.length > 0) {
+          setYoutubeSpeeches(merged);
           setCategoryError(null);
         } else {
           setYoutubeSpeeches([]);
           setCategoryError(
-            `No relevant ${category.name} content found. Please try again.`
+            'No content found for this category. Please try again.'
           );
         }
 
@@ -474,7 +478,7 @@ if (isMotivationCategory) {
           </View>
 
           <View style={styles.speechList}>
-            {categoryLoading && categorySpeeches.length === 0 ? (
+            {categoryLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={category.color} />
                 <Text style={styles.loadingText}>Loading {category.name} content...</Text>
