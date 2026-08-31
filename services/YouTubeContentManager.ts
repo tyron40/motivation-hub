@@ -4,7 +4,6 @@ import {
   DiscoveryProfile,
   discoveryKeyForCategory,
   getDiscoveryProfile,
-  pickDailyQueries,
   rankAndMixDiscovery,
 } from '@/lib/category-discovery';
 
@@ -15,9 +14,6 @@ const REFRESH_INTERVAL_MS = 1000 * 60 * 60 * 24; // 24 hours
 // Two backend YouTube quota pools are available.
 const MAX_FETCHES_PER_DAY = 60;
 
-// Backend calls per category refresh: 1 category endpoint + 2 rotated
-// profile queries. Every other request is served from cache.
-const SEARCH_QUERIES_PER_REFRESH = 2;
 
 const STORAGE_KEYS = {
   VIDEO_CACHE: 'yt_video_cache_',
@@ -173,7 +169,7 @@ async function setCachedVideos(category: string, videos: CachedVideo[]): Promise
 async function fetchFromBackend(
   endpointUrl: string,
   body: Record<string, unknown>,
-  maxRetries: number = 3
+  maxRetries: number = 1
 ): Promise<CachedVideo[]> {
   let lastError: string = '';
 
@@ -188,7 +184,7 @@ async function fetchFromBackend(
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const response = await fetch(endpointUrl, {
         method: 'POST',
@@ -242,45 +238,18 @@ async function fetchFromBackend(
   return [];
 }
 
-async function mergeDedupVideos(...groups: CachedVideo[][]): Promise<CachedVideo[]> {
-  const seen = new Set<string>();
-  const merged: CachedVideo[] = [];
-  for (const group of groups) {
-    for (const v of group) {
-      if (!v?.id || seen.has(v.id)) continue;
-      seen.add(v.id);
-      merged.push(v);
-    }
-  }
-  return merged;
-}
 
 /**
- * Fresh discovery for one category (Parts 5/7/9/14):
- * - the backend category endpoint (which runs its own query profile)
- * - PLUS a daily-rotating window of profile queries via backend search so
- *   the pool keeps finding NEW speeches every day within quota
- *   (1 + SEARCH_QUERIES_PER_REFRESH backend calls per refresh).
+ * Fetch one category inventory from the backend.
+ * Additional category discovery is handled by the category screen so the
+ * ContentManager must not multiply backend requests for the same load.
  */
 async function fetchCategoryFromBackend(
   category: string,
-  profile: DiscoveryProfile,
+  _profile: DiscoveryProfile,
   limit: number
 ): Promise<CachedVideo[]> {
-  const dailyQueries = pickDailyQueries(profile.queries, SEARCH_QUERIES_PER_REFRESH);
-
-  const [categoryPrimary, ...queryResults] = await Promise.all([
-    fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit }),
-    ...dailyQueries.map(query =>
-      fetchFromBackend(API_ENDPOINTS.youtubeSearch, {
-        query,
-        limit: Math.min(limit, 50),
-      })
-    ),
-  ]);
-
-  const merged = await mergeDedupVideos(categoryPrimary, ...queryResults);
-  return merged;
+  return fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category, limit });
 }
 
 async function fetchSearchFromBackend(query: string, limit: number): Promise<CachedVideo[]> {
@@ -288,12 +257,7 @@ async function fetchSearchFromBackend(query: string, limit: number): Promise<Cac
 }
 
 async function fetchTrendingFromBackend(limit: number): Promise<CachedVideo[]> {
-  const [trendingPrimary, motivationFallback] = await Promise.all([
-    fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit }),
-    fetchFromBackend(API_ENDPOINTS.youtubeCategory, { category: 'motivation', limit }),
-  ]);
-  const merged = await mergeDedupVideos(trendingPrimary, motivationFallback);
-  return merged.slice(0, limit);
+  return fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit });
 }
 
 export const YouTubeContentManager = {
