@@ -693,7 +693,12 @@ const handleYouTubeCategory = async (c: Context) => {
 
     // Always run ALL category queries — key rotation happens inside fetchYouTubeVideos.
     const queriesToRun = searchQueries;
-    const perQueryLimit = Math.max(5, Math.ceil(limit / queriesToRun.length));
+
+    const candidateTarget = Math.max(limit * 2, limit + 20);
+    const perQueryLimit = Math.min(
+      50,
+      Math.max(8, Math.ceil(candidateTarget / queriesToRun.length))
+    );
 
     console.log(`[YouTube] Fetching category: ${category}, queries: ${queriesToRun.length}, per-query limit: ${perQueryLimit}, keys: ${YOUTUBE_API_KEYS.length}`);
 

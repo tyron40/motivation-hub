@@ -320,11 +320,37 @@ export const YouTubeContentManager = {
     console.log(`Fetching category "${category}" via backend (profile queries: daily-rotated)`);
     let videos: CachedVideo[] = [];
     try {
-      const raw = await fetchCategoryFromBackend(category, profile, limit);
-      videos = rankAndMixDiscovery(profile, raw, previousIds, limit).map(v => ({
+      const backendLimit = Math.max(limit * 2, 80);
+
+      const raw = await fetchCategoryFromBackend(
+        category,
+        profile,
+        backendLimit
+      );
+
+      const ranked = rankAndMixDiscovery(
+        profile,
+        raw,
+        previousIds,
+        backendLimit
+      ).map(v => ({
         ...v,
         category,
       }));
+
+      const seen = new Set<string>();
+      const merged: CachedVideo[] = [];
+
+      for (const video of [...ranked, ...(previous ?? [])]) {
+        if (!video?.id || seen.has(video.id)) continue;
+
+        seen.add(video.id);
+        merged.push({ ...video, category });
+
+        if (merged.length >= limit) break;
+      }
+
+      videos = merged;
     } catch (error) {
       console.error(`Discovery refresh failed for "${category}":`, error);
     }

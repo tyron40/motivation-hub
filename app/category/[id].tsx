@@ -352,7 +352,7 @@ if (isMotivationCategory) {
          */
         try {
           const firstRaw = await getVideosByCategory(
-            searchQueries[0],
+            category.name,
             TARGET_CATEGORY_COUNT
           );
 
