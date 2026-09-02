@@ -109,6 +109,58 @@ export default function CategoryScreen() {
   const allCategories = [...categories, churchCategory, athleteCategory];
   const category = allCategories.find(c => c.id === categoryId);
   const TARGET_CATEGORY_COUNT = 40;
+
+  const CATEGORY_SEARCH_PROFILES: Record<string, string[]> = {
+    Motivation: [
+      'David Goggins motivational speech',
+      'Eric Thomas motivational speech',
+      'Les Brown motivational speech',
+      'Tony Robbins motivational speech',
+      'best powerful motivational speech',
+    ],
+    Success: [
+      'Jim Rohn success motivational speech',
+      'Tony Robbins success speech',
+      'Les Brown success motivation',
+      'Brian Tracy success motivational speech',
+      'success achievement motivational speech',
+    ],
+    Mindset: [
+      'David Goggins mental toughness mindset',
+      'Jocko Willink discipline mindset',
+      'Les Brown mindset motivational speech',
+      'growth mindset motivational speech',
+      'mental toughness motivational speech',
+    ],
+    Fitness: [
+      'David Goggins workout motivation',
+      'CT Fletcher gym motivational speech',
+      'Jocko Willink workout discipline',
+      'fitness workout motivational speech',
+      'bodybuilding gym motivation',
+    ],
+    Study: [
+      'study motivation speech students',
+      'exam motivation students',
+      'student discipline motivational speech',
+      'study hard motivational speech',
+      'academic success motivation',
+    ],
+    'Christian Motivation': [
+      'powerful Christian motivational sermon preacher',
+      'Christian sermon faith motivation Jesus',
+      'TD Jakes motivational sermon',
+      'Priscilla Shirer motivational sermon',
+      'Steven Furtick motivational sermon',
+    ],
+    'Athlete Pump Up': [
+      'Eric Thomas athlete motivational speech',
+      'Eric Thomas sports motivation',
+      'Ray Lewis motivational speech sports',
+      'Coach Pain athlete motivation',
+      'athlete locker room pump up motivational speech',
+    ],
+  };
   const isChristianCategory =
     category?.id === 'church' ||
     ['christian motivation', 'christian', 'church']
@@ -174,168 +226,308 @@ if (isMotivationCategory) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     const handleLoadOnlineSpeeches = async () => {
       if (!category || hasLoadedOnline) return;
 
       setCategoryLoading(true);
       setCategoryError(null);
 
-      const christianQueries = [
-        'Christian motivational sermon faith Jesus God church inspirational speech',
-        'Christian motivational sermon',
-        'faith motivation Jesus sermon',
-        'church motivational message',
-      ];
+      const searchQueries =
+        CATEGORY_SEARCH_PROFILES[category.name] ?? [
+          `${category.name} motivational speech`,
+        ];
 
-      const query = isChristianCategory ? christianQueries[0] : category.name;
-      console.log('[Category] query:', query);
+      console.log(
+        '[Category] live profile:',
+        category.name,
+        searchQueries
+      );
+
+      const categoryNameLower = category.name.toLowerCase();
+      const categoryWords = categoryNameLower
+        .split(/[^a-z0-9]+/i)
+        .map(w => w.trim())
+        .filter(Boolean);
+
+      const scoreSpeechRelevance = (speech: Speech) => {
+        const haystack =
+          `${speech.title} ${speech.description ?? ''}`.toLowerCase();
+
+        let score = 0;
+
+        if (haystack.includes(categoryNameLower)) {
+          score += 4;
+        }
+
+        for (const word of categoryWords) {
+          if (word.length > 2 && haystack.includes(word)) {
+            score += 1;
+          }
+        }
+
+        const assigned = classifyVideoToCategory(
+          speech.title,
+          speech.description
+        );
+
+        if (assigned === category.name) {
+          score += 3;
+        }
+
+        return score;
+      };
+
+      const convertAndRank = (videos: any[]): Speech[] =>
+        videos
+          .map(video => convertVideoToSpeech(video))
+          .map(speech => ({
+            speech,
+            score: scoreSpeechRelevance(speech),
+          }))
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.speech);
+
+      const keepCategoryContent = (
+        speeches: Speech[]
+      ): Speech[] => {
+        if (requireChristianContent) {
+          return speeches.filter(isChristianContent);
+        }
+
+        return speeches;
+      };
+
+      const mergeUnique = (
+        current: Speech[],
+        incoming: Speech[]
+      ): Speech[] => {
+        const seenIds = new Set(
+          current.map(speech => speech.id)
+        );
+
+        const merged = [...current];
+
+        const preferred = incoming.filter(
+          speech => speech.duration > 60
+        );
+
+        const remaining = incoming.filter(
+          speech => speech.duration <= 60
+        );
+
+        for (const speech of [...preferred, ...remaining]) {
+          if (
+            !speech ||
+            !speech.id ||
+            seenIds.has(speech.id)
+          ) {
+            continue;
+          }
+
+          seenIds.add(speech.id);
+          merged.push(speech);
+
+          if (
+            merged.length >= TARGET_CATEGORY_COUNT
+          ) {
+            break;
+          }
+        }
+
+        return merged.slice(
+          0,
+          TARGET_CATEGORY_COUNT
+        );
+      };
+
+      let accumulated: Speech[] = [];
 
       try {
-        const results = await Promise.allSettled([
-          isChristianCategory
-            ? Promise.all(
-                christianQueries.map(q =>
-                  getVideosByCategory(q, TARGET_CATEGORY_COUNT)
-                )
-              )
-            : getVideosByCategory(category.name, TARGET_CATEGORY_COUNT * 2),
-          getTrendingVideos(TARGET_CATEGORY_COUNT * 2),
-          isChristianCategory
-            ? Promise.resolve([])
-            : getVideosByCategory('motivation', TARGET_CATEGORY_COUNT * 2),
-        ]);
-
-        const primaryRaw =
-          results[0].status === 'fulfilled' ? results[0].value : [];
-        const trendingRaw =
-          results[1].status === 'fulfilled' ? results[1].value : [];
-        const fallbackRaw =
-          results[2].status === 'fulfilled' ? results[2].value : [];
-
-        if (results[0].status === 'rejected') {
-          console.log('[Category] error source: primary', results[0].reason);
-        }
-        if (results[1].status === 'rejected') {
-          console.log('[Category] error source: trending', results[1].reason);
-        }
-        if (results[2].status === 'rejected') {
-          console.log('[Category] error source: fallback', results[2].reason);
-        }
-
-        const categoryNameLower = category.name.toLowerCase();
-        const categoryWords = categoryNameLower
-          .split(/[^a-z0-9]+/i)
-          .map(w => w.trim())
-          .filter(Boolean);
-
-        const scoreSpeechRelevance = (speech: Speech) => {
-          const haystack =
-            `${speech.title} ${speech.description ?? ''}`.toLowerCase();
-
-          let score = 0;
-
-          if (haystack.includes(categoryNameLower)) score += 4;
-
-          for (const word of categoryWords) {
-            if (word.length > 2 && haystack.includes(word)) score += 1;
-          }
-
-          const assigned = classifyVideoToCategory(
-            speech.title,
-            speech.description
+        /*
+         * FIRST PAINT:
+         * Request only the strongest category-specific
+         * search first.
+         */
+        try {
+          const firstRaw = await getVideosByCategory(
+            searchQueries[0],
+            TARGET_CATEGORY_COUNT
           );
 
-          if (assigned === category.name) score += 3;
+          if (cancelled) return;
 
-          return score;
-        };
+          const firstSpeeches = keepCategoryContent(
+            convertAndRank(
+              Array.isArray(firstRaw)
+                ? firstRaw
+                : []
+            )
+          );
 
-        const primaryArr = Array.isArray(primaryRaw) ? primaryRaw : [];
+          accumulated = mergeUnique(
+            accumulated,
+            firstSpeeches
+          );
 
-        const primarySpeeches: Speech[] = primaryArr
-          .flatMap(video => (Array.isArray(video) ? video : [video]))
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({
-            speech,
-            score: scoreSpeechRelevance(speech),
-          }))
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
+          if (accumulated.length > 0) {
+            console.log(
+              '[Category] immediate first batch:',
+              accumulated.length
+            );
 
-        const channelSpeeches: Speech[] = (
-          Array.isArray(trendingRaw) ? trendingRaw : []
-        )
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({
-            speech,
-            score: scoreSpeechRelevance(speech),
-          }))
-          .filter(item => item.score >= 3)
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
+            setYoutubeSpeeches([
+              ...accumulated,
+            ]);
 
-        const fallbackSpeeches: Speech[] = (
-          Array.isArray(fallbackRaw) ? fallbackRaw : []
-        )
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({
-            speech,
-            score: scoreSpeechRelevance(speech),
-          }))
-          .filter(item => item.score >= 1)
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
+            setCategoryError(null);
 
-        console.log('[Category] primary count:', primarySpeeches.length);
-        console.log('[Category] trending count:', channelSpeeches.length);
-        console.log('[Category] fallback count:', fallbackSpeeches.length);
-
-        const seenIds = new Set<string>();
-        const merged: Speech[] = [];
-
-        const pushUnique = (items: Speech[]) => {
-          for (const speech of items) {
-            if (!speech || !speech.id || seenIds.has(speech.id)) continue;
-
-            seenIds.add(speech.id);
-            merged.push(speech);
-
-            if (merged.length >= TARGET_CATEGORY_COUNT) return;
+            /*
+             * Useful live results are visible now.
+             * Secondary requests can continue without
+             * holding the full-screen loading state.
+             */
+            setCategoryLoading(false);
           }
-        };
-
-        const passChristian = (speech: Speech) =>
-          !requireChristianContent || isChristianContent(speech);
-
-        const preferred = [
-          ...primarySpeeches,
-          ...channelSpeeches,
-          ...fallbackSpeeches,
-        ]
-          .filter(passChristian)
-          .filter(speech => speech.duration > 60);
-
-        pushUnique(preferred);
-
-        if (merged.length < TARGET_CATEGORY_COUNT) {
-          const anyDuration = [
-            ...primarySpeeches,
-            ...channelSpeeches,
-            ...fallbackSpeeches,
-          ]
-            .filter(passChristian)
-            .filter(speech => !seenIds.has(speech.id));
-
-          pushUnique(anyDuration);
+        } catch (firstError) {
+          console.log(
+            '[Category] primary search failed:',
+            firstError
+          );
         }
 
-        console.log('[Category] merged count:', merged.length);
+        /*
+         * CATEGORY-SPECIFIC FILL:
+         * Run the remaining speaker/topic searches
+         * concurrently.
+         */
+        if (
+          accumulated.length <
+          TARGET_CATEGORY_COUNT
+        ) {
+          const secondaryResults =
+            await Promise.allSettled(
+              searchQueries
+                .slice(1)
+                .map(searchQuery =>
+                  getVideosByCategory(
+                    searchQuery,
+                    TARGET_CATEGORY_COUNT
+                  )
+                )
+            );
 
-        if (merged.length > 0) {
-          setYoutubeSpeeches(merged);
+          if (cancelled) return;
+
+          for (const result of secondaryResults) {
+            if (
+              result.status !== 'fulfilled'
+            ) {
+              continue;
+            }
+
+            const speeches = keepCategoryContent(
+              convertAndRank(
+                Array.isArray(result.value)
+                  ? result.value
+                  : []
+              )
+            );
+
+            accumulated = mergeUnique(
+              accumulated,
+              speeches
+            );
+
+            if (accumulated.length > 0) {
+              setYoutubeSpeeches([
+                ...accumulated,
+              ]);
+
+              setCategoryError(null);
+              setCategoryLoading(false);
+            }
+
+            if (
+              accumulated.length >=
+              TARGET_CATEGORY_COUNT
+            ) {
+              break;
+            }
+          }
+        }
+
+        /*
+         * TRENDING FILL:
+         * Only use trending videos that actually score
+         * as relevant to the selected category.
+         */
+        if (
+          accumulated.length <
+          TARGET_CATEGORY_COUNT
+        ) {
+          try {
+            const trendingRaw =
+              await getTrendingVideos(
+                TARGET_CATEGORY_COUNT
+              );
+
+            if (cancelled) return;
+
+            const relevantTrending =
+              keepCategoryContent(
+                convertAndRank(
+                  Array.isArray(trendingRaw)
+                    ? trendingRaw
+                    : []
+                ).filter(
+                  speech =>
+                    scoreSpeechRelevance(speech) >= 3
+                )
+              );
+
+            accumulated = mergeUnique(
+              accumulated,
+              relevantTrending
+            );
+
+            if (accumulated.length > 0) {
+              setYoutubeSpeeches([
+                ...accumulated,
+              ]);
+
+              setCategoryError(null);
+            }
+          } catch (trendingError) {
+            console.log(
+              '[Category] trending fill failed:',
+              trendingError
+            );
+          }
+        }
+
+        if (cancelled) return;
+
+        console.log(
+          '[Category] final live count:',
+          accumulated.length,
+          'target:',
+          TARGET_CATEGORY_COUNT
+        );
+
+        if (accumulated.length > 0) {
+          setYoutubeSpeeches(
+            accumulated.slice(
+              0,
+              TARGET_CATEGORY_COUNT
+            )
+          );
+
           setCategoryError(null);
         } else {
           setYoutubeSpeeches([]);
+
           setCategoryError(
             'No content found for this category. Please try again.'
           );
@@ -343,17 +535,40 @@ if (isMotivationCategory) {
 
         setHasLoadedOnline(true);
       } catch (error) {
-        console.error('[Category] load error:', error);
-        setCategoryError('Failed to load content for this category.');
+        if (cancelled) return;
+
+        console.error(
+          '[Category] load error:',
+          error
+        );
+
+        setCategoryError(
+          'Failed to load content for this category.'
+        );
       } finally {
-        setCategoryLoading(false);
+        if (!cancelled) {
+          setCategoryLoading(false);
+        }
       }
     };
 
-    console.log('[Category] page loaded, category:', category?.name);
-    void handleLoadOnlineSpeeches();
-  }, [category, categoryId, hasLoadedOnline, isChristianCategory, requireChristianContent]);
+    console.log(
+      '[Category] page loaded, category:',
+      category?.name
+    );
 
+    void handleLoadOnlineSpeeches();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    category,
+    categoryId,
+    hasLoadedOnline,
+    isChristianCategory,
+    requireChristianContent,
+  ]);
   const handleSpeechPress = async (speech: Speech) => {
     console.log('Selected speech:', speech.title);
     try {
