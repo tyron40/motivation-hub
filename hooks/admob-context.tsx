@@ -37,6 +37,9 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
   useEffect(() => {
     const reportAdState = () => {
+      // Reconcile Appodeal readiness with the native SDK before deciding
+      // whether Appodeal or the direct AdMob fallback is ready.
+      appodeal.syncLoadedState();
       const admobState = manager.getState();
 
       setIsRewardedAdLoaded(

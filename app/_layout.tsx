@@ -20,6 +20,7 @@ import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
+import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -284,6 +285,38 @@ export default function RootLayout() {
         }
         
         setIsReady(true);
+
+        // Keep startup interactive while live YouTube category caches warm
+        // in the background for faster category opening.
+        void (async () => {
+          const startupCategories = [
+            'Motivation',
+            'Success',
+            'Mindset',
+            'Fitness',
+            'Study',
+            'Christian Motivation',
+            'Athlete Pump Up',
+          ];
+
+          for (const startupCategory of startupCategories) {
+            try {
+              await YouTubeContentManager.getVideosForCategory(
+                startupCategory,
+                40
+              );
+            } catch (error) {
+              console.warn(
+                `[YouTube Prewarm] ${startupCategory} failed`,
+                error
+              );
+            }
+
+            // Stagger requests so all category searches do not hit the
+            // shared YouTube quota pools at the same instant.
+            await new Promise(resolve => setTimeout(resolve, 750));
+          }
+        })();
         
         
         console.log('âœ… App initialization completed');
