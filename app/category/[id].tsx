@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -22,6 +22,8 @@ import { categories, churchCategory, athleteCategory, classifyVideoToCategory } 
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
+import { YouTubeContentManager } from '@/services/YouTubeContentManager';
+import type { CachedVideo } from '@/services/YouTubeContentManager';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
@@ -29,6 +31,37 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import { CategoryBanner } from '@/mocks/categoryBanners';
 
 const motivationHeroImage = require('@/assets/images/run club.jpeg');
+
+// Freshness window for skipping the live refresh on category entry — mirrors
+// the ContentManager's 24h discovery policy.
+const CATEGORY_CACHE_FRESH_MS = 1000 * 60 * 60 * 24;
+
+const CHRISTIAN_KEYWORDS = [
+  'christian', 'church', 'jesus', 'christ', 'god', 'lord', 'faith',
+  'bible', 'scripture', 'gospel', 'prayer', 'worship', 'sermon',
+  'pastor', 'holy spirit', 'christian motivation', 'biblical',
+  'ministry', 'preaching',
+];
+
+const isChristianContent = (title: string, description?: string): boolean => {
+  const haystack = `${title} ${description ?? ''}`.toLowerCase();
+  return CHRISTIAN_KEYWORDS.some(k => haystack.includes(k));
+};
+
+/** Convert a persisted CachedVideo into the Speech shape used by the UI. */
+const cachedVideoToSpeech = (video: CachedVideo): Speech => ({
+  id: video.id,
+  title: video.title,
+  speaker: video.channelTitle,
+  duration: video.duration,
+  category: video.category,
+  imageUrl: video.thumbnail,
+  audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
+  youtubeId: video.id,
+  description: video.description,
+  playCount: Math.floor(video.viewCount / 1000),
+  tags: [],
+});
 
 export default function CategoryScreen() {
   const { colors } = useTheme();
@@ -38,9 +71,40 @@ export default function CategoryScreen() {
   const rawId = Array.isArray(id) ? id[0] : id;
   const categoryId = String(rawId ?? '');
 
+  const allCategories = [...categories, churchCategory, athleteCategory];
+  const category = allCategories.find(c => c.id === categoryId);
+  const TARGET_CATEGORY_COUNT = 40;
+
+  const isChristianCategory =
+    category?.id === 'church' ||
+    ['christian motivation', 'christian', 'church']
+      .includes((category?.name || '').trim().toLowerCase());
+
+  const requireChristianContent = isChristianCategory;
+
+  // CACHE-FIRST SEED (synchronous, memory-only): when the manager's memory
+  // layer is warm (prewarm or any earlier open populated it), the cached pool
+  // for this exact category becomes the INITIAL component state — videos are
+  // on screen at first paint with zero spinner and zero network. When the
+  // memory layer is cold, initial state is empty/loading and the load effect's
+  // fast async cache read (one AsyncStorage read) fills it before any network.
+  const cachedSeed = category
+    ? YouTubeContentManager.getCachedVideosSync(category.name)
+    : null;
+  const usableSeed = (cachedSeed ?? [])
+    .filter(v =>
+      v && v.id && v.duration > 60 &&
+      (!requireChristianContent || isChristianContent(v.title, v.description))
+    )
+    .slice(0, TARGET_CATEGORY_COUNT);
+
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
-  const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
-  const [categoryLoading, setCategoryLoading] = useState(true);
+  const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>(() =>
+    usableSeed.map(cachedVideoToSpeech)
+  );
+  const [categoryLoading, setCategoryLoading] = useState<boolean>(
+    usableSeed.length === 0
+  );
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
@@ -106,10 +170,6 @@ export default function CategoryScreen() {
     }
   }, []);
 
-  const allCategories = [...categories, churchCategory, athleteCategory];
-  const category = allCategories.find(c => c.id === categoryId);
-  const TARGET_CATEGORY_COUNT = 40;
-
   const CATEGORY_SEARCH_PROFILES: Record<string, string[]> = {
     Motivation: [
       'David Goggins motivational speech',
@@ -161,23 +221,8 @@ export default function CategoryScreen() {
       'athlete locker room pump up motivational speech',
     ],
   };
-  const isChristianCategory =
-    category?.id === 'church' ||
-    ['christian motivation', 'christian', 'church']
-      .includes((category?.name || '').trim().toLowerCase());
-
-  const requireChristianContent = isChristianCategory;
-
-  const isChristianContent = (speech: Speech) => {
-    const haystack = `${speech.title} ${speech.description ?? ''}`.toLowerCase();
-    const christianKeywords = [
-      'christian', 'church', 'jesus', 'christ', 'god', 'lord', 'faith',
-      'bible', 'scripture', 'gospel', 'prayer', 'worship', 'sermon',
-      'pastor', 'holy spirit', 'christian motivation', 'biblical',
-      'ministry', 'preaching',
-    ];
-    return christianKeywords.some(k => haystack.includes(k));
-  };
+  const isChristianContentForSpeech = (speech: Speech) =>
+    isChristianContent(speech.title, speech.description);
 
   const categorySpeeches = useMemo(() => {
     const unique: Speech[] = [];
@@ -185,7 +230,7 @@ export default function CategoryScreen() {
 
     for (const s of youtubeSpeeches) {
       if (!s || !s.id || seen.has(s.id) || s.duration <= 60) continue;
-      if (requireChristianContent && !isChristianContent(s)) continue;
+      if (requireChristianContent && !isChristianContentForSpeech(s)) continue;
 
       seen.add(s.id);
       unique.push(s);
@@ -213,22 +258,33 @@ if (isMotivationCategory) {
   }, [banner?.imageUrl, isMotivationCategory, isChristianCategory, category, categoryId]);
 
   // Reset online-sourced data whenever the category (route id) changes.
-  // Loading must be true here: the previous version left it false, so the
-  // first paint after opening a category briefly rendered the "No content
-  // found"/Retry empty state while the (cache-first or network) load was
-  // still in flight.
+  // The FIRST mount is skipped: initial state was already seeded synchronously
+  // from the manager's memory cache, and clearing here would wipe that instant
+  // cache-first render. On an actual category switch the old category's pool
+  // is cleared so pools never contaminate each other; the new category's own
+  // cached pool is then restored by the load effect's cache-first read.
+  const prevCategoryIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (prevCategoryIdRef.current === categoryId) return;
+    const isFirstMount = prevCategoryIdRef.current === null;
+    prevCategoryIdRef.current = categoryId;
+    if (isFirstMount) return;
+
     setHasLoadedOnline(false);
     setYoutubeSpeeches([]);
     setCategoryError(null);
     setCategoryLoading(true);
   }, [categoryId]);
 
+  // Retry re-runs the cache-first load. Currently visible videos are KEPT:
+  // the reload seeds from cache and merges, never blanking the screen.
   const handleRetry = useCallback(() => {
     setHasLoadedOnline(false);
-    setYoutubeSpeeches([]);
     setCategoryError(null);
-  }, []);
+    if (categorySpeeches.length === 0) {
+      setCategoryLoading(true);
+    }
+  }, [categorySpeeches.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,7 +292,6 @@ if (isMotivationCategory) {
     const handleLoadOnlineSpeeches = async () => {
       if (!category || hasLoadedOnline) return;
 
-      setCategoryLoading(true);
       setCategoryError(null);
 
       const searchQueries =
@@ -298,7 +353,7 @@ if (isMotivationCategory) {
         speeches: Speech[]
       ): Speech[] => {
         if (requireChristianContent) {
-          return speeches.filter(isChristianContent);
+          return speeches.filter(isChristianContentForSpeech);
         }
 
         return speeches;
@@ -347,7 +402,80 @@ if (isMotivationCategory) {
         );
       };
 
+      /*
+       * CACHE-FIRST: render the persisted pool for this exact category
+       * BEFORE any network work. Memory hit = effectively instant;
+       * otherwise one AsyncStorage read. This path never fetches, never
+       * refreshes, never ranks live results and never checks quota.
+       * Cached videos go on screen immediately; the live refresh below
+       * then runs in the background and MERGES without clearing.
+       */
       let accumulated: Speech[] = [];
+
+      try {
+        const cachedPool = await YouTubeContentManager.getCachedVideosForCategory(
+          category.name
+        );
+
+        if (cancelled) return;
+
+        accumulated = cachedPool
+          .filter(v => v && v.id && v.duration > 60)
+          .map(cachedVideoToSpeech);
+
+        if (requireChristianContent) {
+          accumulated = accumulated.filter(isChristianContentForSpeech);
+        }
+
+        accumulated = accumulated.slice(0, TARGET_CATEGORY_COUNT);
+
+        if (accumulated.length > 0) {
+          console.log(
+            '[Category] cache-first render:',
+            accumulated.length,
+            'cached videos for',
+            category.name
+          );
+
+          setYoutubeSpeeches(accumulated);
+          setCategoryError(null);
+          setCategoryLoading(false);
+        }
+      } catch (cacheError) {
+        console.log('[Category] cache-first read failed:', cacheError);
+      }
+
+      if (accumulated.length === 0) {
+        // Genuinely nothing usable to show yet — only now is a loading
+        // state correct while the first live fetch runs.
+        setCategoryLoading(true);
+      }
+
+      /*
+       * REFRESH ONLY IF NEEDED: a full pool refreshed within the freshness
+       * window needs NO network request on this open at all. Undersized or
+       * stale pools fall through to the background live refresh below while
+       * their cached videos stay visible.
+       */
+      if (accumulated.length >= TARGET_CATEGORY_COUNT) {
+        let cacheIsFresh = false;
+        try {
+          const ageMs = await YouTubeContentManager.getLastRefreshAgeMs(
+            category.name
+          );
+          cacheIsFresh = ageMs != null && ageMs < CATEGORY_CACHE_FRESH_MS;
+        } catch {}
+
+        if (cacheIsFresh) {
+          console.log(
+            '[Category] full fresh cache — skipping live refresh for',
+            category.name
+          );
+          setHasLoadedOnline(true);
+          if (!cancelled) setCategoryLoading(false);
+          return;
+        }
+      }
 
       try {
         /*
@@ -531,8 +659,7 @@ if (isMotivationCategory) {
 
           setCategoryError(null);
         } else {
-          setYoutubeSpeeches([]);
-
+          // Keep whatever is on screen; only report the empty result.
           setCategoryError(
             'No content found for this category. Please try again.'
           );
@@ -547,9 +674,13 @@ if (isMotivationCategory) {
           error
         );
 
-        setCategoryError(
-          'Failed to load content for this category.'
-        );
+        // A failed refresh must never replace cached videos with an error
+        // state — only surface an error when there is nothing to show.
+        if (accumulated.length === 0) {
+          setCategoryError(
+            'Failed to load content for this category.'
+          );
+        }
       } finally {
         if (!cancelled) {
           setCategoryLoading(false);

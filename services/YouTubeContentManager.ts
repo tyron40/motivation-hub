@@ -56,6 +56,13 @@ const inflightRefreshes = new Map<string, Promise<CachedVideo[]>>();
 // only redundant refresh attempts are skipped. Bounded: one timestamp per key.
 const MIN_BACKGROUND_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const lastBackgroundRefreshAt = new Map<string, number>();
+// In-memory cache layer (fastest first choice), keyed by the SAME canonical
+// category key as AsyncStorage. It is populated on every AsyncStorage read
+// and kept in sync on every write, so it can never become a divergent second
+// source of truth — AsyncStorage remains the persisted canonical cache.
+// This removes repeated JSON.parse of large 40-item pools from every read.
+const memoryVideoCache = new Map<string, CachedVideoData>();
+const memoryLastRefresh = new Map<string, number>();
 
 function getTodayDateString(): string {
   const now = new Date();
@@ -101,6 +108,7 @@ async function shouldRefresh(category: string): Promise<boolean> {
     if (!lastRefreshStr) return true;
 
     const lastRefresh = parseInt(lastRefreshStr, 10);
+    memoryLastRefresh.set(category, lastRefresh);
     const elapsed = Date.now() - lastRefresh;
     const shouldDo = elapsed >= REFRESH_INTERVAL_MS;
 
@@ -116,6 +124,7 @@ async function shouldRefresh(category: string): Promise<boolean> {
 }
 
 async function markRefreshed(category: string): Promise<void> {
+  memoryLastRefresh.set(category, Date.now());
   try {
     await AsyncStorage.setItem(`${STORAGE_KEYS.LAST_REFRESH}${category}`, String(Date.now()));
   } catch (error) {
@@ -124,11 +133,16 @@ async function markRefreshed(category: string): Promise<void> {
 }
 
 async function readCache(category: string): Promise<CachedVideoData | null> {
+  // Memory layer first: repeated reads (same-session category reopens,
+  // prewarm, other screens) skip AsyncStorage I/O and JSON.parse entirely.
+  const mem = memoryVideoCache.get(category);
+  if (mem) return mem;
   try {
     const stored = await AsyncStorage.getItem(`${STORAGE_KEYS.VIDEO_CACHE}${category}`);
     if (!stored) return null;
     const cached: CachedVideoData = JSON.parse(stored);
     if (!cached || !Array.isArray(cached.videos)) return null;
+    memoryVideoCache.set(category, cached);
     return cached;
   } catch (error) {
     console.error('Error reading video cache:', error);
@@ -167,6 +181,7 @@ async function setCachedVideos(category: string, videos: CachedVideo[]): Promise
       timestamp: Date.now(),
       category,
     };
+    memoryVideoCache.set(category, data);
     await AsyncStorage.setItem(`${STORAGE_KEYS.VIDEO_CACHE}${category}`, JSON.stringify(data));
     console.log(`Video cache updated – ${videos.length} videos for "${category}"`);
   } catch (error) {
@@ -269,6 +284,51 @@ async function fetchTrendingFromBackend(limit: number): Promise<CachedVideo[]> {
 }
 
 export const YouTubeContentManager = {
+  /**
+   * Fast read of the persisted canonical pool for one exact category:
+   * memory cache first, then AsyncStorage. NEVER triggers a network fetch,
+   * refresh, ranking or quota check, and never mutates the cache — used by
+   * the category screen for cache-first render before any live work.
+   */
+  async getCachedVideosForCategory(category: string): Promise<CachedVideo[]> {
+    const key = category.toLowerCase().trim();
+    const mem = memoryVideoCache.get(key);
+    if (mem) return mem.videos;
+    const cached = await readCache(key);
+    return cached?.videos ?? [];
+  },
+
+  /**
+   * Synchronous memory-only peek (no AsyncStorage I/O). Returns null when
+   * the memory layer is cold; callers then fall back to the async
+   * getCachedVideosForCategory. Enables zero-spinner first paint on
+   * category screens when the pool is already warm.
+   */
+  getCachedVideosSync(category: string): CachedVideo[] | null {
+    const mem = memoryVideoCache.get(category.toLowerCase().trim());
+    return mem && mem.videos.length > 0 ? mem.videos : null;
+  },
+
+  /**
+   * Milliseconds since the category's last successful backend refresh,
+   * or null if it has never been refreshed. Memory-backed.
+   */
+  async getLastRefreshAgeMs(category: string): Promise<number | null> {
+    const key = category.toLowerCase().trim();
+    const mem = memoryLastRefresh.get(key);
+    if (mem != null) return Date.now() - mem;
+    try {
+      const stored = await AsyncStorage.getItem(`${STORAGE_KEYS.LAST_REFRESH}${key}`);
+      if (!stored) return null;
+      const ts = parseInt(stored, 10);
+      if (Number.isNaN(ts)) return null;
+      memoryLastRefresh.set(key, ts);
+      return Date.now() - ts;
+    } catch {
+      return null;
+    }
+  },
+
   async getVideosForCategory(category: string, limit: number = 50): Promise<CachedVideo[]> {
     const normalizedCategory = category.toLowerCase().trim();
 
@@ -493,6 +553,8 @@ export const YouTubeContentManager = {
       if (ytKeys.length > 0) {
         await AsyncStorage.multiRemove(ytKeys);
       }
+      memoryVideoCache.clear();
+      memoryLastRefresh.clear();
       console.log('All YouTube caches cleared');
     } catch (error) {
       console.error('Error clearing caches:', error);
