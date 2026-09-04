@@ -43,6 +43,13 @@ const queryClient = new QueryClient({
 
 
 
+// One startup content warm per app process. React 18 StrictMode (development)
+// remounts effects, which previously launched a second concurrent warm job —
+// duplicate network bursts and cache writes. The flag guarantees a single job;
+// if that job is aborted mid-run the flag is released so a later mount can
+// restart it.
+let startupWarmStarted = false;
+
 function AudioPlayerWrapper() {
   const [audioUrl, setAudioUrl] = React.useState<string>('');
   const [isLoadingAudio, setIsLoadingAudio] = React.useState(false);
@@ -263,7 +270,8 @@ export default function RootLayout() {
   const [initError, setInitError] = React.useState<string | null>(null);
 
   useEffect(() => {
-    
+    let cancelled = false;
+
     const prepare = async () => {
       try {
         console.log('ðŸš€ Starting app initialization...');
@@ -288,7 +296,16 @@ export default function RootLayout() {
 
         // Keep startup interactive while live YouTube category caches warm
         // in the background for faster category opening.
+        //
+        // Bounded by construction: single job per process (guarded flag),
+        // aborts between categories when unmounted, sequential with the
+        // existing 750ms quota stagger, and the ContentManager itself is
+        // cache-first with in-flight dedup — fresh pools return instantly
+        // and stale/undersized pools share ONE background refresh.
         void (async () => {
+          if (startupWarmStarted) return;
+          startupWarmStarted = true;
+
           const startupCategories = [
             'Motivation',
             'Success',
@@ -300,6 +317,11 @@ export default function RootLayout() {
           ];
 
           for (const startupCategory of startupCategories) {
+            if (cancelled) {
+              startupWarmStarted = false;
+              return;
+            }
+
             try {
               await YouTubeContentManager.getVideosForCategory(
                 startupCategory,
@@ -310,6 +332,11 @@ export default function RootLayout() {
                 `[YouTube Prewarm] ${startupCategory} failed`,
                 error
               );
+            }
+
+            if (cancelled) {
+              startupWarmStarted = false;
+              return;
             }
 
             // Stagger requests so all category searches do not hit the
@@ -334,7 +361,10 @@ export default function RootLayout() {
     };
 
     void prepare();
-    
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!isReady) {

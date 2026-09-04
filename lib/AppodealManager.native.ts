@@ -249,6 +249,13 @@ class AppodealManager {
       this.interstitialReady = false;
       this.log('Interstitial dismissed');
       this.resolveInterstitialClose(true);
+      // Immediately request fresh inventory: without this the shown ad was
+      // never replaced, so after the FIRST interstitial of a session every
+      // later trigger found Appodeal empty and silently fell back to AdMob.
+      try {
+        Appodeal.cache(AdType.INTERSTITIAL);
+        debugLog('[Appodeal] interstitial re-cache requested after close');
+      } catch {}
     });
 
     // Banner lifecycle (loaded/shown fire from the native SDK, not from UI)
@@ -279,6 +286,12 @@ class AppodealManager {
       this.rewardedReady = false;
       this.log('Rewarded video dismissed');
       this.resolveRewardedClose(true);
+      // Same refill gap as the interstitial: request the next rewarded video
+      // as soon as the current one is dismissed.
+      try {
+        Appodeal.cache(AdType.REWARDED_VIDEO);
+        debugLog('[Appodeal] rewarded re-cache requested after close');
+      } catch {}
     });
   }
 
@@ -375,7 +388,13 @@ class AppodealManager {
    * (bypassing the cached AdMob fallback path entirely).
    */
   private async verifyConsentAfterForm(): Promise<void> {
-    if (!ADS_DEBUG) return;
+    // Strictly development-only. EXPO_PUBLIC_APPODEAL_DEBUG can be enabled in
+    // EAS production builds for diagnostics; this verification path also
+    // FORCE-SHOWS an interstitial right after consent — in production that
+    // consumed Appodeal's only cached fill seconds after launch (with no user
+    // interaction), after which Appodeal never triggered again for the rest
+    // of the session. The production CMP flow itself still runs in syncConsent().
+    if (!__DEV__) return;
 
     // Give UMP a moment to persist IABTCF_* defaults after form dismissal.
     await this.delay(1000);

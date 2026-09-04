@@ -40,7 +40,7 @@ export default function CategoryScreen() {
 
   const [hasLoadedOnline, setHasLoadedOnline] = useState(false);
   const [youtubeSpeeches, setYoutubeSpeeches] = useState<Speech[]>([]);
-  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(true);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { isAdmin, getBannerForCategory, updateBanner } = useAdmin();
@@ -212,11 +212,16 @@ if (isMotivationCategory) {
     setBannerImageUri(next);
   }, [banner?.imageUrl, isMotivationCategory, isChristianCategory, category, categoryId]);
 
-  // Reset online-sourced data whenever the category (route id) changes
+  // Reset online-sourced data whenever the category (route id) changes.
+  // Loading must be true here: the previous version left it false, so the
+  // first paint after opening a category briefly rendered the "No content
+  // found"/Retry empty state while the (cache-first or network) load was
+  // still in flight.
   useEffect(() => {
     setHasLoadedOnline(false);
     setYoutubeSpeeches([]);
     setCategoryError(null);
+    setCategoryLoading(true);
   }, [categoryId]);
 
   const handleRetry = useCallback(() => {

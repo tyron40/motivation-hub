@@ -48,6 +48,14 @@ export interface CachedVideo {
 // One in-flight refresh per category (Part 14): if 20 users (or 20 screens)
 // request a stale category simultaneously, only ONE refresh sequence runs.
 const inflightRefreshes = new Map<string, Promise<CachedVideo[]>>();
+// In-memory throttle for SCHEDULING background refreshes: a cached pool that is
+// stale or undersized (e.g. a heavily filtered pool that never reaches the
+// requested count) previously triggered a backend refresh attempt on EVERY
+// call. Rate-limit scheduling attempts per category so repeated screen visits
+// cannot churn network/JSON/AsyncStorage work. Display pools are unaffected —
+// only redundant refresh attempts are skipped. Bounded: one timestamp per key.
+const MIN_BACKGROUND_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const lastBackgroundRefreshAt = new Map<string, number>();
 
 function getTodayDateString(): string {
   const now = new Date();
@@ -282,7 +290,14 @@ export const YouTubeContentManager = {
       // Never block visible content on a network refresh.
       // Previously fetched online inventory must be returned immediately,
       // even when the caller requests more items than are currently cached.
-      // Fill/refresh the cache in the background instead.
+      // Fill/refresh the cache in the background instead — but at most one
+      // scheduling attempt per category per MIN_BACKGROUND_REFRESH_INTERVAL_MS
+      // (in-flight dedup still collapses concurrent callers into one fetch).
+      const lastAttempt = lastBackgroundRefreshAt.get(normalizedCategory) ?? 0;
+      if (Date.now() - lastAttempt < MIN_BACKGROUND_REFRESH_INTERVAL_MS) {
+        return cached.slice(0, limit);
+      }
+      lastBackgroundRefreshAt.set(normalizedCategory, Date.now());
       this.refreshCategoryInBackground(normalizedCategory, limit).catch(() => {});
       return cached.slice(0, limit);
     }
