@@ -20,7 +20,6 @@ import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
-import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import type { Speech } from '@/types/speech';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -42,13 +41,6 @@ const queryClient = new QueryClient({
 });
 
 
-
-// One startup content warm per app process. React 18 StrictMode (development)
-// remounts effects, which previously launched a second concurrent warm job —
-// duplicate network bursts and cache writes. The flag guarantees a single job;
-// if that job is aborted mid-run the flag is released so a later mount can
-// restart it.
-let startupWarmStarted = false;
 
 function AudioPlayerWrapper() {
   const [audioUrl, setAudioUrl] = React.useState<string>('');
@@ -270,8 +262,6 @@ export default function RootLayout() {
   const [initError, setInitError] = React.useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-
     const prepare = async () => {
       try {
         console.log('ðŸš€ Starting app initialization...');
@@ -292,58 +282,13 @@ export default function RootLayout() {
           }
         }
         
+        // NOTE: No startup content prewarm. The category screen is fully
+        // cache-first (memory/AsyncStorage read renders instantly, one
+        // single-flight live refresh only when needed), so prewarming all
+        // seven categories at launch only added startup network/storage
+        // contention with Home's own fetches. Categories fetch once on
+        // first open and are instant from cache afterwards.
         setIsReady(true);
-
-        // Keep startup interactive while live YouTube category caches warm
-        // in the background for faster category opening.
-        //
-        // Bounded by construction: single job per process (guarded flag),
-        // aborts between categories when unmounted, sequential with the
-        // existing 750ms quota stagger, and the ContentManager itself is
-        // cache-first with in-flight dedup — fresh pools return instantly
-        // and stale/undersized pools share ONE background refresh.
-        void (async () => {
-          if (startupWarmStarted) return;
-          startupWarmStarted = true;
-
-          const startupCategories = [
-            'Motivation',
-            'Success',
-            'Mindset',
-            'Fitness',
-            'Study',
-            'Christian Motivation',
-            'Athlete Pump Up',
-          ];
-
-          for (const startupCategory of startupCategories) {
-            if (cancelled) {
-              startupWarmStarted = false;
-              return;
-            }
-
-            try {
-              await YouTubeContentManager.getVideosForCategory(
-                startupCategory,
-                40
-              );
-            } catch (error) {
-              console.warn(
-                `[YouTube Prewarm] ${startupCategory} failed`,
-                error
-              );
-            }
-
-            if (cancelled) {
-              startupWarmStarted = false;
-              return;
-            }
-
-            // Stagger requests so all category searches do not hit the
-            // shared YouTube quota pools at the same instant.
-            await new Promise(resolve => setTimeout(resolve, 750));
-          }
-        })();
         
         
         console.log('âœ… App initialization completed');
@@ -361,10 +306,6 @@ export default function RootLayout() {
     };
 
     void prepare();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   if (!isReady) {

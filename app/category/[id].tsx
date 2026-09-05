@@ -18,10 +18,9 @@ import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { ArrowLeft, Edit3, X, Quote, Upload, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SpeechCard } from '@/components/SpeechCard';
-import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
+import { categories, churchCategory, athleteCategory } from '@/mocks/speeches';
 import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
-import { getVideosByCategory, getTrendingVideos, convertVideoToSpeech } from '@/services/youtubeService';
 import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import type { CachedVideo } from '@/services/YouTubeContentManager';
 import { useTheme } from '@/hooks/theme-context';
@@ -170,57 +169,6 @@ export default function CategoryScreen() {
     }
   }, []);
 
-  const CATEGORY_SEARCH_PROFILES: Record<string, string[]> = {
-    Motivation: [
-      'David Goggins motivational speech',
-      'Eric Thomas motivational speech',
-      'Les Brown motivational speech',
-      'Tony Robbins motivational speech',
-      'best powerful motivational speech',
-    ],
-    Success: [
-      'Jim Rohn success motivational speech',
-      'Tony Robbins success speech',
-      'Les Brown success motivation',
-      'Brian Tracy success motivational speech',
-      'success achievement motivational speech',
-    ],
-    Mindset: [
-      'David Goggins mental toughness mindset',
-      'Jocko Willink discipline mindset',
-      'Les Brown mindset motivational speech',
-      'growth mindset motivational speech',
-      'mental toughness motivational speech',
-    ],
-    Fitness: [
-      'David Goggins workout motivation',
-      'CT Fletcher gym motivational speech',
-      'Jocko Willink workout discipline',
-      'fitness workout motivational speech',
-      'bodybuilding gym motivation',
-    ],
-    Study: [
-      'study motivation speech students',
-      'exam motivation students',
-      'student discipline motivational speech',
-      'study hard motivational speech',
-      'academic success motivation',
-    ],
-    'Christian Motivation': [
-      'powerful Christian motivational sermon preacher',
-      'Christian sermon faith motivation Jesus',
-      'TD Jakes motivational sermon',
-      'Priscilla Shirer motivational sermon',
-      'Steven Furtick motivational sermon',
-    ],
-    'Athlete Pump Up': [
-      'Eric Thomas athlete motivational speech',
-      'Eric Thomas sports motivation',
-      'Ray Lewis motivational speech sports',
-      'Coach Pain athlete motivation',
-      'athlete locker room pump up motivational speech',
-    ],
-  };
   const isChristianContentForSpeech = (speech: Speech) =>
     isChristianContent(speech.title, speech.description);
 
@@ -293,114 +241,6 @@ if (isMotivationCategory) {
       if (!category || hasLoadedOnline) return;
 
       setCategoryError(null);
-
-      const searchQueries =
-        CATEGORY_SEARCH_PROFILES[category.name] ?? [
-          `${category.name} motivational speech`,
-        ];
-
-      console.log(
-        '[Category] live profile:',
-        category.name,
-        searchQueries
-      );
-
-      const categoryNameLower = category.name.toLowerCase();
-      const categoryWords = categoryNameLower
-        .split(/[^a-z0-9]+/i)
-        .map(w => w.trim())
-        .filter(Boolean);
-
-      const scoreSpeechRelevance = (speech: Speech) => {
-        const haystack =
-          `${speech.title} ${speech.description ?? ''}`.toLowerCase();
-
-        let score = 0;
-
-        if (haystack.includes(categoryNameLower)) {
-          score += 4;
-        }
-
-        for (const word of categoryWords) {
-          if (word.length > 2 && haystack.includes(word)) {
-            score += 1;
-          }
-        }
-
-        const assigned = classifyVideoToCategory(
-          speech.title,
-          speech.description
-        );
-
-        if (assigned === category.name) {
-          score += 3;
-        }
-
-        return score;
-      };
-
-      const convertAndRank = (videos: any[]): Speech[] =>
-        videos
-          .map(video => convertVideoToSpeech(video))
-          .map(speech => ({
-            speech,
-            score: scoreSpeechRelevance(speech),
-          }))
-          .sort((a, b) => b.score - a.score)
-          .map(item => item.speech);
-
-      const keepCategoryContent = (
-        speeches: Speech[]
-      ): Speech[] => {
-        if (requireChristianContent) {
-          return speeches.filter(isChristianContentForSpeech);
-        }
-
-        return speeches;
-      };
-
-      const mergeUnique = (
-        current: Speech[],
-        incoming: Speech[]
-      ): Speech[] => {
-        const seenIds = new Set(
-          current.map(speech => speech.id)
-        );
-
-        const merged = [...current];
-
-        const preferred = incoming.filter(
-          speech => speech.duration > 60
-        );
-
-        const remaining = incoming.filter(
-          speech => speech.duration <= 60
-        );
-
-        for (const speech of [...preferred, ...remaining]) {
-          if (
-            !speech ||
-            !speech.id ||
-            seenIds.has(speech.id)
-          ) {
-            continue;
-          }
-
-          seenIds.add(speech.id);
-          merged.push(speech);
-
-          if (
-            merged.length >= TARGET_CATEGORY_COUNT
-          ) {
-            break;
-          }
-        }
-
-        return merged.slice(
-          0,
-          TARGET_CATEGORY_COUNT
-        );
-      };
 
       /*
        * CACHE-FIRST: render the persisted pool for this exact category
@@ -477,202 +317,68 @@ if (isMotivationCategory) {
         }
       }
 
+      /*
+       * LIVE REFRESH — ONE canonical manager call. fetchAndCacheCategory is
+       * single-flight per category (inflightRefreshes), runs the backend's
+       * full category query profile server-side, merges the previous
+       * inventory, persists on success, and falls back to the previous pool
+       * on failure. The screen no longer orchestrates secondary searches,
+       * trending fills or its own ranking — one request path per category.
+       */
       try {
-        /*
-         * FIRST PAINT:
-         * Request only the strongest category-specific
-         * search first.
-         */
-        try {
-          const firstRaw = await getVideosByCategory(
-            category.name,
-            TARGET_CATEGORY_COUNT
-          );
-
-          if (cancelled) return;
-
-          const firstSpeeches = keepCategoryContent(
-            convertAndRank(
-              Array.isArray(firstRaw)
-                ? firstRaw
-                : []
-            )
-          );
-
-          accumulated = mergeUnique(
-            accumulated,
-            firstSpeeches
-          );
-
-          if (accumulated.length > 0) {
-            console.log(
-              '[Category] immediate first batch:',
-              accumulated.length
-            );
-
-            setYoutubeSpeeches([
-              ...accumulated,
-            ]);
-
-            setCategoryError(null);
-
-            /*
-             * Useful live results are visible now.
-             * Secondary requests can continue without
-             * holding the full-screen loading state.
-             */
-            setCategoryLoading(false);
-          }
-        } catch (firstError) {
-          console.log(
-            '[Category] primary search failed:',
-            firstError
-          );
-        }
-
-        /*
-         * CATEGORY-SPECIFIC FILL:
-         * Run the remaining speaker/topic searches
-         * concurrently.
-         */
-        if (
-          accumulated.length <
-          TARGET_CATEGORY_COUNT
-        ) {
-          const secondaryResults =
-            await Promise.allSettled(
-              searchQueries
-                .slice(1)
-                .map(searchQuery =>
-                  getVideosByCategory(
-                    searchQuery,
-                    TARGET_CATEGORY_COUNT
-                  )
-                )
-            );
-
-          if (cancelled) return;
-
-          for (const result of secondaryResults) {
-            if (
-              result.status !== 'fulfilled'
-            ) {
-              continue;
-            }
-
-            const speeches = keepCategoryContent(
-              convertAndRank(
-                Array.isArray(result.value)
-                  ? result.value
-                  : []
-              )
-            );
-
-            accumulated = mergeUnique(
-              accumulated,
-              speeches
-            );
-
-            if (accumulated.length > 0) {
-              setYoutubeSpeeches([
-                ...accumulated,
-              ]);
-
-              setCategoryError(null);
-              setCategoryLoading(false);
-            }
-
-            if (
-              accumulated.length >=
-              TARGET_CATEGORY_COUNT
-            ) {
-              break;
-            }
-          }
-        }
-
-        /*
-         * TRENDING FILL:
-         * Only use trending videos that actually score
-         * as relevant to the selected category.
-         */
-        if (
-          accumulated.length <
-          TARGET_CATEGORY_COUNT
-        ) {
-          try {
-            const trendingRaw =
-              await getTrendingVideos(
-                TARGET_CATEGORY_COUNT
-              );
-
-            if (cancelled) return;
-
-            const relevantTrending =
-              keepCategoryContent(
-                convertAndRank(
-                  Array.isArray(trendingRaw)
-                    ? trendingRaw
-                    : []
-                ).filter(
-                  speech =>
-                    scoreSpeechRelevance(speech) >= 3
-                )
-              );
-
-            accumulated = mergeUnique(
-              accumulated,
-              relevantTrending
-            );
-
-            if (accumulated.length > 0) {
-              setYoutubeSpeeches([
-                ...accumulated,
-              ]);
-
-              setCategoryError(null);
-            }
-          } catch (trendingError) {
-            console.log(
-              '[Category] trending fill failed:',
-              trendingError
-            );
-          }
-        }
-
-        if (cancelled) return;
-
-        console.log(
-          '[Category] final live count:',
-          accumulated.length,
-          'target:',
+        const refreshed = await YouTubeContentManager.fetchAndCacheCategory(
+          category.name,
           TARGET_CATEGORY_COUNT
         );
 
-        if (accumulated.length > 0) {
-          setYoutubeSpeeches(
-            accumulated.slice(
-              0,
-              TARGET_CATEGORY_COUNT
-            )
-          );
+        if (cancelled) return;
 
+        let freshSpeeches = (refreshed ?? [])
+          .filter(v => v && v.id && v.duration > 60)
+          .map(cachedVideoToSpeech);
+
+        if (requireChristianContent) {
+          freshSpeeches = freshSpeeches.filter(isChristianContentForSpeech);
+        }
+
+        if (freshSpeeches.length > 0) {
+          // Merge WITHOUT clearing what is visible: fresh ranked items first,
+          // then anything currently visible that the refresh dropped —
+          // deduplicated by video id, capped at the full target count.
+          const seenIds = new Set<string>();
+          const merged: Speech[] = [];
+
+          for (const speech of [...freshSpeeches, ...accumulated]) {
+            if (!speech || !speech.id || seenIds.has(speech.id)) continue;
+
+            seenIds.add(speech.id);
+            merged.push(speech);
+
+            if (merged.length >= TARGET_CATEGORY_COUNT) break;
+          }
+
+          accumulated = merged;
+          setYoutubeSpeeches(merged);
           setCategoryError(null);
-        } else {
+        } else if (accumulated.length === 0) {
           // Keep whatever is on screen; only report the empty result.
           setCategoryError(
             'No content found for this category. Please try again.'
           );
         }
 
+        console.log(
+          '[Category] refresh complete:',
+          accumulated.length,
+          'target:',
+          TARGET_CATEGORY_COUNT
+        );
+
         setHasLoadedOnline(true);
       } catch (error) {
         if (cancelled) return;
 
-        console.error(
-          '[Category] load error:',
-          error
-        );
+        console.error('[Category] refresh error:', error);
 
         // A failed refresh must never replace cached videos with an error
         // state — only surface an error when there is nothing to show.
@@ -681,6 +387,8 @@ if (isMotivationCategory) {
             'Failed to load content for this category.'
           );
         }
+
+        setHasLoadedOnline(true);
       } finally {
         if (!cancelled) {
           setCategoryLoading(false);

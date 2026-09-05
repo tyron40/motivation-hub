@@ -90,7 +90,8 @@ export default function HomeScreen() {
   }, []);
 
   
-  const styles = getStyles(colors);
+  // StyleSheet.create allocates ~90 style objects per render if not memoized.
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const allCategories = React.useMemo(() => {
     const base = categories.filter(category => 
@@ -105,12 +106,22 @@ export default function HomeScreen() {
   }, [profile.includeChurchMotivation]);
 
   React.useEffect(() => {
+    let cancelled = false;
+
+    // ONE trending fetch per Home mount — its result feeds BOTH the Popular
+    // Speeches section and the Short Clips pool. Trending has no in-flight
+    // dedup in the ContentManager, so the previous two separate calls meant
+    // two concurrent backend fetches whenever the cache was cold.
+    const trendingPromise = getTrendingVideos(35);
+
     const loadYouTubeSpeeches = async () => {
       try {
         // ContentManager is cache-first. Previously fetched online inventory
         // returns immediately; a real network fetch only occurs when needed.
         console.log('Loading fetched YouTube speeches...');
-        const videos = await getTrendingVideos(35);
+        const videos = await trendingPromise;
+
+        if (cancelled) return;
 
         if (videos.length > 0) {
           console.log(`Loaded ${videos.length} fetched YouTube videos`);
@@ -134,8 +145,11 @@ export default function HomeScreen() {
         console.log('🎬 Loading short clips for home page...');
         const [searchResults, trending] = await Promise.all([
           searchVideos('motivational short clips inspiration', 24),
-          getTrendingVideos(24),
+          trendingPromise,
         ]);
+
+        if (cancelled) return;
+
         const seenIds = new Set<string>();
         const clips: any[] = [];
         for (const v of [...searchResults, ...trending]) {
@@ -163,16 +177,25 @@ export default function HomeScreen() {
         setShortClips(fallbackShortClips);
       }
     };
-    
+
     // Render immediately from fallbacks; both loads refresh the UI in place
     // as their state updates land.
     void loadYouTubeSpeeches();
     void loadShortClips();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
   
   const { toggleFavorite, setCurrentSpeech, setCurrentPlaylist } = speechContext ?? {};
 
-  const displaySpeeches = youtubeSpeeches.filter(s => s.duration > 60);
+  // Memoized so the list identity is stable across renders — it feeds
+  // displayFeatured's memo and handleSpeechPress's dependency array.
+  const displaySpeeches = React.useMemo(
+    () => youtubeSpeeches.filter(s => s.duration > 60),
+    [youtubeSpeeches]
+  );
   const displayFeatured = React.useMemo(() => {
     if (displaySpeeches.length === 0) return null;
     const today = new Date();
@@ -223,9 +246,12 @@ export default function HomeScreen() {
     }
   };
   
-  const safeDisplaySpeeches = displaySpeeches.filter(speech => 
-    speech && typeof speech === 'object' && speech.id && speech.title
-  ).slice(0, 6);
+  const safeDisplaySpeeches = React.useMemo(
+    () => displaySpeeches.filter(speech =>
+      speech && typeof speech === 'object' && speech.id && speech.title
+    ).slice(0, 6),
+    [displaySpeeches]
+  );
 
   const homeFeaturedFlyers = React.useMemo(() => {
     const combined = [...motivationalFlyers, ...customFlyers];

@@ -357,8 +357,21 @@ export const YouTubeContentManager = {
       if (Date.now() - lastAttempt < MIN_BACKGROUND_REFRESH_INTERVAL_MS) {
         return cached.slice(0, limit);
       }
+      // Mark the attempt, but a FAILED or EMPTY refresh releases the slot
+      // immediately so the very next request can retry — a failed attempt
+      // must never poison the throttle for a category that still needs
+      // filling. (An EMPTY cache is never throttled at all — this throttle
+      // only governs repeated background refresh of usable cache.)
       lastBackgroundRefreshAt.set(normalizedCategory, Date.now());
-      this.refreshCategoryInBackground(normalizedCategory, limit).catch(() => {});
+      this.fetchAndCacheCategory(normalizedCategory, limit)
+        .then(result => {
+          if (!result || result.length === 0) {
+            lastBackgroundRefreshAt.delete(normalizedCategory);
+          }
+        })
+        .catch(() => {
+          lastBackgroundRefreshAt.delete(normalizedCategory);
+        });
       return cached.slice(0, limit);
     }
 
