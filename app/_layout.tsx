@@ -307,7 +307,26 @@ export default function RootLayout() {
             'Christian Motivation',
             'Athlete Pump Up',
           ];
+          // Hydrate persisted category pools into memory first. These are local
+          // cache reads only, so every category can synchronously render its
+          // exact cached content before network refresh reaches it.
+          await Promise.all(
+            startupCategories.map(async startupCategory => {
+              try {
+                await YouTubeContentManager.getCachedVideosForCategory(
+                  startupCategory
+                );
+              } catch (error) {
+                console.warn(
+                  '[YouTube Cache Hydrate] ' + startupCategory + ' failed',
+                  error
+                );
+              }
+            })
+          );
 
+          // Keep live refresh sequential and staggered so startup does not
+          // recreate the previous network request storm.
           for (const startupCategory of startupCategories) {
             try {
               await YouTubeContentManager.getVideosForCategory(

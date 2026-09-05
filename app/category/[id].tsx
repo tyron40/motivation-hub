@@ -217,12 +217,26 @@ if (isMotivationCategory) {
     const isFirstMount = prevCategoryIdRef.current === null;
     prevCategoryIdRef.current = categoryId;
     if (isFirstMount) return;
-
     setHasLoadedOnline(false);
-    setYoutubeSpeeches([]);
+
+    // Switch directly to this category's own warm cache instead of
+    // blanking the list while its persisted cache is being restored.
+    const nextCachedPool = category
+      ? YouTubeContentManager.getCachedVideosSync(category.name)
+      : null;
+
+    const nextSpeeches = (nextCachedPool ?? [])
+      .filter(v =>
+        v && v.id && v.duration > 60 &&
+        (!requireChristianContent || isChristianContent(v.title, v.description))
+      )
+      .slice(0, TARGET_CATEGORY_COUNT)
+      .map(cachedVideoToSpeech);
+
+    setYoutubeSpeeches(nextSpeeches);
     setCategoryError(null);
-    setCategoryLoading(true);
-  }, [categoryId]);
+    setCategoryLoading(nextSpeeches.length === 0);
+  }, [categoryId, category, requireChristianContent]);
 
   // Retry re-runs the cache-first load. Currently visible videos are KEPT:
   // the reload seeds from cache and merges, never blanking the screen.

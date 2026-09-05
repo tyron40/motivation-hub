@@ -195,15 +195,38 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log('✅ Demo user signed in successfully');
         return { error: null, isDemo: true };
       }
-      
       const { error } = await auth.signIn(email, password);
-      
+
       if (error) {
         console.error('❌ Sign in error:', error);
         setAuthState(prev => ({ ...prev, isLoading: false }));
         return { error };
       }
-      
+
+      // Do not return to the auth screen before React knows this session is
+      // authenticated. The auth listener may arrive a moment later on-device,
+      // so hydrate the successful Supabase session here immediately.
+      const {
+        data: { session },
+        error: sessionError,
+      } = await auth.getSession();
+
+      if (sessionError) {
+        console.warn('⚠️ Signed in but session read failed:', sessionError);
+      }
+
+      if (session?.user) {
+        setAuthState({
+          user: session.user,
+          session,
+          isLoading: false,
+          isAuthenticated: true,
+        });
+      } else {
+        // Never leave the root navigation stuck in its auth-loading state.
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+      }
+
       console.log('✅ User signed in successfully');
       return { error: null };
     } catch (error) {
