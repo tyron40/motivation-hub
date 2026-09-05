@@ -309,6 +309,11 @@ export const YouTubeContentManager = {
     return mem && mem.videos.length > 0 ? mem.videos : null;
   },
 
+  getCachedTrendingSync(): CachedVideo[] | null {
+    const mem = memoryVideoCache.get('_trending');
+    return mem && mem.videos.length > 0 ? mem.videos : null;
+  },
+
   /**
    * Milliseconds since the category's last successful backend refresh,
    * or null if it has never been refreshed. Memory-backed.

@@ -78,9 +78,13 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
-      await manager.initialize();
+      // Appodeal is primary; start its SDK and inventory before the fallback.
       appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
       if (ADS_DEBUG) console.log(`[Appodeal] active: ${appodeal.active}`);
+      reportAdState();
+
+      await manager.initialize();
+
       setIsInitialized(true);
       reportAdState();
     };

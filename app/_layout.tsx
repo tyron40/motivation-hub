@@ -266,29 +266,34 @@ export default function RootLayout() {
       try {
         console.log('ðŸš€ Starting app initialization...');
         
-        if (Platform.OS !== 'web') {
-          try {
-            const { Audio } = require('expo-av');
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: false,
-              staysActiveInBackground: true,
-              playsInSilentModeIOS: true,
-              shouldDuckAndroid: true,
-              playThroughEarpieceAndroid: false,
-            });
-            console.log('ðŸ”Š Background audio mode configured');
-          } catch (audioErr) {
-            console.warn('âš ï¸ Failed to set audio mode:', audioErr);
+        // Mount providers/navigation immediately. Native audio configuration
+        // must not delay authentication, Home, or ad initialization.
+        setIsReady(true);
+
+        void (async () => {
+          if (Platform.OS !== 'web') {
+            try {
+              const { Audio } = require('expo-av');
+              await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                staysActiveInBackground: true,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+              });
+              console.log('ðŸ”Š Background audio mode configured');
+            } catch (audioErr) {
+              console.warn('âš ï¸ Failed to set audio mode:', audioErr);
+            }
           }
-        }
-        
+        })();
+
         // NOTE: No startup content prewarm. The category screen is fully
         // cache-first (memory/AsyncStorage read renders instantly, one
         // single-flight live refresh only when needed), so prewarming all
         // seven categories at launch only added startup network/storage
         // contention with Home's own fetches. Categories fetch once on
         // first open and are instant from cache afterwards.
-        setIsReady(true);
         
         
         console.log('âœ… App initialization completed');

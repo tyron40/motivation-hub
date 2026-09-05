@@ -20,6 +20,7 @@ import { SpeechCard } from '@/components/SpeechCard';
 import { CategoryCard } from '@/components/CategoryCard';
 import { categories, churchCategory, athleteCategory, classifyVideoToCategory } from '@/mocks/speeches';
 import { getTrendingVideos, convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
+import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useTheme } from '@/hooks/theme-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
@@ -47,7 +48,22 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { tryShowInterstitialOnTransition } = useAdMob();
   const { customFlyers } = useAdmin();
-  const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>([]);
+  const [youtubeSpeeches, setYoutubeSpeeches] = React.useState<any[]>(() => {
+    const cached = YouTubeContentManager.getCachedTrendingSync();
+
+    if (!cached || cached.length === 0) {
+      return [];
+    }
+
+    return cached.map(video => {
+      const speech = convertVideoToSpeech(video as any);
+      const assignedCategory = classifyVideoToCategory(
+        speech.title,
+        speech.description
+      );
+      return { ...speech, category: assignedCategory };
+    });
+  });
   const [shortClips, setShortClips] = React.useState<any[]>(fallbackShortClips);
   const [selectedFlyer, setSelectedFlyer] = React.useState<MotivationalFlyer | null>(null);
   const scaleAnim = React.useRef(new Animated.Value(0)).current;
