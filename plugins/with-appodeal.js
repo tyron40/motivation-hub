@@ -54,11 +54,32 @@ const POD_SOURCES = [
  * with AdMob mediation, and the ~76 extra adapters previously listed here
  * caused CocoaPods to flood trunk/GitHub and fail with HTTP 429 on EAS.
  */
-const APPODEAL_PODS = `# Appodeal SDK 4.2.0 — minimal mediation set (Appodeal + AdMob)
+const APPODEAL_PODS = `# Appodeal SDK 4.2.0 — proven production mediation set
 def appodeal
   pod 'Appodeal', '4.2.0'
-  pod 'AppodealIABAdapter', '3.5.0.0'
+  pod 'AppodealAdjustAdapter', '5.4.6.1'
+  pod 'AppodealAmazonAdapter', '5.3.2.0'
+  pod 'AppodealAppLovinAdapter', '13.5.1.0'
+  pod 'AppodealAppLovinMAXAdapter', '13.5.1.1'
+  pod 'AppodealAppsFlyerAdapter', '6.17.7.1'
+  pod 'AppodealBidMachineAdapter', '3.7.1.0'
+  pod 'AppodealBidonAdapter', '0.15.0.0'
+  pod 'AppodealBigoAdsAdapter', '5.0.0.0'
+  pod 'AppodealDTExchangeAdapter', '8.4.1.0'
+  pod 'AppodealFacebookAdapter', '18.0.1.0'
+  pod 'AppodealFirebaseAdapter', '12.4.0.1'
   pod 'AppodealGoogleAdMobAdapter', '13.5.0.0'
+  pod 'AppodealIABAdapter', '3.5.0.0'
+  pod 'AppodealInMobiAdapter', '11.1.0.0'
+  pod 'AppodealIronSourceAdapter', '9.1.0.0.0'
+  pod 'AppodealLevelPlayAdapter', '9.1.0.0.0'
+  pod 'AppodealMetaAudienceNetworkAdapter', '6.20.1.0'
+  pod 'AppodealMintegralAdapter', '7.7.9.0'
+  pod 'AppodealMyTargetAdapter', '5.36.2.0'
+  pod 'AppodealSentryAdapter', '8.57.2.1'
+  pod 'AppodealUnityAdapter', '4.16.3.0'
+  pod 'AppodealVungleAdapter', '7.6.2.0'
+  pod 'AppodealYandexAdapter', '7.17.0.1'
 end`;
 
 function withAppodealInfoPlist(config, props) {

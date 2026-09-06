@@ -176,7 +176,32 @@ class AppodealManager {
 
     try {
       this.wireEvents();
+
+      if (ADS_DEBUG) {
+        try {
+          const appodealModule = require('react-native-appodeal');
+          const LogLevel = appodealModule.AppodealLogLevel;
+
+          if (LogLevel?.VERBOSE !== undefined) {
+            Appodeal.setLogLevel(LogLevel.VERBOSE);
+            console.log('[Appodeal] native verbose logging enabled');
+          } else if (LogLevel?.DEBUG !== undefined) {
+            Appodeal.setLogLevel(LogLevel.DEBUG);
+            console.log('[Appodeal] native debug logging enabled');
+          } else {
+            console.log('[Appodeal] native log-level enum unavailable');
+          }
+        } catch (logError: any) {
+          console.warn(
+            '[Appodeal] unable to enable native SDK logging:',
+            logError?.message ?? 'unknown'
+          );
+        }
+      }
+
       const adTypes = AdType.INTERSTITIAL | AdType.BANNER | AdType.REWARDED_VIDEO;
+
+      console.log('[Appodeal] calling native initialize');
       Appodeal.initialize(APPODEAL_APP_KEY, adTypes);
 
       // Explicitly request inventory so the first fill never depends on
