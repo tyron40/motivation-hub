@@ -88,35 +88,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         console.log('✅ RevenueCat configured');
         setIsConfigured(true);
 
-        // Connect authenticated users so purchases/restores are consistent across devices
-        if (user?.id) {
-          try {
-            await Purchases.logIn(user.id);
-            console.log('[IAP] RevenueCat user logged in:', user.id);
-          } catch (loginError) {
-            console.warn('[IAP] RevenueCat logIn failed (continuing anonymously):', loginError);
-          }
-        }
 
-        // Verify offerings and report product availability
-        try {
-          const offerings = await Purchases.getOfferings();
-          const current = offerings.current;
-          console.log('[IAP] current offering:', current?.identifier ?? 'none');
-
-          const availableIds = (current?.availablePackages ?? []).map(p => p.product.identifier);
-          console.log('[IAP] package product IDs:', availableIds);
-
-          const expectedIds = Object.values(IAP_PRODUCT_IDS);
-          const missing = expectedIds.filter(id => !availableIds.includes(id));
-          if (missing.length > 0) {
-            console.warn('[IAP] missing expected products:', missing);
-          } else {
-            console.log('[IAP] all expected products present.');
-          }
-        } catch (offeringsError) {
-          console.warn('[IAP] getOfferings failed:', offeringsError);
-        }
       } catch (error) {
         console.error('❌ Failed to configure RevenueCat:', error);
         setIsConfigured(false);
@@ -124,8 +96,7 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     };
 
     void configureRevenueCat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, []);
 
   const loadEntitlements = useCallback(async () => {
     try {
