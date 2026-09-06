@@ -277,16 +277,46 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
       const offerings = await Purchases.getOfferings();
       const current = offerings.current;
+
       if (!current) {
-        throw new Error('No current offering found');
+        console.error('[IAP Purchase] No current RevenueCat offering.', {
+          requestedProductId: productId,
+          offeringIds: Object.keys(offerings.all ?? {}),
+        });
+
+        throw new Error('No current RevenueCat offering is configured.');
       }
 
-      const pkg = current.availablePackages.find((p: PurchasesPackage) => p.product.identifier === productId);
+      const availableProductIds = current.availablePackages.map(
+        (p: PurchasesPackage) => p.product.identifier
+      );
+
+      console.log('[IAP Purchase]', {
+        requestedProductId: productId,
+        currentOffering: current.identifier,
+        availableProductIds,
+      });
+
+      const pkg = current.availablePackages.find(
+        (p: PurchasesPackage) => p.product.identifier === productId
+      );
+
       if (!pkg) {
-        throw new Error(`Product not found in current offering: ${productId}`);
+        console.error('[IAP Purchase] Requested product is missing.', {
+          requestedProductId: productId,
+          availableProductIds,
+        });
+
+        throw new Error(
+          `Product ${productId} is not available in the current RevenueCat offering.`
+        );
       }
+
+      console.log('[IAP Purchase] Starting native purchase:', productId);
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
+
+      console.log('[IAP Purchase] Native purchase completed:', productId);
 
       let updated = { ...entitlementsRef.current };
 

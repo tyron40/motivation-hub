@@ -35,18 +35,42 @@ const motivationHeroImage = require('@/assets/images/run club.jpeg');
 // the ContentManager's 24h discovery policy.
 const CATEGORY_CACHE_FRESH_MS = 1000 * 60 * 60 * 24;
 
-const CHRISTIAN_KEYWORDS = [
-  'christian', 'church', 'jesus', 'christ', 'god', 'lord', 'faith',
-  'bible', 'scripture', 'gospel', 'prayer', 'worship', 'sermon',
-  'pastor', 'holy spirit', 'christian motivation', 'biblical',
-  'ministry', 'preaching',
+const CHRISTIAN_PREACHING_KEYWORDS = [
+  'pastor',
+  'preacher',
+  'preaching',
+  'sermon',
+  'bishop',
+  'church message',
+  'church sermon',
+  'ministry message',
+  'motivational sermon',
+  'christian sermon',
+];
+
+const CHRISTIAN_NON_PREACHING_KEYWORDS = [
+  'worship music',
+  'worship song',
+  'christian music',
+  'christian song',
+  'gospel music',
+  'gospel song',
+  'lyrics',
+  'instrumental',
+  'music playlist',
+  'bible reading',
+  'scripture reading',
 ];
 
 const isChristianContent = (title: string, description?: string): boolean => {
   const haystack = `${title} ${description ?? ''}`.toLowerCase();
-  return CHRISTIAN_KEYWORDS.some(k => haystack.includes(k));
-};
 
+  if (CHRISTIAN_NON_PREACHING_KEYWORDS.some(k => haystack.includes(k))) {
+    return false;
+  }
+
+  return CHRISTIAN_PREACHING_KEYWORDS.some(k => haystack.includes(k));
+};
 /** Convert a persisted CachedVideo into the Speech shape used by the UI. */
 const cachedVideoToSpeech = (video: CachedVideo): Speech => ({
   id: video.id,

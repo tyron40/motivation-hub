@@ -467,9 +467,9 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
     'student motivation',
   ],
   'christian motivation': [
-    'christian motivation speech church',
-    'sermon inspiration faith encouragement',
-    'bible motivation jesus gospel testimony',
+    'pastor motivational sermon preaching',
+    'christian pastor sermon encouragement',
+    'church pastor preaching motivational message',
   ],
   'athlete pump up': [
     'athlete pump up motivation',
