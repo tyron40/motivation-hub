@@ -88,7 +88,35 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
         console.log('✅ RevenueCat configured');
         setIsConfigured(true);
 
+        // Connect authenticated users so purchases/restores are consistent across devices
+        if (user?.id) {
+          try {
+            await Purchases.logIn(user.id);
+            console.log('[IAP] RevenueCat user logged in:', user.id);
+          } catch (loginError) {
+            console.warn('[IAP] RevenueCat logIn failed (continuing anonymously):', loginError);
+          }
+        }
 
+        // Verify offerings and report product availability
+        try {
+          const offerings = await Purchases.getOfferings();
+          const current = offerings.current;
+          console.log('[IAP] current offering:', current?.identifier ?? 'none');
+
+          const availableIds = (current?.availablePackages ?? []).map(p => p.product.identifier);
+          console.log('[IAP] package product IDs:', availableIds);
+
+          const expectedIds = Object.values(IAP_PRODUCT_IDS);
+          const missing = expectedIds.filter(id => !availableIds.includes(id));
+          if (missing.length > 0) {
+            console.warn('[IAP] missing expected products:', missing);
+          } else {
+            console.log('[IAP] all expected products present.');
+          }
+        } catch (offeringsError) {
+          console.warn('[IAP] getOfferings failed:', offeringsError);
+        }
       } catch (error) {
         console.error('❌ Failed to configure RevenueCat:', error);
         setIsConfigured(false);
@@ -96,7 +124,8 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
     };
 
     void configureRevenueCat();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const loadEntitlements = useCallback(async () => {
     try {
@@ -248,46 +277,16 @@ export const [IAPProvider, useIAP] = createContextHook(() => {
 
       const offerings = await Purchases.getOfferings();
       const current = offerings.current;
-
       if (!current) {
-        console.error('[IAP Purchase] No current RevenueCat offering.', {
-          requestedProductId: productId,
-          offeringIds: Object.keys(offerings.all ?? {}),
-        });
-
-        throw new Error('No current RevenueCat offering is configured.');
+        throw new Error('No current offering found');
       }
 
-      const availableProductIds = current.availablePackages.map(
-        (p: PurchasesPackage) => p.product.identifier
-      );
-
-      console.log('[IAP Purchase]', {
-        requestedProductId: productId,
-        currentOffering: current.identifier,
-        availableProductIds,
-      });
-
-      const pkg = current.availablePackages.find(
-        (p: PurchasesPackage) => p.product.identifier === productId
-      );
-
+      const pkg = current.availablePackages.find((p: PurchasesPackage) => p.product.identifier === productId);
       if (!pkg) {
-        console.error('[IAP Purchase] Requested product is missing.', {
-          requestedProductId: productId,
-          availableProductIds,
-        });
-
-        throw new Error(
-          `Product ${productId} is not available in the current RevenueCat offering.`
-        );
+        throw new Error(`Product not found in current offering: ${productId}`);
       }
-
-      console.log('[IAP Purchase] Starting native purchase:', productId);
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
-
-      console.log('[IAP Purchase] Native purchase completed:', productId);
 
       let updated = { ...entitlementsRef.current };
 
