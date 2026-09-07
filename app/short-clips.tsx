@@ -39,6 +39,7 @@ import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { fallbackShortClips } from '@/mocks/shortClips';
+import { playbackAdCoordinator } from '@/services/PlaybackAdCoordinator';
 
 let NativeYoutubePlayer: any = null;
 if (Platform.OS !== 'web') {
@@ -470,11 +471,78 @@ const ClipPage = React.memo(function ClipPage({
   const autoplayInProgressRef = useRef(false);
   const warmupDoneRef = useRef(false);
   const autoplayWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loopRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const adPausedRef = useRef(false);
+  const resumeAfterAdRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  const shouldPlayRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      if (autoplayWatchdogRef.current) {
+        clearTimeout(autoplayWatchdogRef.current);
+        autoplayWatchdogRef.current = null;
+      }
+      if (stateDebounceRef.current) {
+        clearTimeout(stateDebounceRef.current);
+        stateDebounceRef.current = null;
+      }
+      if (loopRestartTimerRef.current) {
+        clearTimeout(loopRestartTimerRef.current);
+        loopRestartTimerRef.current = null;
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    shouldPlayRef.current = shouldPlay;
+  }, [shouldPlay]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    return playbackAdCoordinator.register({
+      pauseForAd: () => {
+        if (!mountedRef.current) return;
+
+        resumeAfterAdRef.current = isPlayingRef.current || shouldPlayRef.current;
+        adPausedRef.current = true;
+        autoplayInProgressRef.current = false;
+
+        if (autoplayWatchdogRef.current) {
+          clearTimeout(autoplayWatchdogRef.current);
+          autoplayWatchdogRef.current = null;
+        }
+
+        if (loopRestartTimerRef.current) {
+          clearTimeout(loopRestartTimerRef.current);
+          loopRestartTimerRef.current = null;
+        }
+
+        setShouldPlay(false);
+        setIsPlaying(false);
+      },
+
+      resumeAfterAd: () => {
+        if (!mountedRef.current || !isActive) return;
+
+        const shouldResume = resumeAfterAdRef.current;
+        resumeAfterAdRef.current = false;
+        adPausedRef.current = false;
+
+        if (shouldResume) {
+          autoplayInProgressRef.current = true;
+          setShouldPlay(true);
+        }
+      },
+    });
+  }, [isActive]);
 
   useEffect(() => {
     if (isActive) {
@@ -500,6 +568,10 @@ const ClipPage = React.memo(function ClipPage({
       return;
     }
     if (!playerReady) return;
+    if (adPausedRef.current || playbackAdCoordinator.isAdActive) {
+      setShouldPlay(false);
+      return;
+    }
 
     autoplayInProgressRef.current = true;
     setShouldPlay(true);
@@ -545,6 +617,11 @@ const ClipPage = React.memo(function ClipPage({
     }
 
     if (state === 'playing') {
+      if (adPausedRef.current || playbackAdCoordinator.isAdActive) {
+        setShouldPlay(false);
+        setIsPlaying(false);
+        return;
+      }
       autoplayInProgressRef.current = false;
       if (!mountedRef.current) return;
       setIsPlaying(true);
@@ -565,8 +642,13 @@ const ClipPage = React.memo(function ClipPage({
       autoplayInProgressRef.current = true;
       setShouldPlay(false);
       setIsPlaying(false);
-      setTimeout(() => {
+      if (loopRestartTimerRef.current) {
+        clearTimeout(loopRestartTimerRef.current);
+      }
+      loopRestartTimerRef.current = setTimeout(() => {
+        loopRestartTimerRef.current = null;
         if (!mountedRef.current) return;
+        if (adPausedRef.current || playbackAdCoordinator.isAdActive) return;
         setShouldPlay(true);
       }, 120);
       return;
@@ -591,10 +673,11 @@ const ClipPage = React.memo(function ClipPage({
     console.log('Clip player ready:', clip.youtubeId);
     if (!mountedRef.current) return;
     setPlayerReady(true);
-    if (isActive) {
+    if (isActive && !adPausedRef.current && !playbackAdCoordinator.isAdActive) {
       autoplayInProgressRef.current = true;
       void runWarmupSeek().finally(() => {
         if (!mountedRef.current) return;
+        if (adPausedRef.current || playbackAdCoordinator.isAdActive) return;
         setShouldPlay(true);
       });
     }
@@ -630,8 +713,13 @@ const ClipPage = React.memo(function ClipPage({
               autoplayInProgressRef.current = true;
               setShouldPlay(false);
               setIsPlaying(false);
-              setTimeout(() => {
+              if (loopRestartTimerRef.current) {
+                clearTimeout(loopRestartTimerRef.current);
+              }
+              loopRestartTimerRef.current = setTimeout(() => {
+                loopRestartTimerRef.current = null;
                 if (!mountedRef.current) return;
+                if (adPausedRef.current || playbackAdCoordinator.isAdActive) return;
                 setShouldPlay(true);
                 try {
                   webIframeRef.current?.contentWindow?.postMessage(
