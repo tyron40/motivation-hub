@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -909,7 +909,7 @@ function ChatScreenContent() {
               styles.messageRole,
               { color: message.isUser ? Colors.background : Colors.text }
             ]}>
-              {message.isUser ? (profile.name || 'You') : 'Coach Alex'}
+              {message.isUser ? (profile.name || 'You') : (profile.chatbotName?.trim() || 'Coach Alex')}
             </Text>
           </View>
           <Text style={[
@@ -978,7 +978,7 @@ function ChatScreenContent() {
                 <Sparkles color={Colors.background} size={18} />
               </LinearGradient>
               <View>
-                <Text style={styles.title}>Coach Alex</Text>
+                <Text style={styles.title}>{profile.chatbotName?.trim() || 'Coach Alex'}</Text>
                 <View style={styles.statusIndicator}>
                   <View style={styles.onlineIndicator} />
                   <Text style={styles.statusText}>Online</Text>
@@ -1049,7 +1049,7 @@ function ChatScreenContent() {
                         <Bot color={Colors.background} size={14} />
                       </LinearGradient>
                     </View>
-                    <Text style={[styles.messageRole, { color: Colors.text }]}>Coach Alex</Text>
+                    <Text style={[styles.messageRole, { color: Colors.text }]}>{profile.chatbotName?.trim() || 'Coach Alex'}</Text>
                   </View>
                   <View style={styles.typingIndicator}>
                     <View style={styles.typingDot} />
@@ -1250,6 +1250,13 @@ interface SettingsModalProps {
 
 const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: SettingsModalProps) => {
   const [tempName, setTempName] = useState(profile.name);
+  const [tempChatbotName, setTempChatbotName] = useState(profile.chatbotName || 'Coach Alex');
+
+  useEffect(() => {
+    if (visible) {
+      setTempChatbotName(profile.chatbotName || 'Coach Alex');
+    }
+  }, [visible, profile.chatbotName]);
   const [tempVoice, setTempVoice] = useState(profile.preferredVoice);
 
   const voices = [
@@ -1264,6 +1271,7 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
   const saveSettings = () => {
     updateProfile({
       name: tempName,
+      chatbotName: tempChatbotName.trim() || 'Coach Alex',
       preferredVoice: tempVoice,
     });
     onClose();
@@ -1292,6 +1300,15 @@ const SettingsModal = ({ visible, onClose, profile, updateProfile, styles }: Set
           </View>
 
           <View style={styles.settingSection}>
+            <Text style={styles.settingLabel}>AI Chatbot Name</Text>
+            <TextInput
+              style={styles.settingInput}
+              value={tempChatbotName}
+              onChangeText={setTempChatbotName}
+              placeholder="Enter chatbot name"
+              placeholderTextColor={Colors.textSecondary}
+              maxLength={30}
+            />
           </View>
 
           {(

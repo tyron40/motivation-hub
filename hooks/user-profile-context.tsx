@@ -1,4 +1,4 @@
-﻿import createContextHook from '@nkzw/create-context-hook';
+import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './auth-context';
@@ -7,6 +7,7 @@ interface UserProfile {
   name: string;
   preferredVoice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
   voiceEnabled: boolean;
+  chatbotName: string;
   includeChurchMotivation: boolean;
   profileImageUri?: string;
   coachCharacter?: {
@@ -22,6 +23,7 @@ const defaultProfile: UserProfile = {
   name: '',
   preferredVoice: 'alloy',
   voiceEnabled: false,
+  chatbotName: 'Coach Alex',
   includeChurchMotivation: false,
 };
 

@@ -1,7 +1,6 @@
 import { Tabs, Redirect } from "expo-router";
 import { Home, User, BookOpen, MessageCircle } from "lucide-react-native";
 import React from "react";
-import MiniPlayer from "@/components/MiniPlayer";
 import { useTheme } from "@/hooks/theme-context";
 import { useAuth } from "@/hooks/auth-context";
 
@@ -59,7 +58,6 @@ export default function TabLayout() {
           }}
         />
       </Tabs>
-      <MiniPlayer />
     </>
   );
 }

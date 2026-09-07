@@ -109,6 +109,7 @@ function ProfileContent() {
           style: 'destructive',
           onPress: async () => {
             await signOut();
+            router.replace('/auth');
           },
         },
       ]

@@ -1,4 +1,4 @@
-﻿import { Stack, Redirect } from "expo-router";
+import { Stack, Redirect } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet, Platform } from "react-native";
@@ -19,6 +19,7 @@ import { AdMobProvider } from "@/hooks/admob-context";
 import { AdminProvider } from "@/hooks/admin-context";
 import { AudioPlayer } from '@/components/AudioPlayer';
 import GlobalYouTubePlayer from '@/components/GlobalYouTubePlayer';
+import MiniPlayer from '@/components/MiniPlayer';
 import { getWorkingAudioUrl } from '@/services/speechService';
 import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import type { Speech } from '@/types/speech';
@@ -257,6 +258,7 @@ function RootLayoutNav() {
       </Stack>
       {isAuthenticated && <AudioPlayerWrapper />}
       {isAuthenticated && <GlobalYouTubePlayer />}
+      {isAuthenticated && <MiniPlayer />}
     </>
   );
 }
