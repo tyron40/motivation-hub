@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Heart, Clock, User, Share2, ListPlus } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { Speech } from '@/types/speech';
+import { usePlaylists } from '@/hooks/playlist-context';
 
 interface SpeechCardProps {
   speech: Speech;
@@ -21,6 +22,7 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
   variant = 'compact' 
 }) => {
   const { colors } = useTheme();
+  const { playlists, addToPlaylist } = usePlaylists();
   const [imageError, setImageError] = useState<boolean>(false);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -80,6 +82,56 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     return `${mins} min`;
   };
 
+  const handleAddToPlaylist = () => {
+    if (onAddToPlaylist) {
+      onAddToPlaylist();
+      return;
+    }
+
+    if (!playlists.length) {
+      Alert.alert(
+        'No Playlists',
+        'Create a playlist first, then add this speech to it.'
+      );
+      return;
+    }
+
+    const availablePlaylists = playlists.filter(
+      (playlist) => !playlist.speechIds.includes(speech.id)
+    );
+
+    if (!availablePlaylists.length) {
+      Alert.alert(
+        'Already Saved',
+        'This speech is already saved to all of your playlists.'
+      );
+      return;
+    }
+
+    const buttons = availablePlaylists.map((playlist) => ({
+      text: playlist.name,
+      onPress: async () => {
+        await addToPlaylist(playlist.id, speech.id);
+
+        Alert.alert(
+          'Saved',
+          `Added "${speech.title}" to "${playlist.name}".`
+        );
+      },
+    }));
+
+    Alert.alert(
+      'Add to Playlist',
+      'Choose a playlist:',
+      [
+        ...buttons,
+        {
+          text: 'Cancel',
+          style: 'cancel' as const,
+        },
+      ]
+    );
+  };
   const handleShare = async () => {
     try {
       const message = `Check out "${speech.title}" by ${speech.speaker}\n\n${speech.description || 'A motivational speech to inspire you!'}`;
@@ -140,11 +192,12 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
                   <TouchableOpacity onPress={handleShare} style={styles.actionBtn}>
                     <Share2 color={colors.text} size={18} />
                   </TouchableOpacity>
-                  {onAddToPlaylist && (
-                    <TouchableOpacity onPress={onAddToPlaylist} style={styles.actionBtn}>
-                      <ListPlus color={colors.text} size={18} />
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    onPress={handleAddToPlaylist}
+                    style={styles.actionBtn}
+                  >
+                    <ListPlus color={colors.text} size={18} />
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={onFavorite} style={styles.favoriteButton}>
                     <Heart 
                       color={colors.text} 
@@ -184,11 +237,12 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
               <TouchableOpacity onPress={handleShare} style={styles.compactActionBtn}>
                 <Share2 color={colors.textSecondary} size={16} />
               </TouchableOpacity>
-              {onAddToPlaylist && (
-                <TouchableOpacity onPress={onAddToPlaylist} style={styles.compactActionBtn}>
-                  <ListPlus color={colors.textSecondary} size={16} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                onPress={handleAddToPlaylist}
+                style={styles.compactActionBtn}
+              >
+                <ListPlus color={colors.textSecondary} size={16} />
+              </TouchableOpacity>
               <TouchableOpacity onPress={onFavorite}>
                 <Heart 
                   color={colors.accent} 

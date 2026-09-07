@@ -2,52 +2,69 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Playlist } from '@/types/speech';
-
-const STORAGE_KEY = 'playlists';
+import { useAuth } from '@/hooks/auth-context';
 
 export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
+  const { user, isLoading: authLoading } = useAuth();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const storageKey = user?.id ? `playlists:${user.id}` : null;
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+
     const loadPlaylists = async () => {
+      setIsLoading(true);
+
+      if (!storageKey) {
+        setPlaylists([]);
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        const timeoutPromise = new Promise<null>((resolve) => {
-          setTimeout(() => {
-            console.warn('⚠️ Playlists loading timeout');
-            resolve(null);
-          }, 1000);
-        });
-        
-        const loadPromise = AsyncStorage.getItem(STORAGE_KEY);
-        const stored = await Promise.race([loadPromise, timeoutPromise]);
-        
-        if (stored && typeof stored === 'string') {
+        const stored = await AsyncStorage.getItem(storageKey);
+
+        if (stored) {
           try {
             setPlaylists(JSON.parse(stored));
           } catch (parseError) {
             console.error('❌ Error parsing playlists:', parseError);
             setPlaylists([]);
           }
+          return;
         }
+
+        setPlaylists([]);
       } catch (error) {
         console.error('Error loading playlists:', error);
+        setPlaylists([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadPlaylists();
-  }, []);
+    void loadPlaylists();
+  }, [authLoading, storageKey]);
 
   const savePlaylists = useCallback(async (newPlaylists: Playlist[]) => {
+    if (!storageKey) {
+      console.warn(
+        '⚠️ Refusing to save playlists without an authenticated user'
+      );
+      return;
+    }
+
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newPlaylists));
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify(newPlaylists)
+      );
       setPlaylists(newPlaylists);
     } catch (error) {
       console.error('Error saving playlists:', error);
     }
-  }, []);
+  }, [storageKey]);
 
   const createPlaylist = useCallback(async (
     name: string,

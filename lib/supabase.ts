@@ -155,10 +155,10 @@ export const auth = {
           const parsed = JSON.parse(tokenData);
           const expiresAt = parsed?.expires_at || 0;
           
-          // Check if token is expired
+          // An expired access token is not an invalid persisted session.
+          // Keep it so Supabase can use the refresh token on app reopen.
           if (expiresAt && expiresAt * 1000 < Date.now()) {
-            console.log('🔐 Found expired token, clearing...');
-            await storage.removeItem(tokenKey);
+            console.log('🔐 Cached access token expired - keeping persisted session for refresh');
           }
         } catch (parseError) {
           console.warn('⚠️ Could not parse token data, clearing:', parseError);

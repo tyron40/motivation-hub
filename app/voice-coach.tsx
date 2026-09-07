@@ -123,7 +123,7 @@ function VoiceCoachContent() {
   const conversationRef = useRef<Message[]>([]);
   const autoGreetDoneRef = useRef(false);
 
-  const trimConversation = useCallback((messages: Message[]) => messages.slice(-10), []);
+  const trimConversation = useCallback((messages: Message[]) => messages.slice(-6), []);
   useEffect(() => {
     const animations = [
       sphereBreathAnim,
@@ -483,7 +483,7 @@ function VoiceCoachContent() {
         const voiceDescription = selectedVoice.description;
 
         const systemPrompt = `You are a motivational voice coach having a spoken conversation with ${userName}. ${voiceDescription}
-Respond naturally and directly. Keep most responses concise enough to speak in roughly 10-25 seconds unless the user explicitly asks for more detail. Avoid long lists and essays. Sound encouraging, energetic, and conversational. Call the user by name when natural.`;
+Respond naturally and directly. Keep most responses concise enough to speak in roughly 6-12 seconds unless the user explicitly asks for more detail. Lead with the most useful answer immediately. Avoid long lists, repetition, and essays. Sound encouraging, energetic, and conversational. Call the user by name when natural.`;
 
         const nextConversation = trimConversation([
           ...conversationRef.current,
