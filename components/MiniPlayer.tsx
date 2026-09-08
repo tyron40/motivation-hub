@@ -80,8 +80,16 @@ export default function MiniPlayer() {
     setCurrentSpeech(null);
   };
 
+  const isTabScreen =
+    pathname === '/' ||
+    pathname === '/scripture' ||
+    pathname === '/chat' ||
+    pathname === '/profile';
+
   const tabBarHeight = Platform.OS === 'ios' ? 80 : 60;
-  const bottomOffset = insets.bottom > 0 ? tabBarHeight + 4 : tabBarHeight + 8;
+  const bottomOffset = isTabScreen
+    ? tabBarHeight + 4
+    : Math.max(insets.bottom, 8) + 8;
 
   return (
     <Animated.View
