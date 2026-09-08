@@ -239,8 +239,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const signUp = useCallback(async (email: string, password: string, userData?: { name?: string }) => {
     try {
       console.log('🔐 Signing up user:', email);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
       
+      // The auth screen owns the signup loading UI. Keep the root navigator visible.
       const { error } = await auth.signUp(email, password, userData);
       
       if (error) {
@@ -249,6 +249,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return { error };
       }
       
+      // Signup may succeed without an authenticated session when email verification is required.
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+
       console.log('✅ User signed up successfully');
       return { error: null };
     } catch (error) {
