@@ -164,7 +164,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       console.log('🔐 Signing in user:', email);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
+      // The auth screen owns the sign-in loading UI. Keep the root navigator visible.
       
       if (email.toLowerCase() === 'demo@motivationhub.app' && password === 'Demo2025!') {
         console.log('🎭 Demo account detected - granting full access');
@@ -195,7 +195,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         console.log('✅ Demo user signed in successfully');
         return { error: null, isDemo: true };
       }
-      const { error } = await auth.signIn(email, password);
+      const { data, error } = await auth.signIn(email, password);
 
       if (error) {
         console.error('❌ Sign in error:', error);
@@ -203,17 +203,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return { error };
       }
 
-      // Do not return to the auth screen before React knows this session is
-      // authenticated. The auth listener may arrive a moment later on-device,
-      // so hydrate the successful Supabase session here immediately.
-      const {
-        data: { session },
-        error: sessionError,
-      } = await auth.getSession();
-
-      if (sessionError) {
-        console.warn('⚠️ Signed in but session read failed:', sessionError);
-      }
+      // signInWithPassword already returns the authenticated session.
+      // Use it immediately instead of performing a second session lookup.
+      const session = data?.session ?? null;
 
       if (session?.user) {
         setAuthState({
@@ -264,26 +256,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const signOut = useCallback(async () => {
     try {
       console.log('🔐 Signing out user');
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      
-      if (authState.user?.email === 'demo@motivationhub.app') {
-        console.log('🎭 Signing out demo user');
-      } else {
-        try {
-          await auth.signOut();
-        } catch (signOutError) {
-          console.warn('⚠️ Supabase signOut error (forcing clear):', signOutError);
-        }
-      }
-      
-      await auth.clearSession();
-      
+      const isDemoUser = authState.user?.email === 'demo@motivationhub.app';
+
+      // Update React immediately so protected UI disappears without waiting on the network.
       setAuthState({
         user: null,
         session: null,
         isLoading: false,
         isAuthenticated: false,
       });
+
+      // Clear persisted credentials locally before returning to the auth screen.
+      await auth.clearSession();
+
+      if (isDemoUser) {
+        console.log('🎭 Signing out demo user');
+      } else {
+        // Remote revocation must not block navigation to the login screen.
+        void auth.signOut().catch((signOutError) => {
+          console.warn('⚠️ Supabase signOut error after local sign out:', signOutError);
+        });
+      }
       
       console.log('✅ User signed out successfully');
       return { error: null };
