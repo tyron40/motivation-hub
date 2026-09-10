@@ -6,6 +6,7 @@ import {
   requestTrackingPermissionsAsync,
 } from 'expo-tracking-transparency';
 import { useIAP } from './iap-context';
+import { useAuth } from './auth-context';
 import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
 import AppodealManager, { ADS_DEBUG } from '@/lib/AppodealManager';
@@ -20,6 +21,7 @@ const logProvider = (provider: 'APPODEAL' | 'ADMOB FALLBACK') => {
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const { addCredits, usageStats } = useIAP();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [isShowingAd, setIsShowingAd] = useState(false);
   const [isRewardedAdLoaded, setIsRewardedAdLoaded] = useState(false);
   const [isInterstitialAdLoaded, setIsInterstitialAdLoaded] = useState(false);
@@ -82,6 +84,11 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
+      // Do not request ATT or initialize tracking-capable ad SDKs before auth.
+      // On the first authenticated session, request ATT if still undetermined.
+      if (isAuthLoading || !isAuthenticated) {
+        return;
+      }
       // Apple ATT must resolve before any tracking-capable advertising SDK
       // initializes or requests ad inventory.
       if (Platform.OS === 'ios') {
@@ -128,7 +135,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [manager, appodeal, addCredits]);
+  }, [manager, appodeal, addCredits, isAuthenticated, isAuthLoading]);
 
   const canShowAds = useMemo(() => {
     return !usageStats.isAdFree;
