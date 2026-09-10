@@ -103,7 +103,8 @@
       ],
       "./plugins/with-appdelegate-rctbridge-fix.js",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-tracking-transparency"
     ],
     "extra": {
       "router": {

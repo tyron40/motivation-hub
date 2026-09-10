@@ -1,6 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
+import {
+  getTrackingPermissionsAsync,
+  requestTrackingPermissionsAsync,
+} from 'expo-tracking-transparency';
 import { useIAP } from './iap-context';
 import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
@@ -78,7 +82,35 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
-      // Appodeal is primary; start its SDK and inventory before the fallback.
+      // Apple ATT must resolve before any tracking-capable advertising SDK
+      // initializes or requests ad inventory.
+      if (Platform.OS === 'ios') {
+        try {
+          const current = await getTrackingPermissionsAsync();
+
+          if (current.status === 'undetermined') {
+            if (ADS_DEBUG) {
+              console.log('[ATT] requesting tracking authorization');
+            }
+
+            const result = await requestTrackingPermissionsAsync();
+
+            if (ADS_DEBUG) {
+              console.log(`[ATT] authorization status: ${result.status}`);
+            }
+          } else if (ADS_DEBUG) {
+            console.log(`[ATT] existing authorization status: ${current.status}`);
+          }
+        } catch (error) {
+          console.warn(
+            '[ATT] permission request failed; continuing without blocking app startup',
+            error
+          );
+        }
+      }
+
+      // Appodeal remains primary, but advertising starts only after the
+      // ATT decision has resolved on iOS.
       appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
       if (ADS_DEBUG) console.log(`[Appodeal] active: ${appodeal.active}`);
       reportAdState();
