@@ -1,7 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
+import {
+  getTrackingPermissionsAsync,
+  requestTrackingPermissionsAsync,
+} from 'expo-tracking-transparency';
 import { useIAP } from './iap-context';
+import { useAuth } from './auth-context';
 import { AD_CONFIG } from '@/constants/admob';
 import AdManager from '@/lib/AdManager';
 import AppodealManager, { ADS_DEBUG } from '@/lib/AppodealManager';
@@ -15,6 +20,7 @@ const logProvider = (provider: 'APPODEAL' | 'ADMOB FALLBACK') => {
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const { addCredits, usageStats } = useIAP();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [isShowingAd, setIsShowingAd] = useState(false);
   const [isRewardedAdLoaded, setIsRewardedAdLoaded] = useState(false);
   const [isInterstitialAdLoaded, setIsInterstitialAdLoaded] = useState(false);
@@ -64,6 +70,37 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
+      // Do not request ATT or initialize tracking-capable ad SDKs before auth.
+      // On the first authenticated session, request ATT if still undetermined.
+      if (isAuthLoading || !isAuthenticated) {
+        return;
+      }
+
+      // Apple ATT must resolve before Appodeal or AdMob initializes.
+      if (Platform.OS === 'ios') {
+        try {
+          const current = await getTrackingPermissionsAsync();
+
+          if (current.status === 'undetermined') {
+            if (ADS_DEBUG) {
+              console.log('[ATT] requesting tracking authorization');
+            }
+
+            const result = await requestTrackingPermissionsAsync();
+
+            if (ADS_DEBUG) {
+              console.log(`[ATT] authorization status: ${result.status}`);
+            }
+          } else if (ADS_DEBUG) {
+            console.log(`[ATT] existing authorization status: ${current.status}`);
+          }
+        } catch (error) {
+          console.warn(
+            '[ATT] permission request failed; continuing without blocking app startup',
+            error
+          );
+        }
+      }
       await manager.initialize();
       appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
       if (ADS_DEBUG) console.log(`[Appodeal] active: ${appodeal.active}`);
@@ -78,7 +115,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [manager, appodeal, addCredits]);
+  }, [manager, appodeal, addCredits, isAuthenticated, isAuthLoading]);
 
   const canShowAds = useMemo(() => {
     return !usageStats.isAdFree;
