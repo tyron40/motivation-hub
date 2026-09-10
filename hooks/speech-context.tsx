@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './auth-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
@@ -59,6 +60,11 @@ const defaultUserProfile: UserProfile = {
 
 export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContextValue>(() => {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const favoritesStorageKey = user?.id ? `favorites:${user.id}` : null;
+  const profileStorageKey = user?.id ? `speechProfile:${user.id}` : null;
+  const historyStorageKey = user?.id ? `listeningHistory:${user.id}` : null;
   const [speeches, setSpeeches] = useState<Speech[]>([]);
   const [currentSpeech, setCurrentSpeech] = useState<Speech | null>(null);
   const [currentPlaylist, setCurrentPlaylist] = useState<Speech[]>([]);
@@ -74,27 +80,30 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
 
   // Load favorites from AsyncStorage
   const favoritesQuery = useQuery({
-    queryKey: ['favorites'],
+    queryKey: ['favorites', user?.id],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem('favorites');
+      if (!favoritesStorageKey) return [];
+      const stored = await AsyncStorage.getItem(favoritesStorageKey);
       return stored ? JSON.parse(stored) : [];
     },
   });
 
   // Load user profile from AsyncStorage
   const profileQuery = useQuery({
-    queryKey: ['userProfile'],
+    queryKey: ['userProfile', user?.id],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem('userProfile');
+      if (!profileStorageKey) return defaultUserProfile;
+      const stored = await AsyncStorage.getItem(profileStorageKey);
       return stored ? JSON.parse(stored) : defaultUserProfile;
     },
   });
 
   // Load listening history
   const historyQuery = useQuery({
-    queryKey: ['listeningHistory'],
+    queryKey: ['listeningHistory', user?.id],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem('listeningHistory');
+      if (!historyStorageKey) return [];
+      const stored = await AsyncStorage.getItem(historyStorageKey);
       return stored ? JSON.parse(stored) : [];
     },
   });
@@ -102,11 +111,12 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   // Save favorites mutation
   const saveFavoritesMutation = useMutation({
     mutationFn: async (favoriteIds: string[]) => {
-      await AsyncStorage.setItem('favorites', JSON.stringify(favoriteIds));
+      if (!favoritesStorageKey) return favoriteIds;
+      await AsyncStorage.setItem(favoritesStorageKey, JSON.stringify(favoriteIds));
       return favoriteIds;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['favorites'] });
+      void queryClient.invalidateQueries({ queryKey: ['favorites', user?.id] });
     },
   });
   const { mutate: mutateFavorites } = saveFavoritesMutation;
@@ -114,7 +124,8 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   // Save profile mutation
   const saveProfileMutation = useMutation({
     mutationFn: async (profile: UserProfile) => {
-      await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+      if (!profileStorageKey) return profile;
+      await AsyncStorage.setItem(profileStorageKey, JSON.stringify(profile));
       return profile;
     },
   });

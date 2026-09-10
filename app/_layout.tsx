@@ -306,7 +306,7 @@ export default function RootLayout() {
             'Mindset',
             'Fitness',
             'Study',
-            'Christian Motivation',
+            'Church Motivation',
             'Athlete Pump Up',
           ];
           // Hydrate persisted category pools into memory first. These are local

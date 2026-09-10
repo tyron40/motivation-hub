@@ -37,6 +37,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { searchVideos, getTrendingVideos } from '@/services/youtubeService';
 import { useAdmin } from '@/hooks/admin-context';
+import { useAuth } from '@/hooks/auth-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { fallbackShortClips } from '@/mocks/shortClips';
 import { playbackAdCoordinator } from '@/services/PlaybackAdCoordinator';
@@ -52,8 +53,8 @@ if (Platform.OS !== 'web') {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const LIKED_CLIPS_KEY = 'liked_clips_v1';
-const SAVED_CLIPS_KEY = 'saved_clips_v1';
+const LIKED_CLIPS_KEY_PREFIX = 'liked_clips_v1:';
+const SAVED_CLIPS_KEY_PREFIX = 'saved_clips_v1:';
 
 interface ClipItem {
   id: string;
@@ -73,6 +74,9 @@ export default function ShortClipsScreen() {
   const params = useLocalSearchParams();
   const initialVideoId = params.initialVideoId ? String(params.initialVideoId) : null;
   const { isAdmin, customVideos, addVideo, removeVideo } = useAdmin();
+  const { user } = useAuth();
+  const likedClipsKey = user?.id ? `${LIKED_CLIPS_KEY_PREFIX}${user.id}` : null;
+  const savedClipsKey = user?.id ? `${SAVED_CLIPS_KEY_PREFIX}${user.id}` : null;
   const { showInterstitialAd, canShowAds } = useAdMob();
   const clipViewCountRef = useRef(0);
 
@@ -107,20 +111,45 @@ export default function ShortClipsScreen() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Never leave the previous account's preferences visible while the
+    // newly authenticated account is loading.
+    setLikedClips(new Set());
+    setSavedClips(new Set());
+
+    if (!likedClipsKey || !savedClipsKey) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const loadPrefs = async () => {
       try {
         const [likedRaw, savedRaw] = await Promise.all([
-          AsyncStorage.getItem(LIKED_CLIPS_KEY),
-          AsyncStorage.getItem(SAVED_CLIPS_KEY),
+          AsyncStorage.getItem(likedClipsKey),
+          AsyncStorage.getItem(savedClipsKey),
         ]);
-        if (likedRaw) setLikedClips(new Set(JSON.parse(likedRaw)));
-        if (savedRaw) setSavedClips(new Set(JSON.parse(savedRaw)));
+
+        if (cancelled) return;
+
+        setLikedClips(likedRaw ? new Set(JSON.parse(likedRaw)) : new Set());
+        setSavedClips(savedRaw ? new Set(JSON.parse(savedRaw)) : new Set());
       } catch (e) {
+        if (!cancelled) {
+          setLikedClips(new Set());
+          setSavedClips(new Set());
+        }
         console.error('Error loading clip prefs:', e);
       }
     };
+
     void loadPrefs();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [likedClipsKey, savedClipsKey]);
 
   useEffect(() => {
     const fetchClips = async () => {
@@ -233,10 +262,12 @@ export default function ShortClipsScreen() {
       } else {
         next.add(clipId);
       }
-      void AsyncStorage.setItem(LIKED_CLIPS_KEY, JSON.stringify(Array.from(next)));
+      if (likedClipsKey) {
+        void AsyncStorage.setItem(likedClipsKey, JSON.stringify(Array.from(next)));
+      }
       return next;
     });
-  }, [getOrCreateAnim, likeAnimations]);
+  }, [getOrCreateAnim, likeAnimations, likedClipsKey]);
 
   const toggleSave = useCallback(async (clipId: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -254,10 +285,12 @@ export default function ShortClipsScreen() {
       } else {
         next.add(clipId);
       }
-      void AsyncStorage.setItem(SAVED_CLIPS_KEY, JSON.stringify(Array.from(next)));
+      if (savedClipsKey) {
+        void AsyncStorage.setItem(savedClipsKey, JSON.stringify(Array.from(next)));
+      }
       return next;
     });
-  }, [getOrCreateAnim, saveAnimations]);
+  }, [getOrCreateAnim, saveAnimations, savedClipsKey]);
 
   const handleAddVideo = useCallback(async () => {
     if (!newVideoTitle.trim() || !newVideoId.trim()) {
