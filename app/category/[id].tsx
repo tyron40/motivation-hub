@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -23,6 +23,11 @@ import { useSpeechContext } from '@/hooks/speech-context';
 import type { Speech } from '@/types/speech';
 import { YouTubeContentManager } from '@/services/YouTubeContentManager';
 import type { CachedVideo } from '@/services/YouTubeContentManager';
+import {
+  discoveryKeyForCategory,
+  getDiscoveryProfile,
+  rankAndMixDiscovery,
+} from '@/lib/category-discovery';
 import { useTheme } from '@/hooks/theme-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { useAdmin } from '@/hooks/admin-context';
@@ -364,6 +369,69 @@ if (isMotivationCategory) {
        * trending fills or its own ranking — one request path per category.
        */
       try {
+        /*
+         * COLD-CACHE FIRST BATCH:
+         * Restore immediate fetched category content on an empty cache.
+         * This uses the strongest query from the same discovery profile.
+         * The full canonical refresh below still fills/ranks/caches the
+         * complete TARGET_CATEGORY_COUNT inventory.
+         */
+        if (accumulated.length === 0) {
+          try {
+            const discoveryProfile = getDiscoveryProfile(
+              discoveryKeyForCategory(category.name)
+            );
+            const firstQuery = discoveryProfile.queries[0];
+
+            if (firstQuery) {
+              const firstRaw = await YouTubeContentManager.searchVideos(
+                firstQuery,
+                TARGET_CATEGORY_COUNT
+              );
+
+              if (cancelled) return;
+
+              const firstRanked = rankAndMixDiscovery(
+                discoveryProfile,
+                firstRaw ?? [],
+                new Set<string>(),
+                TARGET_CATEGORY_COUNT
+              );
+
+              let firstSpeeches = firstRanked
+                .filter(v => v && v.id && v.duration > 60)
+                .slice(0, TARGET_CATEGORY_COUNT)
+                .map(cachedVideoToSpeech);
+
+              if (requireChristianContent) {
+                firstSpeeches = firstSpeeches.filter(
+                  isChristianContentForSpeech
+                );
+              }
+
+              if (firstSpeeches.length > 0) {
+                accumulated = firstSpeeches;
+
+                console.log(
+                  '[Category] immediate first fetched batch:',
+                  firstSpeeches.length,
+                  'for',
+                  category.name
+                );
+
+                setYoutubeSpeeches(firstSpeeches);
+                setCategoryError(null);
+                setCategoryLoading(false);
+              }
+            }
+          } catch (firstBatchError) {
+            console.log(
+              '[Category] immediate first batch failed; continuing canonical refresh:',
+              firstBatchError
+            );
+          }
+        }
+
         const refreshed = await YouTubeContentManager.fetchAndCacheCategory(
           category.name,
           TARGET_CATEGORY_COUNT
