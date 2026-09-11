@@ -177,23 +177,6 @@ const handleDeleteAccount = async (c: Context) => {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', user.id);
-
-    if (profileError) {
-      console.error(
-        '[Account Delete] Profile deletion failed:',
-        profileError.message
-      );
-
-      return c.json(
-        { error: 'Failed to delete account data' },
-        500
-      );
-    }
-
     const { error: authDeleteError } =
       await supabaseAdmin.auth.admin.deleteUser(user.id);
 
