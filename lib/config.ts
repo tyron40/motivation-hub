@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   youtubeTrending: `${VERCEL_BACKEND_URL}/api/youtube/trending`,
   adminData: `${VERCEL_BACKEND_URL}/api/admin/data`,
   flyers: `${VERCEL_BACKEND_URL}/api/flyers`,
+  deleteAccount: `${VERCEL_BACKEND_URL}/api/account`,
 } as const;
 
 console.log(

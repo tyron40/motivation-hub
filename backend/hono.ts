@@ -30,7 +30,13 @@ app.use("*", cors({
 app.use("*", async (c: Context, next: Next) => {
   console.log("[Hono] Incoming request:", c.req.method, c.req.url);
   console.log("[Hono] Request path:", c.req.path);
-  console.log("[Hono] Request headers:", Object.fromEntries(c.req.raw.headers.entries()));
+  const safeHeaders = Object.fromEntries(c.req.raw.headers.entries());
+
+  if (safeHeaders.authorization) {
+    safeHeaders.authorization = '[REDACTED]';
+  }
+
+  console.log("[Hono] Request headers:", safeHeaders);
   await next();
   console.log("[Hono] Response status:", c.res.status);
   console.log("[Hono] Response content-type:", c.res.headers.get('content-type'));
@@ -135,6 +141,91 @@ app.all('/api/cron/youtube-batch', async (c: Context) => {
   }
 });
 
+const handleDeleteAccount = async (c: Context) => {
+  try {
+    const authorization = c.req.header('authorization') || '';
+
+    if (!authorization.startsWith('Bearer ')) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    if (!supabaseAdmin) {
+      console.error(
+        '[Account Delete] SUPABASE_SERVICE_ROLE_KEY is not configured'
+      );
+      return c.json(
+        { error: 'Account deletion is not configured' },
+        503
+      );
+    }
+
+    const accessToken = authorization.slice('Bearer '.length).trim();
+
+    if (!accessToken) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    // Never trust a client-supplied user ID.
+    // Resolve the account from the authenticated Supabase token.
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseBackend.auth.getUser(accessToken);
+
+    if (userError || !user) {
+      console.warn('[Account Delete] Invalid or expired session');
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', user.id);
+
+    if (profileError) {
+      console.error(
+        '[Account Delete] Profile deletion failed:',
+        profileError.message
+      );
+
+      return c.json(
+        { error: 'Failed to delete account data' },
+        500
+      );
+    }
+
+    const { error: authDeleteError } =
+      await supabaseAdmin.auth.admin.deleteUser(user.id);
+
+    if (authDeleteError) {
+      console.error(
+        '[Account Delete] Auth deletion failed:',
+        authDeleteError.message
+      );
+
+      return c.json(
+        { error: 'Failed to delete account' },
+        500
+      );
+    }
+
+    console.log('[Account Delete] Account permanently deleted');
+
+    return c.json({ ok: true });
+  } catch (error) {
+    console.error(
+      '[Account Delete] Unexpected error:',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    return c.json(
+      { error: 'Failed to delete account' },
+      500
+    );
+  }
+};
+
+app.delete('/api/account', handleDeleteAccount);
 const handleTTS = async (c: Context) => {
   try {
     console.log("[Hono] TTS request received");
@@ -360,7 +451,7 @@ const ADMIN_DATA_STORE: Record<string, any> = {
   _loaded: false,
 };
 
-import { supabaseBackend } from './lib/supabase';
+import { supabaseBackend, supabaseAdmin } from './lib/supabase';
 
 const ADMIN_SUPABASE_TABLE = 'admin_content';
 

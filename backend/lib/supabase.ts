@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Backend Supabase] Missing env vars:', {
@@ -16,6 +17,18 @@ export const supabaseBackend = createClient(
   supabaseUrl || '',
   supabaseAnonKey || ''
 );
+
+// Server-only privileged client.
+// NEVER expose SUPABASE_SERVICE_ROLE_KEY through EXPO_PUBLIC_* variables.
+export const supabaseAdmin =
+  supabaseUrl && supabaseServiceRoleKey
+    ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null;
 
 export async function getOpenAIKey(): Promise<string> {
   try {

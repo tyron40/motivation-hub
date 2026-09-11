@@ -32,7 +32,7 @@ export default function AuthScreen() {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
   const { signIn, signUp } = useAuth();
-  const { updateProfile } = useUserProfile();
+  const { updateProfileForUser } = useUserProfile();
 
   React.useEffect(() => {
     fadeAnim.setValue(0);
@@ -76,7 +76,7 @@ export default function AuthScreen() {
     setIsLoading(true);
 
     try {
-      let result;
+      let result: { error?: any; data?: any };
       if (currentScreen === 'signup') {
         result = await signUp(email, password, { name });
       } else {
@@ -90,7 +90,15 @@ export default function AuthScreen() {
         );
       } else {
         if (currentScreen === 'signup') {
-          await updateProfile({
+          const newUserId = result.data?.user?.id;
+
+          if (!newUserId) {
+            throw new Error(
+              'Account was created but the new user ID was not returned.'
+            );
+          }
+
+          await updateProfileForUser(newUserId, {
             name: name.trim(),
             includeChurchMotivation,
           });

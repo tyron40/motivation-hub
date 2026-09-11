@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -16,6 +17,7 @@ import { useUserProfile } from '@/hooks/user-profile-context';
 import { useAuth } from '@/hooks/auth-context';
 import { useTheme, ThemeColor, themeNames } from '@/hooks/theme-context';
 import { supabase } from '@/lib/supabase';
+import { API_ENDPOINTS } from '@/lib/config';
 import { useIAP } from '@/hooks/iap-context';
 import { CreditsInfoModal } from '@/components/CreditsInfoModal';
 import PaywallModal from '@/components/PaywallModal';
@@ -509,20 +511,79 @@ export default function SettingsScreen() {
                   try {
                     console.log('🗑️ Deleting user account...');
                     
-                    if (user?.id) {
-                      const { error: deleteError } = await supabase
-                        .from('profiles')
-                        .delete()
-                        .eq('id', user.id);
-                      
-                      if (deleteError) {
-                        console.error('❌ Error deleting profile:', deleteError);
+                    const {
+                      data: { session },
+                      error: sessionError,
+                    } = await supabase.auth.getSession();
+
+                    const accessToken = session?.access_token;
+
+                    if (sessionError || !accessToken) {
+                      throw new Error(
+                        'Your session has expired. Please sign in again.'
+                      );
+                    }
+
+                    const response = await fetch(
+                      API_ENDPOINTS.deleteAccount,
+                      {
+                        method: 'DELETE',
+                        headers: {
+                          Authorization: `Bearer ${accessToken}`,
+                          Accept: 'application/json',
+                        },
+                      }
+                    );
+
+                    let responseBody: any = null;
+
+                    try {
+                      responseBody = await response.json();
+                    } catch {
+                      responseBody = null;
+                    }
+
+                    if (!response.ok || !responseBody?.ok) {
+                      throw new Error(
+                        responseBody?.error ||
+                          'Unable to permanently delete your account.'
+                      );
+                    }
+
+                    const deletedUserId = user?.id;
+
+                    if (deletedUserId) {
+                      try {
+                        const allStorageKeys = await AsyncStorage.getAllKeys();
+                        const deletedUserStorageKeys = allStorageKeys.filter(
+                          (key) => key.endsWith(`:${deletedUserId}`)
+                        );
+
+                        if (deletedUserStorageKeys.length > 0) {
+                          await AsyncStorage.multiRemove(deletedUserStorageKeys);
+                        }
+
+                        console.log(
+                          '[Account] Removed local user data keys:',
+                          deletedUserStorageKeys.length
+                        );
+                      } catch (storageError) {
+                        console.warn(
+                          '[Account] Local cleanup failed after account deletion:',
+                          storageError
+                        );
                       }
                     }
-                    
+
                     await signOut();
+                    router.replace('/auth');
+
                     console.log('✅ Account deleted successfully');
-                    Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+
+                    Alert.alert(
+                      'Account Deleted',
+                      'Your account has been permanently deleted.'
+                    );
                   } catch (error) {
                     console.error('❌ Exception deleting account:', error);
                     Alert.alert('Error', 'An unexpected error occurred. Please try again.');

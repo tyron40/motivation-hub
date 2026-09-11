@@ -12,12 +12,12 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<{ error?: any }>;
-  signUp: (email: string, password: string, userData?: { name?: string }) => Promise<{ error?: any }>;
+  signUp: (email: string, password: string, userData?: { name?: string }) => Promise<{ error?: any; data?: any }>;
   signOut: () => Promise<{ error?: any }>;
   refreshSession: () => Promise<void>;
 }
 
-export const [AuthProvider, useAuth] = createContextHook(() => {
+export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthActions => {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     session: null,
@@ -228,12 +228,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, userData?: { name?: string }) => {
+  const signUp = useCallback(async (email: string, password: string, userData?: { name?: string }): Promise<{ error?: any; data?: any }> => {
     try {
       console.log('🔐 Signing up user:', email);
       
       // The auth screen owns the signup loading UI. Keep the root navigator visible.
-      const { error } = await auth.signUp(email, password, userData);
+      const { data, error } = await auth.signUp(email, password, userData);
       
       if (error) {
         console.error('❌ Sign up error:', error);
@@ -245,7 +245,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setAuthState(prev => ({ ...prev, isLoading: false }));
 
       console.log('✅ User signed up successfully');
-      return { error: null };
+      return { error: null, data };
     } catch (error) {
       console.error('❌ Sign up exception:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));

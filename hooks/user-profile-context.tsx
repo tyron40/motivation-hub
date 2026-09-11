@@ -82,9 +82,57 @@ export const [UserProfileProvider, useUserProfile] = createContextHook(() => {
     }
   }, [storageKey]);
 
+  const updateProfileForUser = useCallback(async (
+    userId: string,
+    updates: Partial<UserProfile>
+  ) => {
+    if (!userId) {
+      throw new Error('A valid user ID is required to save the profile.');
+    }
+
+    const targetStorageKey = `userProfile:${userId}`;
+
+    try {
+      const stored = await AsyncStorage.getItem(targetStorageKey);
+
+      let currentProfile: UserProfile = { ...defaultProfile };
+
+      if (stored) {
+        try {
+          currentProfile = {
+            ...defaultProfile,
+            ...JSON.parse(stored),
+          };
+        } catch (parseError) {
+          console.error('Error parsing existing user profile:', parseError);
+        }
+      }
+
+      const next = {
+        ...currentProfile,
+        ...updates,
+      };
+
+      await AsyncStorage.setItem(
+        targetStorageKey,
+        JSON.stringify(next)
+      );
+
+      if (user?.id === userId) {
+        setProfile(next);
+      }
+
+      console.log('User profile saved for account:', userId);
+    } catch (error) {
+      console.error('Error saving user profile for account:', error);
+      throw error;
+    }
+  }, [user?.id]);
+
   return useMemo(() => ({
     profile,
     updateProfile,
+    updateProfileForUser,
     isLoading,
-  }), [profile, updateProfile, isLoading]);
+  }), [profile, updateProfile, updateProfileForUser, isLoading]);
 });
