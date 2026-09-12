@@ -81,6 +81,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 // Helper functions for authentication
 export const auth = {
   signUp: async (email: string, password: string, userData?: { name?: string }) => {
+    const startedAt = Date.now();
+    console.log('[Auth Timing] signUp START');
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -88,14 +90,26 @@ export const auth = {
         data: userData,
       },
     });
+    console.log(
+      '[Auth Timing] signUp END:',
+      Date.now() - startedAt,
+      'ms'
+    );
     return { data, error };
   },
 
   signIn: async (email: string, password: string) => {
+    const startedAt = Date.now();
+    console.log('[Auth Timing] signInWithPassword START');
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    console.log(
+      '[Auth Timing] signInWithPassword END:',
+      Date.now() - startedAt,
+      'ms'
+    );
     return { data, error };
   },
 
