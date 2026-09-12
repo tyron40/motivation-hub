@@ -15,8 +15,22 @@ import { useTheme } from '@/hooks/theme-context';
 import { useSpeechContext } from '@/hooks/speech-context';
 import { useUserProfile } from '@/hooks/user-profile-context';
 import { SpeechCard } from '@/components/SpeechCard';
-import { convertVideoToSpeech, searchVideos } from '@/services/youtubeService';
+import { YouTubeContentManager } from '@/services/YouTubeContentManager';
+import type { CachedVideo } from '@/services/YouTubeContentManager';
 import type { Speech } from '@/types/speech';
+const cachedVideoToSpeech = (video: CachedVideo): Speech => ({
+  id: video.id,
+  title: video.title,
+  speaker: video.channelTitle,
+  duration: video.duration,
+  category: video.category || 'Church Motivation',
+  imageUrl: video.thumbnail,
+  audioUrl: `https://www.youtube.com/watch?v=${video.id}`,
+  youtubeId: video.id,
+  description: video.description,
+  playCount: Math.floor(video.viewCount / 1000),
+  tags: [],
+});
 
 export default function ChurchMotivationScreen() {
   const { colors } = useTheme();
@@ -29,26 +43,80 @@ export default function ChurchMotivationScreen() {
   const styles = getStyles(colors);
 
   React.useEffect(() => {
+    let cancelled = false;
+
     const loadChurchContent = async () => {
+      if (!profile.includeChurchMotivation) {
+        if (!cancelled) {
+          setChurchSpeeches([]);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
-        setIsLoading(true);
-        console.log('⛪ Loading church motivation videos...');
-        const videos = await searchVideos('church motivation encouragement sermon', 30);
-        const converted = videos.map((video) => convertVideoToSpeech(video));
-        setChurchSpeeches(converted);
-        console.log(`✅ Loaded ${converted.length} church motivation speeches`);
+        /*
+         * Church Motivation uses the same cache-first pipeline as normal
+         * categories. Startup already hydrates and prewarms this exact pool.
+         *
+         * 1. Synchronous memory cache = immediate first paint.
+         * 2. Persisted cache = fast fallback after a cold app launch.
+         * 3. getVideosForCategory = background refresh/fill while cached
+         *    content remains visible.
+         */
+        const memoryCached =
+          YouTubeContentManager.getCachedVideosSync('Church Motivation');
+
+        if (memoryCached && memoryCached.length > 0) {
+          if (!cancelled) {
+            setChurchSpeeches(
+              memoryCached.slice(0, 40).map(cachedVideoToSpeech)
+            );
+            setIsLoading(false);
+          }
+        }
+
+        const persistedCached =
+          await YouTubeContentManager.getCachedVideosForCategory(
+            'Church Motivation'
+          );
+
+        if (persistedCached.length > 0 && !cancelled) {
+          setChurchSpeeches(
+            persistedCached.slice(0, 40).map(cachedVideoToSpeech)
+          );
+          setIsLoading(false);
+        }
+
+        if (!cancelled && persistedCached.length === 0) {
+          setIsLoading(true);
+        }
+
+        const refreshed = await YouTubeContentManager.getVideosForCategory(
+          'Church Motivation',
+          40
+        );
+
+        if (!cancelled && refreshed.length > 0) {
+          setChurchSpeeches(
+            refreshed.slice(0, 40).map(cachedVideoToSpeech)
+          );
+          setIsLoading(false);
+        }
       } catch (error) {
-        console.error('❌ Failed to load church motivation videos:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('[Church Motivation] Failed to load content:', error);
+
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    if (profile.includeChurchMotivation) {
-      loadChurchContent();
-    } else {
-      setIsLoading(false);
-    }
+    void loadChurchContent();
+
+    return () => {
+      cancelled = true;
+    };
   }, [profile.includeChurchMotivation]);
 
   if (!speechContext) {
