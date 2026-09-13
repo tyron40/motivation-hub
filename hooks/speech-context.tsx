@@ -7,6 +7,11 @@ import { Speech, ListeningHistory, UserProfile } from '@/types/speech';
 import { speeches as mockSpeeches } from '@/mocks/speeches';
 import { fetchRealSpeeches } from '@/services/speechService';
 import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent, getQuotaStatus } from '@/services/contentService';
+import {
+  FavoriteLibrary,
+  loadRemoteFavorites,
+  saveRemoteFavorites,
+} from '@/lib/user-library-sync';
 
 interface SpeechContextValue {
   speeches: Speech[];
@@ -63,6 +68,9 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const { user } = useAuth();
 
   const favoritesStorageKey = user?.id ? `favorites:${user.id}` : null;
+  const favoriteSnapshotsStorageKey = user?.id
+    ? `favoriteSnapshots:${user.id}`
+    : null;
   const profileStorageKey = user?.id ? `speechProfile:${user.id}` : null;
   const historyStorageKey = user?.id ? `listeningHistory:${user.id}` : null;
   const [speeches, setSpeeches] = useState<Speech[]>([]);
@@ -78,15 +86,188 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const audioPlayerRef = useRef<any>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
 
-  // Load favorites from AsyncStorage
+  // Load favorites immediately from the local cache, then merge
+  // the authenticated user's durable Supabase snapshots.
   const favoritesQuery = useQuery({
     queryKey: ['favorites', user?.id],
-    queryFn: async () => {
-      if (!favoritesStorageKey) return [];
-      const stored = await AsyncStorage.getItem(favoritesStorageKey);
-      return stored ? JSON.parse(stored) : [];
+    queryFn: async (): Promise<FavoriteLibrary> => {
+      if (
+        !favoritesStorageKey ||
+        !favoriteSnapshotsStorageKey ||
+        !user?.id
+      ) {
+        return {
+          ids: [],
+          snapshots: [],
+        };
+      }
+
+      const [storedIds, storedSnapshots] =
+        await AsyncStorage.multiGet([
+          favoritesStorageKey,
+          favoriteSnapshotsStorageKey,
+        ]);
+
+      let localIds: string[] = [];
+      let localSnapshots: Speech[] = [];
+
+      try {
+        const parsedIds = storedIds[1]
+          ? JSON.parse(storedIds[1])
+          : [];
+
+        localIds = Array.isArray(parsedIds)
+          ? parsedIds.filter(
+              (id): id is string =>
+                typeof id === 'string'
+            )
+          : [];
+      } catch (error) {
+        console.warn(
+          'Unable to parse local favorite IDs:',
+          error
+        );
+      }
+
+      try {
+        const parsedSnapshots = storedSnapshots[1]
+          ? JSON.parse(storedSnapshots[1])
+          : [];
+
+        localSnapshots = Array.isArray(parsedSnapshots)
+          ? parsedSnapshots.filter(
+              (speech): speech is Speech =>
+                !!speech &&
+                typeof speech.id === 'string' &&
+                typeof speech.title === 'string' &&
+                typeof speech.speaker === 'string'
+            )
+          : [];
+      } catch (error) {
+        console.warn(
+          'Unable to parse local favorite snapshots:',
+          error
+        );
+      }
+
+      try {
+        const remoteSnapshots =
+          await loadRemoteFavorites(user.id);
+
+        const snapshotMap =
+          new Map<string, Speech>();
+
+        localSnapshots.forEach(speech => {
+          snapshotMap.set(speech.id, {
+            ...speech,
+            isFavorite: true,
+          });
+        });
+
+        remoteSnapshots.forEach(speech => {
+          snapshotMap.set(speech.id, {
+            ...speech,
+            isFavorite: true,
+          });
+        });
+
+        const snapshots =
+          Array.from(snapshotMap.values());
+
+        const ids = Array.from(
+          new Set([
+            ...localIds,
+            ...snapshots.map(speech => speech.id),
+          ])
+        );
+
+        await AsyncStorage.multiSet([
+          [
+            favoritesStorageKey,
+            JSON.stringify(ids),
+          ],
+          [
+            favoriteSnapshotsStorageKey,
+            JSON.stringify(snapshots),
+          ],
+        ]);
+
+        if (
+          JSON.stringify(snapshots) !==
+          JSON.stringify(remoteSnapshots)
+        ) {
+          await saveRemoteFavorites(
+            user.id,
+            snapshots
+          );
+        }
+
+        return {
+          ids,
+          snapshots,
+        };
+      } catch (error) {
+        console.warn(
+          'Favorite cloud sync unavailable; using local cache:',
+          error
+        );
+
+        return {
+          ids: localIds,
+          snapshots: localSnapshots,
+        };
+      }
     },
   });
+
+  // Save locally first, then synchronize full snapshots to Supabase.
+  const saveFavoritesMutation = useMutation({
+    mutationFn: async (
+      library: FavoriteLibrary
+    ): Promise<FavoriteLibrary> => {
+      if (
+        !favoritesStorageKey ||
+        !favoriteSnapshotsStorageKey ||
+        !user?.id
+      ) {
+        return library;
+      }
+
+      await AsyncStorage.multiSet([
+        [
+          favoritesStorageKey,
+          JSON.stringify(library.ids),
+        ],
+        [
+          favoriteSnapshotsStorageKey,
+          JSON.stringify(library.snapshots),
+        ],
+      ]);
+
+      try {
+        await saveRemoteFavorites(
+          user.id,
+          library.snapshots
+        );
+      } catch (error) {
+        console.warn(
+          'Favorites saved locally; cloud sync will retry on next login:',
+          error
+        );
+      }
+
+      return library;
+    },
+    onSuccess: library => {
+      queryClient.setQueryData(
+        ['favorites', user?.id],
+        library
+      );
+    },
+  });
+
+  const { mutate: mutateFavorites } =
+    saveFavoritesMutation;
 
   // Load user profile from AsyncStorage
   const profileQuery = useQuery({
@@ -107,19 +288,6 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
       return stored ? JSON.parse(stored) : [];
     },
   });
-
-  // Save favorites mutation
-  const saveFavoritesMutation = useMutation({
-    mutationFn: async (favoriteIds: string[]) => {
-      if (!favoritesStorageKey) return favoriteIds;
-      await AsyncStorage.setItem(favoritesStorageKey, JSON.stringify(favoriteIds));
-      return favoriteIds;
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['favorites', user?.id] });
-    },
-  });
-  const { mutate: mutateFavorites } = saveFavoritesMutation;
 
   // Save profile mutation
   const saveProfileMutation = useMutation({
@@ -223,16 +391,24 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     };
   }, []);
 
-  // Update speeches with favorite status
+  // Update speeches with the current user's favorite status.
   useEffect(() => {
-    if (favoritesQuery.data && speeches.length > 0) {
-      const favoriteIds = favoritesQuery.data as string[];
-      setSpeeches(prevSpeeches => prevSpeeches.map(speech => ({
-        ...speech,
-        isFavorite: favoriteIds.includes(speech.id),
-      })));
+    const favoriteIds =
+      favoritesQuery.data?.ids ?? [];
+
+    if (speeches.length > 0) {
+      const favoriteSet =
+        new Set(favoriteIds);
+
+      setSpeeches(prevSpeeches =>
+        prevSpeeches.map(speech => ({
+          ...speech,
+          isFavorite:
+            favoriteSet.has(speech.id),
+        }))
+      );
     }
-  }, [favoritesQuery.data, speeches.length]);
+  }, [favoritesQuery.data?.ids, speeches.length]);
 
   // Update user profile
   useEffect(() => {
@@ -248,90 +424,248 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, [historyQuery.data]);
 
-  const favoriteIdsSet = useMemo(() => {
-    const data = favoritesQuery.data;
-    if (!Array.isArray(data)) return new Set<string>();
-    return new Set<string>(data.filter((id): id is string => typeof id === 'string'));
-  }, [favoritesQuery.data]);
+  const favoriteIdsSet = useMemo(
+    () => new Set(
+      favoritesQuery.data?.ids ?? []
+    ),
+    [favoritesQuery.data?.ids]
+  );
+
+  const favoriteSnapshots =
+    favoritesQuery.data?.snapshots ?? [];
 
   const favorites = useMemo(() => {
-    const speechMap = new Map<string, Speech>();
-    speeches.forEach((speech) => {
-      if (speech?.id && favoriteIdsSet.has(speech.id)) {
-        speechMap.set(speech.id, { ...speech, isFavorite: true });
+    const speechMap =
+      new Map<string, Speech>();
+
+    favoriteSnapshots.forEach(speech => {
+      if (favoriteIdsSet.has(speech.id)) {
+        speechMap.set(speech.id, {
+          ...speech,
+          isFavorite: true,
+        });
       }
     });
 
-    if (currentSpeech?.id && favoriteIdsSet.has(currentSpeech.id) && !speechMap.has(currentSpeech.id)) {
-      speechMap.set(currentSpeech.id, { ...currentSpeech, isFavorite: true });
+    speeches.forEach(speech => {
+      if (
+        speech?.id &&
+        favoriteIdsSet.has(speech.id)
+      ) {
+        speechMap.set(speech.id, {
+          ...speech,
+          isFavorite: true,
+        });
+      }
+    });
+
+    if (
+      currentSpeech?.id &&
+      favoriteIdsSet.has(currentSpeech.id)
+    ) {
+      speechMap.set(currentSpeech.id, {
+        ...currentSpeech,
+        isFavorite: true,
+      });
     }
 
     return Array.from(speechMap.values());
-  }, [speeches, currentSpeech, favoriteIdsSet]);
+  }, [
+    speeches,
+    currentSpeech,
+    favoriteIdsSet,
+    favoriteSnapshots,
+  ]);
 
-  const toggleFavorite = useCallback((speechId: string) => {
-    try {
-      if (!speechId || typeof speechId !== 'string') {
-        console.warn('Invalid speechId provided to toggleFavorite:', speechId);
-        return;
-      }
-      
-      if (!Array.isArray(speeches)) {
-        console.warn('Speeches array is not valid:', speeches);
-        return;
-      }
-      
-      const updatedSpeeches = speeches.map(speech => {
-        if (speech && speech.id === speechId) {
-          return { ...speech, isFavorite: !speech.isFavorite };
-        }
-        return speech;
-      });
-      
-      setSpeeches(updatedSpeeches);
+  // Convert legacy local favorite IDs into complete snapshots
+  // as matching speeches become available.
+  useEffect(() => {
+    const favoriteIds =
+      favoritesQuery.data?.ids ?? [];
 
-      setCurrentSpeech(prev => {
-        if (prev && prev.id === speechId) {
-          return { ...prev, isFavorite: !prev.isFavorite };
-        }
-        return prev;
-      });
-      
-      const currentStoredFavorites = Array.isArray(favoritesQuery.data)
-        ? favoritesQuery.data.filter((id): id is string => typeof id === 'string')
-        : [];
-
-      const favoriteSet = new Set<string>(currentStoredFavorites);
-
-      const targetSpeech = updatedSpeeches.find((s) => s?.id === speechId);
-      const isNowFavorite = !!targetSpeech?.isFavorite;
-
-      if (isNowFavorite) {
-        favoriteSet.add(speechId);
-      } else {
-        favoriteSet.delete(speechId);
-      }
-
-      const newFavoriteIds = Array.from(favoriteSet);
-      mutateFavorites(newFavoriteIds);
-      
-      setUserProfile(prev => {
-        if (!prev || typeof prev !== 'object') {
-          console.warn('Invalid user profile:', prev);
-          return defaultUserProfile;
-        }
-        
-        const newProfile = {
-          ...prev,
-          favoriteCount: newFavoriteIds.length,
-        };
-        mutateProfile(newProfile);
-        return newProfile;
-      });
-    } catch (error) {
-      console.error('Error in toggleFavorite:', error);
+    if (favoriteIds.length === 0) {
+      return;
     }
-  }, [speeches, currentSpeech, mutateFavorites, mutateProfile, favoritesQuery.data]);
+
+    const snapshotMap =
+      new Map<string, Speech>();
+
+    favoriteSnapshots.forEach(speech => {
+      snapshotMap.set(speech.id, speech);
+    });
+
+    let addedSnapshot = false;
+
+    speeches.forEach(speech => {
+      if (
+        favoriteIdsSet.has(speech.id) &&
+        !snapshotMap.has(speech.id)
+      ) {
+        snapshotMap.set(speech.id, {
+          ...speech,
+          isFavorite: true,
+        });
+
+        addedSnapshot = true;
+      }
+    });
+
+    if (
+      currentSpeech?.id &&
+      favoriteIdsSet.has(currentSpeech.id) &&
+      !snapshotMap.has(currentSpeech.id)
+    ) {
+      snapshotMap.set(currentSpeech.id, {
+        ...currentSpeech,
+        isFavorite: true,
+      });
+
+      addedSnapshot = true;
+    }
+
+    if (addedSnapshot) {
+      mutateFavorites({
+        ids: favoriteIds,
+        snapshots:
+          Array.from(snapshotMap.values()),
+      });
+    }
+  }, [
+    speeches,
+    currentSpeech,
+    favoriteIdsSet,
+    favoriteSnapshots,
+    favoritesQuery.data?.ids,
+    mutateFavorites,
+  ]);
+
+  const toggleFavorite = useCallback(
+    (speechId: string) => {
+      try {
+        if (
+          !speechId ||
+          typeof speechId !== 'string'
+        ) {
+          console.warn(
+            'Invalid speechId provided to toggleFavorite:',
+            speechId
+          );
+          return;
+        }
+
+        const favoriteSet = new Set(
+          favoritesQuery.data?.ids ?? []
+        );
+
+        const wasFavorite =
+          favoriteSet.has(speechId);
+
+        const targetSpeech =
+          speeches.find(
+            speech => speech?.id === speechId
+          ) ??
+          (
+            currentSpeech?.id === speechId
+              ? currentSpeech
+              : undefined
+          ) ??
+          favoriteSnapshots.find(
+            speech => speech.id === speechId
+          );
+
+        if (!wasFavorite && !targetSpeech) {
+          console.warn(
+            'Unable to favorite speech because its data was not found:',
+            speechId
+          );
+          return;
+        }
+
+        if (wasFavorite) {
+          favoriteSet.delete(speechId);
+        } else {
+          favoriteSet.add(speechId);
+        }
+
+        const snapshotMap =
+          new Map<string, Speech>();
+
+        favoriteSnapshots.forEach(speech => {
+          snapshotMap.set(speech.id, speech);
+        });
+
+        if (wasFavorite) {
+          snapshotMap.delete(speechId);
+        } else if (targetSpeech) {
+          snapshotMap.set(speechId, {
+            ...targetSpeech,
+            isFavorite: true,
+          });
+        }
+
+        const newFavoriteIds =
+          Array.from(favoriteSet);
+
+        const newSnapshots =
+          Array.from(snapshotMap.values());
+
+        setSpeeches(prevSpeeches =>
+          prevSpeeches.map(speech =>
+            speech.id === speechId
+              ? {
+                  ...speech,
+                  isFavorite: !wasFavorite,
+                }
+              : speech
+          )
+        );
+
+        setCurrentSpeech(previous =>
+          previous?.id === speechId
+            ? {
+                ...previous,
+                isFavorite: !wasFavorite,
+              }
+            : previous
+        );
+
+        mutateFavorites({
+          ids: newFavoriteIds,
+          snapshots: newSnapshots,
+        });
+
+        setUserProfile(previous => {
+          const safeProfile =
+            previous &&
+            typeof previous === 'object'
+              ? previous
+              : defaultUserProfile;
+
+          const newProfile = {
+            ...safeProfile,
+            favoriteCount:
+              newFavoriteIds.length,
+          };
+
+          mutateProfile(newProfile);
+          return newProfile;
+        });
+      } catch (error) {
+        console.error(
+          'Error in toggleFavorite:',
+          error
+        );
+      }
+    },
+    [
+      speeches,
+      currentSpeech,
+      favoriteSnapshots,
+      favoritesQuery.data?.ids,
+      mutateFavorites,
+      mutateProfile,
+    ]
+  );
 
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);

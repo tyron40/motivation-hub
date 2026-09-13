@@ -1,146 +1,282 @@
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
 import { Playlist } from '@/types/speech';
 import { useAuth } from '@/hooks/auth-context';
+import {
+  loadRemotePlaylists,
+  mergePlaylists,
+  saveRemotePlaylists,
+} from '@/lib/user-library-sync';
 
-export const [PlaylistProvider, usePlaylists] = createContextHook(() => {
-  const { user, isLoading: authLoading } = useAuth();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const storageKey = user?.id ? `playlists:${user.id}` : null;
-  const [isLoading, setIsLoading] = useState(true);
+function parseLocalPlaylists(value: string | null): Playlist[] {
+  if (!value) return [];
 
-  useEffect(() => {
-    if (authLoading) return;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('Error parsing stored playlists:', error);
+    return [];
+  }
+}
 
-    const loadPlaylists = async () => {
-      setIsLoading(true);
+export const [PlaylistProvider, usePlaylists] =
+  createContextHook(() => {
+    const {
+      user,
+      isLoading: authLoading,
+    } = useAuth();
 
-      if (!storageKey) {
-        setPlaylists([]);
-        setIsLoading(false);
-        return;
-      }
+    const [playlists, setPlaylists] =
+      useState<Playlist[]>([]);
 
-      try {
-        const stored = await AsyncStorage.getItem(storageKey);
+    const [isLoading, setIsLoading] =
+      useState(true);
 
-        if (stored) {
-          try {
-            setPlaylists(JSON.parse(stored));
-          } catch (parseError) {
-            console.error('❌ Error parsing playlists:', parseError);
+    const storageKey = user?.id
+      ? `playlists:${user.id}`
+      : null;
+
+    useEffect(() => {
+      let cancelled = false;
+
+      if (authLoading) return;
+
+      const loadPlaylists = async () => {
+        setIsLoading(true);
+
+        if (!storageKey || !user?.id) {
+          if (!cancelled) {
             setPlaylists([]);
+            setIsLoading(false);
           }
           return;
         }
 
-        setPlaylists([]);
-      } catch (error) {
-        console.error('Error loading playlists:', error);
-        setPlaylists([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+        const stored = await AsyncStorage.getItem(storageKey);
+        const localPlaylists = parseLocalPlaylists(stored);
 
-    void loadPlaylists();
-  }, [authLoading, storageKey]);
+        if (!cancelled) {
+          setPlaylists(localPlaylists);
+        }
 
-  const savePlaylists = useCallback(async (newPlaylists: Playlist[]) => {
-    if (!storageKey) {
-      console.warn(
-        '⚠️ Refusing to save playlists without an authenticated user'
-      );
-      return;
-    }
+        try {
+          const remotePlaylists =
+            await loadRemotePlaylists(user.id);
 
-    try {
-      await AsyncStorage.setItem(
-        storageKey,
-        JSON.stringify(newPlaylists)
-      );
-      setPlaylists(newPlaylists);
-    } catch (error) {
-      console.error('Error saving playlists:', error);
-    }
-  }, [storageKey]);
+          const merged = mergePlaylists(
+            localPlaylists,
+            remotePlaylists
+          );
 
-  const createPlaylist = useCallback(async (
-    name: string,
-    description?: string,
-    color?: string,
-    initialSpeechId?: string
-  ) => {
-    const newPlaylist: Playlist = {
-      id: Date.now().toString(),
-      name,
-      description,
-      speechIds: initialSpeechId ? [initialSpeechId] : [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      color: color || '#8B4513',
-    };
-    
-    const updated = [...playlists, newPlaylist];
-    await savePlaylists(updated);
-    return newPlaylist;
-  }, [playlists, savePlaylists]);
+          await AsyncStorage.setItem(
+            storageKey,
+            JSON.stringify(merged)
+          );
 
-  const deletePlaylist = useCallback(async (playlistId: string) => {
-    const updated = playlists.filter(p => p.id !== playlistId);
-    await savePlaylists(updated);
-  }, [playlists, savePlaylists]);
+          if (!cancelled) {
+            setPlaylists(merged);
+          }
 
-  const addToPlaylist = useCallback(async (playlistId: string, speechId: string) => {
-    const updated = playlists.map(p => {
-      if (p.id === playlistId && !p.speechIds.includes(speechId)) {
-        return {
-          ...p,
-          speechIds: [...p.speechIds, speechId],
-          updatedAt: Date.now(),
+          if (
+            JSON.stringify(merged) !==
+            JSON.stringify(remotePlaylists)
+          ) {
+            await saveRemotePlaylists(user.id, merged);
+          }
+        } catch (error) {
+          console.warn(
+            'Playlist cloud sync unavailable; using local cache:',
+            error
+          );
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        }
+      };
+
+      void loadPlaylists();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [authLoading, storageKey, user?.id]);
+
+    const savePlaylists = useCallback(
+      async (newPlaylists: Playlist[]) => {
+        if (!storageKey || !user?.id) {
+          console.warn(
+            'Refusing to save playlists without an authenticated user'
+          );
+          return;
+        }
+
+        await AsyncStorage.setItem(
+          storageKey,
+          JSON.stringify(newPlaylists)
+        );
+
+        setPlaylists(newPlaylists);
+
+        try {
+          await saveRemotePlaylists(
+            user.id,
+            newPlaylists
+          );
+        } catch (error) {
+          console.warn(
+            'Playlist saved locally; cloud sync will retry on next login:',
+            error
+          );
+        }
+      },
+      [storageKey, user?.id]
+    );
+
+    const createPlaylist = useCallback(
+      async (
+        name: string,
+        description?: string,
+        color?: string,
+        initialSpeechId?: string
+      ) => {
+        const now = Date.now();
+
+        const newPlaylist: Playlist = {
+          id: `${user?.id ?? 'user'}-${now}`,
+          name,
+          description,
+          speechIds: initialSpeechId
+            ? [initialSpeechId]
+            : [],
+          createdAt: now,
+          updatedAt: now,
+          color: color || '#8B4513',
         };
-      }
-      return p;
-    });
-    await savePlaylists(updated);
-  }, [playlists, savePlaylists]);
 
-  const removeFromPlaylist = useCallback(async (playlistId: string, speechId: string) => {
-    const updated = playlists.map(p => {
-      if (p.id === playlistId) {
-        return {
-          ...p,
-          speechIds: p.speechIds.filter(id => id !== speechId),
-          updatedAt: Date.now(),
-        };
-      }
-      return p;
-    });
-    await savePlaylists(updated);
-  }, [playlists, savePlaylists]);
+        await savePlaylists([
+          ...playlists,
+          newPlaylist,
+        ]);
 
-  const updatePlaylist = useCallback(async (playlistId: string, updates: Partial<Playlist>) => {
-    const updated = playlists.map(p => {
-      if (p.id === playlistId) {
-        return {
-          ...p,
-          ...updates,
-          updatedAt: Date.now(),
-        };
-      }
-      return p;
-    });
-    await savePlaylists(updated);
-  }, [playlists, savePlaylists]);
+        return newPlaylist;
+      },
+      [playlists, savePlaylists, user?.id]
+    );
 
-  return useMemo(() => ({
-    playlists,
-    isLoading,
-    createPlaylist,
-    deletePlaylist,
-    addToPlaylist,
-    removeFromPlaylist,
-    updatePlaylist,
-  }), [playlists, isLoading, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, updatePlaylist]);
-});
+    const deletePlaylist = useCallback(
+      async (playlistId: string) => {
+        await savePlaylists(
+          playlists.filter(
+            playlist => playlist.id !== playlistId
+          )
+        );
+      },
+      [playlists, savePlaylists]
+    );
+
+    const addToPlaylist = useCallback(
+      async (
+        playlistId: string,
+        speechId: string
+      ) => {
+        const updated = playlists.map(playlist => {
+          if (
+            playlist.id === playlistId &&
+            !playlist.speechIds.includes(speechId)
+          ) {
+            return {
+              ...playlist,
+              speechIds: [
+                ...playlist.speechIds,
+                speechId,
+              ],
+              updatedAt: Date.now(),
+            };
+          }
+
+          return playlist;
+        });
+
+        await savePlaylists(updated);
+      },
+      [playlists, savePlaylists]
+    );
+
+    const removeFromPlaylist = useCallback(
+      async (
+        playlistId: string,
+        speechId: string
+      ) => {
+        const updated = playlists.map(playlist => {
+          if (playlist.id === playlistId) {
+            return {
+              ...playlist,
+              speechIds:
+                playlist.speechIds.filter(
+                  id => id !== speechId
+                ),
+              updatedAt: Date.now(),
+            };
+          }
+
+          return playlist;
+        });
+
+        await savePlaylists(updated);
+      },
+      [playlists, savePlaylists]
+    );
+
+    const updatePlaylist = useCallback(
+      async (
+        playlistId: string,
+        updates: Partial<Playlist>
+      ) => {
+        const updated = playlists.map(playlist => {
+          if (playlist.id === playlistId) {
+            return {
+              ...playlist,
+              ...updates,
+              id: playlist.id,
+              createdAt: playlist.createdAt,
+              updatedAt: Date.now(),
+            };
+          }
+
+          return playlist;
+        });
+
+        await savePlaylists(updated);
+      },
+      [playlists, savePlaylists]
+    );
+
+    return useMemo(
+      () => ({
+        playlists,
+        isLoading,
+        createPlaylist,
+        deletePlaylist,
+        addToPlaylist,
+        removeFromPlaylist,
+        updatePlaylist,
+      }),
+      [
+        playlists,
+        isLoading,
+        createPlaylist,
+        deletePlaylist,
+        addToPlaylist,
+        removeFromPlaylist,
+        updatePlaylist,
+      ]
+    );
+  });
