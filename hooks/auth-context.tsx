@@ -1,7 +1,10 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback } from 'react';
-import { auth } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
+
+const STAY_SIGNED_IN_KEY = 'auth_stay_signed_in';
 
 interface AuthState {
   user: User | null;
@@ -11,7 +14,11 @@ interface AuthState {
 }
 
 interface AuthActions {
-  signIn: (email: string, password: string) => Promise<{ error?: any }>;
+  signIn: (
+    email: string,
+    password: string,
+    staySignedIn?: boolean
+  ) => Promise<{ error?: any }>;
   signUp: (email: string, password: string, userData?: { name?: string }) => Promise<{ error?: any; data?: any }>;
   signOut: () => Promise<{ error?: any }>;
   refreshSession: () => Promise<void>;
@@ -28,11 +35,45 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthAct
   useEffect(() => {
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
+    let allowInitialSessionRestore = false;
+
+    const showSignedOutState = () => {
+      if (!isMounted) return;
+
+      setAuthState({
+        user: null,
+        session: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+    };
 
     const initializeAuth = async () => {
       try {
         console.log('🔐 Initializing authentication...');
         
+        allowInitialSessionRestore =
+          (await AsyncStorage.getItem(STAY_SIGNED_IN_KEY)) === 'true';
+
+        if (!allowInitialSessionRestore) {
+          console.log('Stay signed in is off - skipping session restore');
+
+          // Clear Supabase's in-memory session locally. This does not revoke
+          // the user's session on another device or make a network request.
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+          } catch (localSignOutError) {
+            console.warn(
+              'Could not clear in-memory session during startup:',
+              localSignOutError
+            );
+          }
+
+          await auth.clearSession();
+          showSignedOutState();
+          return;
+        }
+
         await auth.checkAndClearInvalidTokens();
         
         const sessionPromise = auth.getSession();
@@ -134,6 +175,20 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthAct
     const { data: { subscription } } = auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 Auth state changed:', event, session?.user?.email || 'no user');
       
+      if (event === 'INITIAL_SESSION') {
+        allowInitialSessionRestore =
+          (await AsyncStorage.getItem(STAY_SIGNED_IN_KEY)) === 'true';
+
+        if (!allowInitialSessionRestore) {
+          if (session) {
+            await auth.clearSession();
+          }
+
+          showSignedOutState();
+          return;
+        }
+      }
+
       if (event === 'TOKEN_REFRESHED' && !session) {
         console.log('🔐 Token refresh failed, clearing session');
         await auth.clearSession();
@@ -161,9 +216,25 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthAct
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (
+    email: string,
+    password: string,
+    staySignedIn: boolean = false
+  ) => {
     try {
       console.log('🔐 Signing in user:', email);
+      // Store only the non-sensitive preference. Never persist raw
+      // email or password values.
+      const preferenceWrite = AsyncStorage.setItem(
+        STAY_SIGNED_IN_KEY,
+        staySignedIn ? 'true' : 'false'
+      ).catch((preferenceError) => {
+        console.warn(
+          'Could not save stay-signed-in preference:',
+          preferenceError
+        );
+      });
+
       // The auth screen owns the sign-in loading UI. Keep the root navigator visible.
       
       if (email.toLowerCase() === 'demo@motivationhub.app' && password === 'Demo2025!') {
@@ -206,6 +277,11 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthAct
       // signInWithPassword already returns the authenticated session.
       // Use it immediately instead of performing a second session lookup.
       const session = data?.session ?? null;
+
+      // The local write started before the network request, so this is
+      // normally already complete. Awaiting it here guarantees the user's
+      // choice is durable before the authenticated screen is shown.
+      await preferenceWrite;
 
       if (session?.user) {
         setAuthState({
@@ -256,6 +332,7 @@ export const [AuthProvider, useAuth] = createContextHook((): AuthState & AuthAct
   const signOut = useCallback(async () => {
     try {
       console.log('🔐 Signing out user');
+      await AsyncStorage.removeItem(STAY_SIGNED_IN_KEY);
       const isDemoUser = authState.user?.email === 'demo@motivationhub.app';
 
       // Update React immediately so protected UI disappears without waiting on the network.

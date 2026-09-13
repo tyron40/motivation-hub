@@ -28,6 +28,7 @@ export default function AuthScreen() {
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [includeChurchMotivation, setIncludeChurchMotivation] = useState<boolean>(false);
+  const [staySignedIn, setStaySignedIn] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
@@ -80,7 +81,7 @@ export default function AuthScreen() {
       if (currentScreen === 'signup') {
         result = await signUp(email, password, { name });
       } else {
-        result = await signIn(email, password);
+        result = await signIn(email, password, staySignedIn);
       }
 
       if (result.error) {
@@ -125,6 +126,7 @@ export default function AuthScreen() {
     setName('');
     setShowPassword(false);
     setIncludeChurchMotivation(false);
+    setStaySignedIn(false);
   };
 
   const navigateToScreen = (screen: Screen) => {
@@ -306,6 +308,46 @@ export default function AuthScreen() {
                       )}
                     </TouchableOpacity>
                   </View>
+
+                  {currentScreen === 'signin' && (
+                    <TouchableOpacity
+                      testID="stay-signed-in-toggle"
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: staySignedIn }}
+                      style={styles.preferenceCard}
+                      onPress={() => setStaySignedIn(previous => !previous)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.preferenceLeft}>
+                        <Lock
+                          color={staySignedIn ? '#FFD700' : '#8B8B9A'}
+                          size={18}
+                        />
+                        <View>
+                          <Text style={styles.preferenceTitle}>
+                            Stay signed in
+                          </Text>
+                          <Text style={styles.preferenceText}>
+                            Automatically sign in when reopening the app
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.preferenceToggle,
+                          staySignedIn && styles.preferenceToggleActive,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.preferenceKnob,
+                            staySignedIn && styles.preferenceKnobActive,
+                          ]}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  )}
 
                   {currentScreen === 'signup' && (
                     <TouchableOpacity
