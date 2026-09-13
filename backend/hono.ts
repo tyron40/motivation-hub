@@ -540,10 +540,16 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string[]> = {
     'focus and concentration',
     'student motivation',
   ],
-  'christian motivation': [
-    'pastor motivational sermon preaching',
-    'christian pastor sermon encouragement',
-    'church pastor preaching motivational message',
+  'church motivation': [
+    'TD Jakes motivational sermon',
+    'Sarah Jakes Roberts motivational sermon',
+    'Tony Evans Priscilla Shirer motivational sermon',
+    'Myles Munroe Charles Stanley motivational sermon',
+    'Joyce Meyer motivational sermon',
+    'Steven Furtick motivational sermon',
+    'Michael Todd pastor motivational sermon',
+    'Jamal Bryant John Gray Noel Jones sermon motivation',
+    'powerful pastor preacher motivational sermon',
   ],
   'athlete pump up': [
     'athlete pump up motivation',
@@ -752,6 +758,93 @@ async function fetchYouTubeVideos(query: string, maxResults: number = 10, prefer
   throw lastError || new Error('YouTube API keys failed');
 }
 
+const CHURCH_PREACHER_IDENTIFIERS = [
+  't.d. jakes',
+  'td jakes',
+  'sarah jakes roberts',
+  'tony evans',
+  'priscilla shirer',
+  'myles munroe',
+  'charles stanley',
+  'joyce meyer',
+  'steven furtick',
+  'michael todd',
+  'jamal bryant',
+  'john gray',
+  'noel jones',
+  'creflo dollar',
+  'rick warren',
+  'joel osteen',
+  'bishop',
+  'pastor',
+  'preacher',
+  'preaching',
+  'evangelist',
+];
+
+const CHURCH_SERMON_IDENTIFIERS = [
+  'sermon',
+  'preaching',
+  'preacher',
+  'pastor',
+  'bishop',
+  'evangelist',
+  'ministry message',
+  'motivational sermon',
+];
+
+const CHURCH_EXCLUDED_CONTENT = [
+  'instrumental',
+  'worship music',
+  'praise music',
+  'gospel music',
+  'music video',
+  'lyric video',
+  'lyrics',
+  'ambient',
+  'soaking music',
+  'prayer music',
+  'worship songs',
+  'harp',
+  'piano worship',
+  'sleep music',
+  'meditation music',
+  'cover song',
+  'playlist',
+  'full album',
+  'concert',
+  'choir',
+];
+
+function isChurchPreachingVideo(video: any): boolean {
+  const haystack = [
+    video?.title,
+    video?.description,
+    video?.channelTitle,
+    video?.channel_title,
+    video?.channelName,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (!haystack) return false;
+
+  if (CHURCH_EXCLUDED_CONTENT.some(term => haystack.includes(term))) {
+    return false;
+  }
+
+  const hasKnownPreacher = CHURCH_PREACHER_IDENTIFIERS.some(term =>
+    haystack.includes(term)
+  );
+
+  const hasSermonSignal = CHURCH_SERMON_IDENTIFIERS.some(term =>
+    haystack.includes(term)
+  );
+
+  return hasKnownPreacher || hasSermonSignal;
+}
+
 const handleYouTubeCategory = async (c: Context) => {
   try {
     console.log('[YouTube] Category request received');
@@ -762,7 +855,7 @@ const handleYouTubeCategory = async (c: Context) => {
       return c.json({ error: 'Category is required' }, 400);
     }
 
-    const categoryKey = category.toLowerCase();
+    const categoryKey = String(category).toLowerCase().trim();
     const searchQueries = CATEGORY_SEARCH_QUERIES[categoryKey] || CATEGORY_SEARCH_QUERIES.motivation;
 
     // Always run ALL category queries — key rotation happens inside fetchYouTubeVideos.
@@ -795,10 +888,18 @@ const handleYouTubeCategory = async (c: Context) => {
       }
     });
 
-    console.log(`[YouTube] Category ${category} returning ${videos.length} unique videos`);
+    const qualifiedVideos =
+      categoryKey === 'church motivation'
+        ? videos.filter(isChurchPreachingVideo)
+        : videos;
+
+    console.log(
+      `[YouTube] Category ${category} returning ${qualifiedVideos.length} ` +
+      `qualified videos from ${videos.length} unique candidates`
+    );
 
     return c.json({
-      videos: videos.slice(0, limit),
+      videos: qualifiedVideos.slice(0, limit),
       category,
       queries: queriesToRun,
       fetchedAt: new Date().toISOString(),
