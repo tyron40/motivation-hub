@@ -11,6 +11,7 @@ export interface DiscoveryProfile {
   positiveTerms: string[];
   /** Deprioritized content; each match subtracts heavily from the score. */
   negativeTerms: string[];
+  requiredTerms?: string[];
 }
 
 export type DiscoveryKey =
@@ -108,6 +109,21 @@ export const DISCOVERY_PROFILES: Record<DiscoveryKey, DiscoveryProfile> = {
       'preacher motivational speech purpose God',
       'powerful church preaching inspiration',
       'discipline Christian sermon perseverance',
+    ],
+    requiredTerms: [
+      'sermon',
+      'preacher',
+      'preaching',
+      'pastor',
+      'bishop',
+      'evangelist',
+      'motivational speech',
+      'motivational sermon',
+      'motivational message',
+      'christian message',
+      'church message',
+      'faith message',
+      'ministry message',
     ],
     positiveTerms: [
       'sermon', 'preacher', 'preaching', 'pastor', 'church', 'christian',
@@ -214,6 +230,40 @@ export function normalizeTitleForDedup(title: string): string {
  *   bonus (max +4) is smaller than a single positive-term match (+2..+3
  *   each, usually several).
  */
+export function matchesRequiredDiscoveryTerms(
+  video: {
+    title?: string;
+    description?: string;
+    channelTitle?: string;
+  },
+  profile: DiscoveryProfile
+): boolean {
+  if (!profile.requiredTerms || profile.requiredTerms.length === 0) {
+    return true;
+  }
+
+  const haystack = [
+    video.title,
+    video.description,
+    video.channelTitle,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const containsExcludedContent = profile.negativeTerms.some(term =>
+    haystack.includes(term.toLowerCase())
+  );
+
+  if (containsExcludedContent) {
+    return false;
+  }
+
+  return profile.requiredTerms.some(term =>
+    haystack.includes(term.toLowerCase())
+  );
+}
+
 export function scoreDiscoveryVideo(
   video: { id?: string; title?: string; description?: string; publishedAt?: string },
   profile: DiscoveryProfile
@@ -293,6 +343,7 @@ export function rankAndMixDiscovery<T extends {
 
   for (const video of videos) {
     if (!isDiscoverableVideo(video)) continue;
+    if (!matchesRequiredDiscoveryTerms(video, profile)) continue;
 
     const id = String(video.id);
     const titleKey = normalizeTitleForDedup(video.title || '');

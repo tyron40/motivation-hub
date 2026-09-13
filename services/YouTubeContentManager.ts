@@ -4,6 +4,7 @@ import {
   DiscoveryProfile,
   discoveryKeyForCategory,
   getDiscoveryProfile,
+  matchesRequiredDiscoveryTerms,
   rankAndMixDiscovery,
 } from '@/lib/category-discovery';
 
@@ -283,6 +284,21 @@ async function fetchTrendingFromBackend(limit: number): Promise<CachedVideo[]> {
   return fetchFromBackend(API_ENDPOINTS.youtubeTrending, { limit });
 }
 
+function qualifyCachedVideosForCategory(
+  category: string,
+  videos: CachedVideo[]
+): CachedVideo[] {
+  const profile = getDiscoveryProfile(discoveryKeyForCategory(category));
+
+  if (!profile.requiredTerms || profile.requiredTerms.length === 0) {
+    return videos;
+  }
+
+  return videos.filter(video =>
+    matchesRequiredDiscoveryTerms(video, profile)
+  );
+}
+
 export const YouTubeContentManager = {
   /**
    * Fast read of the persisted canonical pool for one exact category:
@@ -293,9 +309,13 @@ export const YouTubeContentManager = {
   async getCachedVideosForCategory(category: string): Promise<CachedVideo[]> {
     const key = category.toLowerCase().trim();
     const mem = memoryVideoCache.get(key);
-    if (mem) return mem.videos;
+
+    if (mem) {
+      return qualifyCachedVideosForCategory(key, mem.videos);
+    }
+
     const cached = await readCache(key);
-    return cached?.videos ?? [];
+    return qualifyCachedVideosForCategory(key, cached?.videos ?? []);
   },
 
   /**
@@ -305,8 +325,15 @@ export const YouTubeContentManager = {
    * category screens when the pool is already warm.
    */
   getCachedVideosSync(category: string): CachedVideo[] | null {
-    const mem = memoryVideoCache.get(category.toLowerCase().trim());
-    return mem && mem.videos.length > 0 ? mem.videos : null;
+    const key = category.toLowerCase().trim();
+    const mem = memoryVideoCache.get(key);
+
+    if (!mem || mem.videos.length === 0) {
+      return null;
+    }
+
+    const qualified = qualifyCachedVideosForCategory(key, mem.videos);
+    return qualified.length > 0 ? qualified : null;
   },
 
   getCachedTrendingSync(): CachedVideo[] | null {
@@ -336,8 +363,14 @@ export const YouTubeContentManager = {
 
   async getVideosForCategory(category: string, limit: number = 50): Promise<CachedVideo[]> {
     const normalizedCategory = category.toLowerCase().trim();
+    const profile = getDiscoveryProfile(
+      discoveryKeyForCategory(normalizedCategory)
+    );
 
-    const cached = await getCachedVideos(normalizedCategory);
+    const storedCached = await getCachedVideos(normalizedCategory);
+    const cached = storedCached
+      ? qualifyCachedVideosForCategory(normalizedCategory, storedCached)
+      : undefined;
 
     if (cached && cached.length > 0) {
       const needsRefresh = await shouldRefresh(normalizedCategory);
@@ -403,7 +436,10 @@ export const YouTubeContentManager = {
     const profile = getDiscoveryProfile(discoveryKeyForCategory(category));
 
     // Previous inventory = proven anchor (mix) + failure fallback (Part 15).
-    const previous = await getStaleCache(category);
+    const previousStored = await getStaleCache(category);
+    const previous = previousStored
+      ? qualifyCachedVideosForCategory(category, previousStored)
+      : undefined;
     const previousIds = new Set((previous ?? []).map(v => v.id));
 
     if (!(await canFetchMore())) {
