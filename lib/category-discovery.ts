@@ -12,6 +12,7 @@ export interface DiscoveryProfile {
   /** Deprioritized content; each match subtracts heavily from the score. */
   negativeTerms: string[];
   requiredTerms?: string[];
+  requiredContextTerms?: string[];
 }
 
 export type DiscoveryKey =
@@ -111,14 +112,40 @@ export const DISCOVERY_PROFILES: Record<DiscoveryKey, DiscoveryProfile> = {
       'discipline Christian sermon perseverance',
     ],
     requiredTerms: [
-      'sermon',
+      't.d. jakes',
+      'td jakes',
+      'sarah jakes roberts',
+      'tony evans',
+      'priscilla shirer',
+      'myles munroe',
+      'charles stanley',
+      'joyce meyer',
+      'steven furtick',
+      'michael todd',
+      'jamal bryant',
+      'john gray',
+      'noel jones',
+      'creflo dollar',
+      'rick warren',
+      'joel osteen',
       'preacher',
       'preaching',
       'pastor',
       'bishop',
       'evangelist',
+    ],
+    requiredContextTerms: [
+      'sermon',
+      'preaching',
+      'motivational',
+      'motivation',
+      'inspirational message',
+      'christian message',
+      'faith message',
       'ministry message',
-      'motivational sermon',
+      'encouragement',
+      'powerful message',
+      'word of god',
     ],
     positiveTerms: [
       'sermon', 'preacher', 'preaching', 'pastor', 'church', 'christian',
@@ -254,9 +281,28 @@ export function matchesRequiredDiscoveryTerms(
     return false;
   }
 
-  return profile.requiredTerms.some(term =>
-    haystack.includes(term.toLowerCase())
-  );
+  const hasRequiredIdentity =
+    profile.requiredTerms.some(term =>
+      haystack.includes(term.toLowerCase())
+    );
+
+  if (!hasRequiredIdentity) {
+    return false;
+  }
+
+  if (
+    profile.requiredContextTerms &&
+    profile.requiredContextTerms.length > 0
+  ) {
+    return profile.requiredContextTerms.some(
+      term =>
+        haystack.includes(
+          term.toLowerCase()
+        )
+    );
+  }
+
+  return true;
 }
 
 export function scoreDiscoveryVideo(

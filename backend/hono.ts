@@ -782,15 +782,18 @@ const CHURCH_PREACHER_IDENTIFIERS = [
   'evangelist',
 ];
 
-const CHURCH_SERMON_IDENTIFIERS = [
+const CHURCH_PREACHING_CONTENT_IDENTIFIERS = [
   'sermon',
   'preaching',
-  'preacher',
-  'pastor',
-  'bishop',
-  'evangelist',
+  'motivational',
+  'motivation',
+  'inspirational message',
+  'christian message',
+  'faith message',
   'ministry message',
-  'motivational sermon',
+  'encouragement',
+  'powerful message',
+  'word of god',
 ];
 
 const CHURCH_EXCLUDED_CONTENT = [
@@ -834,15 +837,20 @@ function isChurchPreachingVideo(video: any): boolean {
     return false;
   }
 
-  const hasKnownPreacher = CHURCH_PREACHER_IDENTIFIERS.some(term =>
-    haystack.includes(term)
-  );
+  const hasIdentifiablePreacher =
+    CHURCH_PREACHER_IDENTIFIERS.some(
+      term => haystack.includes(term)
+    );
 
-  const hasSermonSignal = CHURCH_SERMON_IDENTIFIERS.some(term =>
-    haystack.includes(term)
-  );
+  const hasPreachingContent =
+    CHURCH_PREACHING_CONTENT_IDENTIFIERS.some(
+      term => haystack.includes(term)
+    );
 
-  return hasKnownPreacher || hasSermonSignal;
+  return (
+    hasIdentifiablePreacher &&
+    hasPreachingContent
+  );
 }
 
 const handleYouTubeCategory = async (c: Context) => {
