@@ -26,6 +26,10 @@ import { useAuth } from '@/hooks/auth-context';
 import { motivationalFlyers, MotivationalFlyer } from '@/mocks/motivationalFlyers';
 import { useAdmin } from '@/hooks/admin-context';
 import { API_ENDPOINTS } from '@/lib/config';
+import {
+  loadRemoteLibraryField,
+  saveRemoteLibraryField,
+} from '@/lib/user-library-sync';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = Math.floor((SCREEN_WIDTH - 40) / 2);
@@ -65,22 +69,92 @@ export default function FlyersScreen() {
   );
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadLikedIds = async () => {
+      let localIds: string[] = [];
+
       try {
-        const stored = await AsyncStorage.getItem(likedFlyersKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as string[];
-          setLikedIds(new Set(parsed));
-        } else {
-          setLikedIds(new Set());
+        const stored =
+          await AsyncStorage.getItem(
+            likedFlyersKey
+          );
+
+        const parsed = stored
+          ? JSON.parse(stored)
+          : [];
+
+        localIds = Array.isArray(parsed)
+          ? parsed.filter(
+              (id): id is string =>
+                typeof id === 'string'
+            )
+          : [];
+      } catch (error) {
+        console.warn(
+          'Unable to parse liked flyers:',
+          error
+        );
+      }
+
+      if (!cancelled) {
+        setLikedIds(new Set(localIds));
+      }
+
+      if (!user?.id) return;
+
+      try {
+        const remoteIds =
+          await loadRemoteLibraryField<
+            string[]
+          >(
+            user.id,
+            'liked_flyer_ids',
+            []
+          );
+
+        const merged = Array.from(
+          new Set([
+            ...localIds,
+            ...(Array.isArray(remoteIds)
+              ? remoteIds
+              : []),
+          ])
+        );
+
+        await AsyncStorage.setItem(
+          likedFlyersKey,
+          JSON.stringify(merged)
+        );
+
+        if (!cancelled) {
+          setLikedIds(new Set(merged));
+        }
+
+        if (
+          JSON.stringify(merged) !==
+          JSON.stringify(remoteIds)
+        ) {
+          await saveRemoteLibraryField(
+            user.id,
+            'liked_flyer_ids',
+            merged
+          );
         }
       } catch (error) {
-        console.error('Error loading liked flyers:', error);
-        setLikedIds(new Set());
+        console.warn(
+          'Flyer cloud sync unavailable; using local cache:',
+          error
+        );
       }
     };
+
     void loadLikedIds();
-  }, [likedFlyersKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [likedFlyersKey, user?.id]);
 
   useEffect(() => {
     const fetchSupabaseFlyers = async () => {
@@ -120,13 +194,32 @@ export default function FlyersScreen() {
     void fetchSupabaseFlyers();
   }, []);
 
-  const saveLikedIds = useCallback(async (ids: Set<string>) => {
-    try {
-      await AsyncStorage.setItem(likedFlyersKey, JSON.stringify(Array.from(ids)));
-    } catch (error) {
-      console.error('Error saving liked flyers:', error);
-    }
-  }, [likedFlyersKey]);
+  const saveLikedIds = useCallback(
+    async (ids: Set<string>) => {
+      const values = Array.from(ids);
+
+      await AsyncStorage.setItem(
+        likedFlyersKey,
+        JSON.stringify(values)
+      );
+
+      if (!user?.id) return;
+
+      try {
+        await saveRemoteLibraryField(
+          user.id,
+          'liked_flyer_ids',
+          values
+        );
+      } catch (error) {
+        console.warn(
+          'Flyer likes saved locally; cloud sync will retry:',
+          error
+        );
+      }
+    },
+    [likedFlyersKey, user?.id]
+  );
 
   const pickImageFromGallery = useCallback(async () => {
     try {

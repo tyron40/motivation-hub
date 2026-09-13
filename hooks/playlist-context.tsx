@@ -6,7 +6,7 @@ import {
   useCallback,
   useMemo,
 } from 'react';
-import { Playlist } from '@/types/speech';
+import { Playlist, Speech } from '@/types/speech';
 import { useAuth } from '@/hooks/auth-context';
 import {
   loadRemotePlaylists,
@@ -145,7 +145,8 @@ export const [PlaylistProvider, usePlaylists] =
         name: string,
         description?: string,
         color?: string,
-        initialSpeechId?: string
+        initialSpeechId?: string,
+        initialSpeech?: Speech
       ) => {
         const now = Date.now();
 
@@ -156,6 +157,14 @@ export const [PlaylistProvider, usePlaylists] =
           speechIds: initialSpeechId
             ? [initialSpeechId]
             : [],
+          speechSnapshots:
+            initialSpeechId && initialSpeech
+              ? [{
+                  ...initialSpeech,
+                  isFavorite:
+                    !!initialSpeech.isFavorite,
+                }]
+              : [],
           createdAt: now,
           updatedAt: now,
           color: color || '#8B4513',
@@ -185,19 +194,40 @@ export const [PlaylistProvider, usePlaylists] =
     const addToPlaylist = useCallback(
       async (
         playlistId: string,
-        speechId: string
+        speechId: string,
+        speechSnapshot?: Speech
       ) => {
         const updated = playlists.map(playlist => {
           if (
             playlist.id === playlistId &&
             !playlist.speechIds.includes(speechId)
           ) {
+            const snapshotMap =
+              new Map<string, Speech>();
+
+            (
+              playlist.speechSnapshots ?? []
+            ).forEach(speech => {
+              snapshotMap.set(speech.id, speech);
+            });
+
+            if (speechSnapshot) {
+              snapshotMap.set(
+                speechId,
+                speechSnapshot
+              );
+            }
+
             return {
               ...playlist,
               speechIds: [
                 ...playlist.speechIds,
                 speechId,
               ],
+              speechSnapshots:
+                Array.from(
+                  snapshotMap.values()
+                ),
               updatedAt: Date.now(),
             };
           }
@@ -222,6 +252,14 @@ export const [PlaylistProvider, usePlaylists] =
               speechIds:
                 playlist.speechIds.filter(
                   id => id !== speechId
+                ),
+              speechSnapshots:
+                (
+                  playlist.speechSnapshots ??
+                  []
+                ).filter(
+                  speech =>
+                    speech.id !== speechId
                 ),
               updatedAt: Date.now(),
             };

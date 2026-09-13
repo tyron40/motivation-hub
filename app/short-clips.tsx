@@ -41,6 +41,11 @@ import { useAuth } from '@/hooks/auth-context';
 import { useAdMob } from '@/hooks/admob-context';
 import { fallbackShortClips } from '@/mocks/shortClips';
 import { playbackAdCoordinator } from '@/services/PlaybackAdCoordinator';
+import {
+  loadRemoteLibraryField,
+  saveRemoteLibraryField,
+  UserLibraryColumn,
+} from '@/lib/user-library-sync';
 
 let NativeYoutubePlayer: any = null;
 if (Platform.OS !== 'web') {
@@ -126,21 +131,126 @@ export default function ShortClipsScreen() {
 
     const loadPrefs = async () => {
       try {
-        const [likedRaw, savedRaw] = await Promise.all([
-          AsyncStorage.getItem(likedClipsKey),
-          AsyncStorage.getItem(savedClipsKey),
-        ]);
+        const [likedRaw, savedRaw] =
+          await Promise.all([
+            AsyncStorage.getItem(
+              likedClipsKey
+            ),
+            AsyncStorage.getItem(
+              savedClipsKey
+            ),
+          ]);
+
+        const localLiked = likedRaw
+          ? JSON.parse(likedRaw)
+          : [];
+
+        const localSaved = savedRaw
+          ? JSON.parse(savedRaw)
+          : [];
+
+        let likedValues = Array.isArray(
+          localLiked
+        )
+          ? localLiked
+          : [];
+
+        let savedValues = Array.isArray(
+          localSaved
+        )
+          ? localSaved
+          : [];
+
+        if (user?.id) {
+          try {
+            const [
+              remoteLiked,
+              remoteSaved,
+            ] = await Promise.all([
+              loadRemoteLibraryField<
+                string[]
+              >(
+                user.id,
+                'liked_clip_ids',
+                []
+              ),
+              loadRemoteLibraryField<
+                string[]
+              >(
+                user.id,
+                'saved_clip_ids',
+                []
+              ),
+            ]);
+
+            likedValues = Array.from(
+              new Set([
+                ...likedValues,
+                ...(Array.isArray(remoteLiked)
+                  ? remoteLiked
+                  : []),
+              ])
+            );
+
+            savedValues = Array.from(
+              new Set([
+                ...savedValues,
+                ...(Array.isArray(remoteSaved)
+                  ? remoteSaved
+                  : []),
+              ])
+            );
+
+            await Promise.all([
+              AsyncStorage.setItem(
+                likedClipsKey,
+                JSON.stringify(likedValues)
+              ),
+              AsyncStorage.setItem(
+                savedClipsKey,
+                JSON.stringify(savedValues)
+              ),
+            ]);
+
+            await Promise.all([
+              saveRemoteLibraryField(
+                user.id,
+                'liked_clip_ids',
+                likedValues
+              ),
+              saveRemoteLibraryField(
+                user.id,
+                'saved_clip_ids',
+                savedValues
+              ),
+            ]);
+          } catch (error) {
+            console.warn(
+              'Clip cloud sync unavailable; using local cache:',
+              error
+            );
+          }
+        }
 
         if (cancelled) return;
 
-        setLikedClips(likedRaw ? new Set(JSON.parse(likedRaw)) : new Set());
-        setSavedClips(savedRaw ? new Set(JSON.parse(savedRaw)) : new Set());
-      } catch (e) {
+        setLikedClips(
+          new Set(likedValues)
+        );
+
+        setSavedClips(
+          new Set(savedValues)
+        );
+      } catch (error) {
         if (!cancelled) {
+          console.warn(
+            'Unable to load clip preferences:',
+            error
+          );
+
           setLikedClips(new Set());
           setSavedClips(new Set());
         }
-        console.error('Error loading clip prefs:', e);
       }
     };
 
@@ -149,7 +259,11 @@ export default function ShortClipsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [likedClipsKey, savedClipsKey]);
+  }, [
+    likedClipsKey,
+    savedClipsKey,
+    user?.id,
+  ]);
 
   useEffect(() => {
     const fetchClips = async () => {
@@ -246,6 +360,39 @@ export default function ShortClipsScreen() {
     }
   }, [clips, initialVideoId, hasScrolledToInitial]);
 
+  const persistClipIds = useCallback(
+    async (
+      column: UserLibraryColumn,
+      storageKey: string | null,
+      ids: Set<string>
+    ) => {
+      if (!storageKey) return;
+
+      const values = Array.from(ids);
+
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify(values)
+      );
+
+      if (!user?.id) return;
+
+      try {
+        await saveRemoteLibraryField(
+          user.id,
+          column,
+          values
+        );
+      } catch (error) {
+        console.warn(
+          'Clip preference saved locally; cloud sync will retry:',
+          error
+        );
+      }
+    },
+    [user?.id]
+  );
+
   const toggleLike = useCallback(async (clipId: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -262,12 +409,19 @@ export default function ShortClipsScreen() {
       } else {
         next.add(clipId);
       }
-      if (likedClipsKey) {
-        void AsyncStorage.setItem(likedClipsKey, JSON.stringify(Array.from(next)));
-      }
+      void persistClipIds(
+        'liked_clip_ids',
+        likedClipsKey,
+        next
+      );
       return next;
     });
-  }, [getOrCreateAnim, likeAnimations, likedClipsKey]);
+  }, [
+    getOrCreateAnim,
+    likeAnimations,
+    likedClipsKey,
+    persistClipIds,
+  ]);
 
   const toggleSave = useCallback(async (clipId: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -285,12 +439,19 @@ export default function ShortClipsScreen() {
       } else {
         next.add(clipId);
       }
-      if (savedClipsKey) {
-        void AsyncStorage.setItem(savedClipsKey, JSON.stringify(Array.from(next)));
-      }
+      void persistClipIds(
+        'saved_clip_ids',
+        savedClipsKey,
+        next
+      );
       return next;
     });
-  }, [getOrCreateAnim, saveAnimations, savedClipsKey]);
+  }, [
+    getOrCreateAnim,
+    persistClipIds,
+    saveAnimations,
+    savedClipsKey,
+  ]);
 
   const handleAddVideo = useCallback(async () => {
     if (!newVideoTitle.trim() || !newVideoId.trim()) {

@@ -138,7 +138,8 @@ export default function PlayerScreen() {
         name,
         undefined,
         undefined,
-        currentSpeech.id
+        currentSpeech.id,
+        currentSpeech
       );
 
       setNewPlaylistName('');
@@ -168,7 +169,11 @@ export default function PlayerScreen() {
     if (!playlist) return;
 
     try {
-      await addToPlaylist(playlist.id, currentSpeech.id);
+      await addToPlaylist(
+        playlist.id,
+        currentSpeech.id,
+        currentSpeech
+      );
       setShowPlaylistModal(false);
       Alert.alert(
         'Saved',

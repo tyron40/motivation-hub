@@ -111,7 +111,11 @@ export const SpeechCard: React.FC<SpeechCardProps> = ({
     const buttons = availablePlaylists.map((playlist) => ({
       text: playlist.name,
       onPress: async () => {
-        await addToPlaylist(playlist.id, speech.id);
+        await addToPlaylist(
+          playlist.id,
+          speech.id,
+          speech
+        );
 
         Alert.alert(
           'Saved',

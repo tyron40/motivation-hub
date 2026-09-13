@@ -43,6 +43,7 @@ export interface Playlist {
   name: string;
   description?: string;
   speechIds: string[];
+  speechSnapshots?: Speech[];
   createdAt: number;
   updatedAt: number;
   color?: string;

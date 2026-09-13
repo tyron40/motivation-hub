@@ -135,3 +135,103 @@ export async function saveRemoteFavorites(
 
   if (error) throw error;
 }
+
+export type UserLibraryColumn =
+  | 'user_profile'
+  | 'speech_profile'
+  | 'listening_history'
+  | 'favorite_scriptures'
+  | 'chat_sessions'
+  | 'liked_flyer_ids'
+  | 'liked_clip_ids'
+  | 'saved_clip_ids';
+
+export async function loadRemoteLibraryField<T>(
+  userId: string,
+  column: UserLibraryColumn,
+  fallback: T
+): Promise<T> {
+  const { data, error } = await supabase
+    .from('user_libraries')
+    .select(column)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return fallback;
+
+  const row = data as unknown as
+    Record<UserLibraryColumn, unknown>;
+
+  const value = row[column];
+
+  return value === null ||
+    typeof value === 'undefined'
+    ? fallback
+    : value as T;
+}
+
+export async function saveRemoteLibraryField<T>(
+  userId: string,
+  column: UserLibraryColumn,
+  value: T
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    user_id: userId,
+    [column]: value,
+  };
+
+  const { error } = await supabase
+    .from('user_libraries')
+    .upsert(
+      payload,
+      {
+        onConflict: 'user_id',
+      }
+    );
+
+  if (error) throw error;
+}
+
+export function mergeRecordsById<
+  T extends {
+    id: string;
+    updatedAt?: number;
+    savedAt?: number;
+  }
+>(
+  localRecords: T[],
+  remoteRecords: T[]
+): T[] {
+  const merged = new Map<string, T>();
+
+  [...localRecords, ...remoteRecords].forEach(record => {
+    if (
+      !record ||
+      typeof record.id !== 'string'
+    ) {
+      return;
+    }
+
+    const existing = merged.get(record.id);
+
+    const recordTime =
+      record.updatedAt ??
+      record.savedAt ??
+      0;
+
+    const existingTime =
+      existing?.updatedAt ??
+      existing?.savedAt ??
+      0;
+
+    if (
+      !existing ||
+      recordTime >= existingTime
+    ) {
+      merged.set(record.id, record);
+    }
+  });
+
+  return Array.from(merged.values());
+}

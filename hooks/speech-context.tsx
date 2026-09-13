@@ -10,7 +10,9 @@ import { fetchFreshContentByCategory, searchFreshContent, fetchTrendingContent, 
 import {
   FavoriteLibrary,
   loadRemoteFavorites,
+  loadRemoteLibraryField,
   saveRemoteFavorites,
+  saveRemoteLibraryField,
 } from '@/lib/user-library-sync';
 
 interface SpeechContextValue {
@@ -84,6 +86,13 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const audioPlayerRef = useRef<any>(null);
+  const historyCheckpointRef = useRef<{
+    speechId: string;
+    bucket: number;
+  }>({
+    speechId: '',
+    bucket: -1,
+  });
   const [audioError, setAudioError] = useState<string | null>(null);
 
   // Load favorites immediately from the local cache, then merge
@@ -269,35 +278,286 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
   const { mutate: mutateFavorites } =
     saveFavoritesMutation;
 
-  // Load user profile from AsyncStorage
+  // Load the speech profile locally first, then merge
+  // account data without delaying the initial screen.
   const profileQuery = useQuery({
-    queryKey: ['userProfile', user?.id],
-    queryFn: async () => {
-      if (!profileStorageKey) return defaultUserProfile;
-      const stored = await AsyncStorage.getItem(profileStorageKey);
-      return stored ? JSON.parse(stored) : defaultUserProfile;
+    queryKey: ['speechProfile', user?.id],
+    queryFn: async (): Promise<UserProfile> => {
+      if (!profileStorageKey || !user?.id) {
+        return defaultUserProfile;
+      }
+
+      const stored =
+        await AsyncStorage.getItem(
+          profileStorageKey
+        );
+
+      let localProfile = defaultUserProfile;
+
+      if (stored) {
+        try {
+          localProfile = {
+            ...defaultUserProfile,
+            ...JSON.parse(stored),
+          };
+        } catch (error) {
+          console.warn(
+            'Unable to parse local speech profile:',
+            error
+          );
+        }
+      }
+
+      try {
+        const remoteProfile =
+          await loadRemoteLibraryField<
+            Partial<UserProfile>
+          >(
+            user.id,
+            'speech_profile',
+            {}
+          );
+
+        const mergedProfile = {
+          ...defaultUserProfile,
+          ...localProfile,
+          ...remoteProfile,
+        };
+
+        await AsyncStorage.setItem(
+          profileStorageKey,
+          JSON.stringify(mergedProfile)
+        );
+
+        if (
+          JSON.stringify(mergedProfile) !==
+          JSON.stringify(remoteProfile)
+        ) {
+          await saveRemoteLibraryField(
+            user.id,
+            'speech_profile',
+            mergedProfile
+          );
+        }
+
+        return mergedProfile;
+      } catch (error) {
+        console.warn(
+          'Speech profile cloud sync unavailable; using local cache:',
+          error
+        );
+
+        return localProfile;
+      }
     },
   });
 
-  // Load listening history
+  // Load and merge the newest progress for each speech.
   const historyQuery = useQuery({
     queryKey: ['listeningHistory', user?.id],
-    queryFn: async () => {
-      if (!historyStorageKey) return [];
-      const stored = await AsyncStorage.getItem(historyStorageKey);
-      return stored ? JSON.parse(stored) : [];
+    queryFn: async (): Promise<
+      ListeningHistory[]
+    > => {
+      if (!historyStorageKey || !user?.id) {
+        return [];
+      }
+
+      const stored =
+        await AsyncStorage.getItem(
+          historyStorageKey
+        );
+
+      let localHistory: ListeningHistory[] = [];
+
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+
+          localHistory = Array.isArray(parsed)
+            ? parsed
+            : [];
+        } catch (error) {
+          console.warn(
+            'Unable to parse local listening history:',
+            error
+          );
+        }
+      }
+
+      try {
+        const remoteHistory =
+          await loadRemoteLibraryField<
+            ListeningHistory[]
+          >(
+            user.id,
+            'listening_history',
+            []
+          );
+
+        const mergedMap =
+          new Map<string, ListeningHistory>();
+
+        [
+          ...localHistory,
+          ...(Array.isArray(remoteHistory)
+            ? remoteHistory
+            : []),
+        ].forEach(entry => {
+          if (
+            !entry ||
+            typeof entry.speechId !== 'string'
+          ) {
+            return;
+          }
+
+          const existing =
+            mergedMap.get(entry.speechId);
+
+          const entryTime = new Date(
+            entry.listenedAt
+          ).getTime();
+
+          const existingTime = existing
+            ? new Date(
+                existing.listenedAt
+              ).getTime()
+            : 0;
+
+          if (
+            !existing ||
+            entryTime >= existingTime
+          ) {
+            mergedMap.set(
+              entry.speechId,
+              {
+                ...entry,
+                listenedAt:
+                  new Date(entry.listenedAt),
+              }
+            );
+          }
+        });
+
+        const merged = Array.from(
+          mergedMap.values()
+        ).sort(
+          (a, b) =>
+            new Date(b.listenedAt).getTime() -
+            new Date(a.listenedAt).getTime()
+        );
+
+        await AsyncStorage.setItem(
+          historyStorageKey,
+          JSON.stringify(merged)
+        );
+
+        if (
+          JSON.stringify(merged) !==
+          JSON.stringify(remoteHistory)
+        ) {
+          await saveRemoteLibraryField(
+            user.id,
+            'listening_history',
+            merged
+          );
+        }
+
+        return merged;
+      } catch (error) {
+        console.warn(
+          'Listening history cloud sync unavailable; using local cache:',
+          error
+        );
+
+        return localHistory.map(entry => ({
+          ...entry,
+          listenedAt:
+            new Date(entry.listenedAt),
+        }));
+      }
     },
   });
 
-  // Save profile mutation
   const saveProfileMutation = useMutation({
-    mutationFn: async (profile: UserProfile) => {
-      if (!profileStorageKey) return profile;
-      await AsyncStorage.setItem(profileStorageKey, JSON.stringify(profile));
+    mutationFn: async (
+      profile: UserProfile
+    ) => {
+      if (!profileStorageKey || !user?.id) {
+        return profile;
+      }
+
+      await AsyncStorage.setItem(
+        profileStorageKey,
+        JSON.stringify(profile)
+      );
+
+      try {
+        await saveRemoteLibraryField(
+          user.id,
+          'speech_profile',
+          profile
+        );
+      } catch (error) {
+        console.warn(
+          'Speech profile saved locally; cloud sync will retry:',
+          error
+        );
+      }
+
       return profile;
     },
+    onSuccess: profile => {
+      queryClient.setQueryData(
+        ['speechProfile', user?.id],
+        profile
+      );
+    },
   });
-  const { mutate: mutateProfile } = saveProfileMutation;
+
+  const { mutate: mutateProfile } =
+    saveProfileMutation;
+
+  const persistListeningHistory =
+    useCallback(
+      async (
+        history: ListeningHistory[]
+      ) => {
+        if (
+          !historyStorageKey ||
+          !user?.id
+        ) {
+          return;
+        }
+
+        await AsyncStorage.setItem(
+          historyStorageKey,
+          JSON.stringify(history)
+        );
+
+        queryClient.setQueryData(
+          ['listeningHistory', user.id],
+          history
+        );
+
+        try {
+          await saveRemoteLibraryField(
+            user.id,
+            'listening_history',
+            history
+          );
+        } catch (error) {
+          console.warn(
+            'Listening progress saved locally; cloud sync will retry:',
+            error
+          );
+        }
+      },
+      [
+        historyStorageKey,
+        queryClient,
+        user?.id,
+      ]
+    );
 
   // Load real speeches on app start with quota-aware scheduled refresh
   useEffect(() => {
@@ -1010,26 +1270,91 @@ export const [SpeechProvider, useSpeechContext] = createContextHook<SpeechContex
     }
   }, []);
 
-  const handlePlaybackStatusUpdate = useCallback((status: {
-    isPlaying: boolean;
-    currentTime: number;
-    duration: number;
-    didJustFinish: boolean;
-  }) => {
-    if (status.currentTime >= 0) {
-      setCurrentTime(status.currentTime);
-    }
-    if (status.duration > 0) {
-      setDuration(status.duration);
-    }
+  const handlePlaybackStatusUpdate =
+    useCallback((status: {
+      isPlaying: boolean;
+      currentTime: number;
+      duration: number;
+      didJustFinish: boolean;
+    }) => {
+      if (status.currentTime >= 0) {
+        setCurrentTime(status.currentTime);
+      }
 
-    if (status.didJustFinish) {
-      console.log('🏁 Audio finished playing');
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      setCurrentTime(0);
-    }
-  }, []);
+      if (status.duration > 0) {
+        setDuration(status.duration);
+      }
+
+      const speechId = currentSpeech?.id;
+      const checkpointBucket =
+        Math.floor(status.currentTime / 30);
+
+      const shouldSaveProgress =
+        !!speechId &&
+        status.duration > 0 &&
+        (
+          status.didJustFinish ||
+          historyCheckpointRef.current.speechId
+            !== speechId ||
+          historyCheckpointRef.current.bucket
+            !== checkpointBucket
+        );
+
+      if (shouldSaveProgress && speechId) {
+        historyCheckpointRef.current = {
+          speechId,
+          bucket: checkpointBucket,
+        };
+
+        const progress = status.didJustFinish
+          ? 100
+          : Math.min(
+              100,
+              Math.max(
+                0,
+                (
+                  status.currentTime /
+                  status.duration
+                ) * 100
+              )
+            );
+
+        setListeningHistory(previous => {
+          const nextEntry: ListeningHistory = {
+            speechId,
+            listenedAt: new Date(),
+            progress,
+          };
+
+          const nextHistory = [
+            nextEntry,
+            ...previous.filter(
+              entry =>
+                entry.speechId !== speechId
+            ),
+          ].slice(0, 250);
+
+          void persistListeningHistory(
+            nextHistory
+          );
+
+          return nextHistory;
+        });
+      }
+
+      if (status.didJustFinish) {
+        console.log(
+          'Audio finished playing'
+        );
+
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setCurrentTime(0);
+      }
+    }, [
+      currentSpeech?.id,
+      persistListeningHistory,
+    ]);
 
   // Handle audio errors with enhanced logging
   const handleAudioError = useCallback((error: string) => {

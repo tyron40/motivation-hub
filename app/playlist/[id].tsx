@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -21,7 +21,11 @@ export default function PlaylistDetailScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const playlistId = typeof params.id === 'string' ? params.id : '';
 
-  const { playlists, removeFromPlaylist } = usePlaylists();
+  const {
+    playlists,
+    removeFromPlaylist,
+    updatePlaylist,
+  } = usePlaylists();
   const { speeches, setCurrentSpeech, setCurrentPlaylist, toggleFavorite } = useSpeechContext();
 
   const playlist = useMemo(
@@ -31,9 +35,56 @@ export default function PlaylistDetailScreen() {
 
   const playlistSpeeches = useMemo(() => {
     if (!playlist) return [];
-    const byId = new Map(speeches.map((s) => [s.id, s]));
-    return playlist.speechIds.map((id) => byId.get(id)).filter(Boolean) as typeof speeches;
+
+    const byId = new Map(
+      (playlist.speechSnapshots ?? []).map(
+        speech => [speech.id, speech]
+      )
+    );
+
+    speeches.forEach(speech => {
+      byId.set(speech.id, speech);
+    });
+
+    return playlist.speechIds
+      .map(id => byId.get(id))
+      .filter(
+        (speech): speech is NonNullable<
+          typeof speech
+        > => !!speech
+      );
   }, [playlist, speeches]);
+
+  // Upgrade older ID-only playlists as their speeches become
+  // available, so future devices retain the complete records.
+  useEffect(() => {
+    if (!playlist) return;
+
+    const existingSnapshotIds = new Set(
+      (playlist.speechSnapshots ?? [])
+        .map(speech => speech.id)
+    );
+
+    const hasMissingSnapshots =
+      playlistSpeeches.some(
+        speech =>
+          !existingSnapshotIds.has(speech.id)
+      );
+
+    if (!hasMissingSnapshots) return;
+
+    void updatePlaylist(
+      playlist.id,
+      {
+        speechSnapshots:
+          playlistSpeeches,
+      }
+    );
+  }, [
+    playlist,
+    playlistSpeeches,
+    updatePlaylist,
+  ]);
 
   const handlePlayAll = () => {
     if (!playlistSpeeches.length) return;
