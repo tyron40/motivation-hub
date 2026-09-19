@@ -16,6 +16,9 @@
     "node_modules",
     "projects",
     "scripts",
-    "dist"
-  ]
+    "dist",
+    "expo",
+    "__old_iap.tsx"
+  ],
+  "compileOnSave": false
 }

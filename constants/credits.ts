@@ -55,11 +55,11 @@ export const CREDIT_COSTS: CreditCost[] = [
 
 export const CREDIT_PACKAGES = [
   {
-    credits: 10,
+    credits: 2,
     title: 'Starter',
     description: 'Try out AI features',
     price: 'Free for new users',
-    estimated: '~10 AI interactions',
+    estimated: '~2 AI interactions',
   },
   {
     credits: 100,

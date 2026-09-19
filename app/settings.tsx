@@ -44,8 +44,8 @@ export default function SettingsScreen() {
   const [showCreditsModal, setShowCreditsModal] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [tempName, setTempName] = useState(profile.name || '');
-  const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const notifications = profile.notifications;
+  const darkMode = profile.darkMode;
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Appodeal 4.2.0 Privacy Entry Point (native UMP form — no custom popup).
@@ -213,7 +213,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={notifications}
-              onValueChange={setNotifications}
+              onValueChange={(value) => {
+                void updateProfile({ notifications: value });
+              }}
               trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
             />
@@ -231,7 +233,9 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={darkMode}
-              onValueChange={setDarkMode}
+              onValueChange={(value) => {
+                void updateProfile({ darkMode: value });
+              }}
               trackColor={{ false: '#767577', true: colors.primary }}
               thumbColor={'white'}
             />

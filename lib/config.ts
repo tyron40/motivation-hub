@@ -1,12 +1,10 @@
 const FALLBACK_VERCEL_BACKEND_URL = 'https://motivation-hub-iota.vercel.app';
 
-const env = (typeof process !== 'undefined' && process.env) || {};
-
 const backendCandidates: Array<{ source: string; value: string }> = [
-  { source: 'EXPO_PUBLIC_VERCEL_API_BASE_URL', value: env.EXPO_PUBLIC_VERCEL_API_BASE_URL || '' },
-  { source: 'EXPO_PUBLIC_RORK_API_BASE_URL', value: env.EXPO_PUBLIC_RORK_API_BASE_URL || '' },
-  { source: 'EXPO_PUBLIC_API_BASE_URL', value: env.EXPO_PUBLIC_API_BASE_URL || '' },
-  { source: 'EXPO_PUBLIC_TOOLKIT_URL', value: env.EXPO_PUBLIC_TOOLKIT_URL || '' },
+  { source: 'EXPO_PUBLIC_VERCEL_API_BASE_URL', value: process.env.EXPO_PUBLIC_VERCEL_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_RORK_API_BASE_URL', value: process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_API_BASE_URL', value: process.env.EXPO_PUBLIC_API_BASE_URL || '' },
+  { source: 'EXPO_PUBLIC_TOOLKIT_URL', value: process.env.EXPO_PUBLIC_TOOLKIT_URL || '' },
 ];
 
 const pickedCandidate = backendCandidates.find((c) => c.value.trim().length > 0);

@@ -377,11 +377,11 @@ export default function RootLayout() {
       <GestureHandlerRootView style={styles.container}>
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
-            <ThemeProvider>
-              <AuthProvider>
-                <IAPProvider>
-                  <AdMobProvider>
-                    <UserProfileProvider>
+            <AuthProvider>
+              <UserProfileProvider>
+                <ThemeProvider>
+                  <IAPProvider>
+                    <AdMobProvider>
                     <AdminProvider>
                     <PlaylistProvider>
                       <ScriptureFavoritesProvider>
@@ -393,11 +393,11 @@ export default function RootLayout() {
                       </ScriptureFavoritesProvider>
                     </PlaylistProvider>
                     </AdminProvider>
-                    </UserProfileProvider>
-                  </AdMobProvider>
-                </IAPProvider>
-              </AuthProvider>
-            </ThemeProvider>
+                    </AdMobProvider>
+                  </IAPProvider>
+                </ThemeProvider>
+              </UserProfileProvider>
+            </AuthProvider>
           </QueryClientProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

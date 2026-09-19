@@ -434,7 +434,103 @@ const ADMIN_DATA_STORE: Record<string, any> = {
   _loaded: false,
 };
 
+
 import { supabaseBackend, supabaseAdmin } from './lib/supabase';
+
+const CREDIT_PRODUCT_IDS = new Set([
+  'mh_credits_100',
+  'mh_credits_500',
+  'mh_credits_1000',
+]);
+
+const handleRevenueCatWebhook = async (c: Context) => {
+  const expectedAuthorization =
+    process.env.REVENUECAT_WEBHOOK_AUTHORIZATION;
+
+  if (!expectedAuthorization) {
+    console.error(
+      '[RevenueCat Webhook] REVENUECAT_WEBHOOK_AUTHORIZATION is missing'
+    );
+    return c.json({ error: 'Webhook is not configured' }, 503);
+  }
+
+  const providedAuthorization =
+    c.req.header('authorization') || '';
+
+  if (providedAuthorization !== expectedAuthorization) {
+    console.warn('[RevenueCat Webhook] Rejected unauthorized request');
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  if (!supabaseAdmin) {
+    console.error(
+      '[RevenueCat Webhook] SUPABASE_SERVICE_ROLE_KEY is missing'
+    );
+    return c.json({ error: 'Credit service is not configured' }, 503);
+  }
+
+  try {
+    const body = await c.req.json();
+    const event = body?.event;
+
+    if (!event || typeof event !== 'object') {
+      return c.json({ error: 'Invalid webhook payload' }, 400);
+    }
+
+    if (
+      event.type !== 'NON_RENEWING_PURCHASE' ||
+      !CREDIT_PRODUCT_IDS.has(event.product_id)
+    ) {
+      return c.json({ ok: true, ignored: true });
+    }
+
+    const userId = event.app_user_id;
+    const transactionId = event.transaction_id;
+    const store = event.store;
+    const environment = event.environment;
+
+    if (
+      typeof userId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId) ||
+      typeof transactionId !== 'string' ||
+      !transactionId.trim() ||
+      !['APP_STORE', 'PLAY_STORE'].includes(store) ||
+      !['PRODUCTION', 'SANDBOX'].includes(environment)
+    ) {
+      console.warn(
+        '[RevenueCat Webhook] Ignoring incomplete or unsupported purchase event'
+      );
+      return c.json({ ok: true, ignored: true });
+    }
+
+    const { data, error } = await supabaseAdmin.rpc(
+      'apply_verified_credit_purchase',
+      {
+        p_user_id: userId,
+        p_product_id: event.product_id,
+        p_store: store,
+        p_environment: environment,
+        p_transaction_id: transactionId,
+      }
+    );
+
+    if (error) {
+      console.error(
+        '[RevenueCat Webhook] Credit application failed:',
+        error.message
+      );
+      return c.json({ error: 'Unable to apply purchase' }, 500);
+    }
+
+    return c.json({ ok: true, result: data });
+  } catch (error) {
+    console.error('[RevenueCat Webhook] Invalid request:', error);
+    return c.json({ error: 'Invalid webhook request' }, 400);
+  }
+};
+
+app.post('/api/revenuecat/webhook', handleRevenueCatWebhook);
+app.post('/revenuecat/webhook', handleRevenueCatWebhook);
 
 const ADMIN_SUPABASE_TABLE = 'admin_content';
 

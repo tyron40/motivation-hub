@@ -20,7 +20,7 @@ const logProvider = (provider: 'APPODEAL' | 'ADMOB FALLBACK') => {
 };
 
 export const [AdMobProvider, useAdMob] = createContextHook(() => {
-  const { addCredits, usageStats } = useIAP();
+  const { usageStats } = useIAP();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [isShowingAd, setIsShowingAd] = useState(false);
   const [isRewardedAdLoaded, setIsRewardedAdLoaded] = useState(false);
@@ -60,24 +60,12 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     };
 
     manager.setRewardCallback(async (reward: any) => {
-      console.log('🎁 [AdMob] Reward earned:', reward);
-      await addCredits(REWARD_AMOUNT);
-      Alert.alert(
-        '🎉 Reward Earned!',
-        `You earned ${REWARD_AMOUNT} credits!`,
-        [{ text: 'Awesome!' }]
-      );
+      console.log('[AdMob] Rewarded ad completed without a credit grant:', reward);
     });
 
     // Appodeal mediation layer — same reward flow as the AdMob path.
     appodeal.setRewardCallback(async (reward: any) => {
-      console.log('🎁 [Appodeal] Reward earned:', reward);
-      await addCredits(REWARD_AMOUNT);
-      Alert.alert(
-        '🎉 Reward Earned!',
-        `You earned ${REWARD_AMOUNT} credits!`,
-        [{ text: 'Awesome!' }]
-      );
+      console.log('[Appodeal] Rewarded ad completed without a credit grant:', reward);
     });
 
     manager.setEventCallback((_event: string) => reportAdState());
@@ -135,7 +123,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [manager, appodeal, addCredits, isAuthenticated, isAuthLoading]);
+  }, [manager, appodeal, isAuthenticated, isAuthLoading]);
 
   const canShowAds = useMemo(() => {
     return !usageStats.isAdFree;
@@ -329,7 +317,7 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
       isInterstitialAdLoaded,
       isLoadingRewardedAd: !isRewardedAdLoaded && isInitialized && Platform.OS !== 'web',
       canShowAds,
-      rewardAmount: REWARD_AMOUNT,
+      rewardAmount: 0,
       isShowingAd,
     }),
     [
