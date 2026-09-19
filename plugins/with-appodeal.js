@@ -19,7 +19,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { withInfoPlist, withDangerousMod } = require('expo/config-plugins');
+const {
+  withInfoPlist,
+  withDangerousMod,
+  withSettingsGradle,
+} = require('expo/config-plugins');
 
 /** Official Appodeal SKAdNetwork IDs (256). */
 const SKAD_NETWORK_IDS = require('./appodeal-skadnetwork-ids.json');
@@ -202,7 +206,40 @@ function withAppodealPodfile(config) {
   ]);
 }
 
+function withAppodealAndroidRepository(config) {
+  return withSettingsGradle(config, (cfg) => {
+    const repository =
+      'maven { url = uri("https://artifactory.appodeal.com/appodeal") }';
+    const contents = cfg.modResults.contents;
+
+    if (contents.includes('https://artifactory.appodeal.com/appodeal')) {
+      return cfg;
+    }
+
+    const dependencyRepositories =
+      /(dependencyResolutionManagement\s*\{[\s\S]*?repositories\s*\{)/;
+
+    if (!dependencyRepositories.test(contents)) {
+      throw new Error(
+        '[with-appodeal] dependencyResolutionManagement repositories block not found'
+      );
+    }
+
+    cfg.modResults.contents = contents.replace(
+      dependencyRepositories,
+      `$1\n        ${repository}`
+    );
+
+    console.log(
+      '[with-appodeal] Appodeal Android Maven repository configured'
+    );
+
+    return cfg;
+  });
+}
+
 function withAppodeal(config, props = {}) {
+  config = withAppodealAndroidRepository(config);
   config = withAppodealInfoPlist(config, props);
   config = withAppodealPodfile(config);
   return config;
