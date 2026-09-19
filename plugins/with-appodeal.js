@@ -22,7 +22,7 @@ const path = require('path');
 const {
   withInfoPlist,
   withDangerousMod,
-  withSettingsGradle,
+  withProjectBuildGradle,
 } = require('expo/config-plugins');
 
 /** Official Appodeal SKAdNetwork IDs (256). */
@@ -207,7 +207,7 @@ function withAppodealPodfile(config) {
 }
 
 function withAppodealAndroidRepository(config) {
-  return withSettingsGradle(config, (cfg) => {
+  return withProjectBuildGradle(config, (cfg) => {
     const repository =
       'maven { url = uri("https://artifactory.appodeal.com/appodeal") }';
     const contents = cfg.modResults.contents;
@@ -216,17 +216,17 @@ function withAppodealAndroidRepository(config) {
       return cfg;
     }
 
-    const dependencyRepositories =
-      /(dependencyResolutionManagement\s*\{[\s\S]*?repositories\s*\{)/;
+    const projectRepositories =
+      /(allprojects\s*\{[\s\S]*?repositories\s*\{)/;
 
-    if (!dependencyRepositories.test(contents)) {
+    if (!projectRepositories.test(contents)) {
       throw new Error(
-        '[with-appodeal] dependencyResolutionManagement repositories block not found'
+        '[with-appodeal] Android project repositories block not found'
       );
     }
 
     cfg.modResults.contents = contents.replace(
-      dependencyRepositories,
+      projectRepositories,
       `$1\n        ${repository}`
     );
 
