@@ -415,7 +415,15 @@ export default function HomeScreen() {
                       <View style={styles.flyerQuoteRow}>
                         <Quote size={14} color={item.accent} fill={item.accent} />
                       </View>
-                      <Text style={styles.flyerPosterQuote}>{item.quote}</Text>
+                      <Text
+                        style={[
+                          styles.flyerPosterQuote,
+                          item.id === 'flyer-featured-6' &&
+                            styles.surroundGreatnessHomeQuote,
+                        ]}
+                      >
+                        {item.quote}
+                      </Text>
                       <View style={[styles.flyerPosterAccentLine, { backgroundColor: item.accent }]} />
                       <Text style={styles.flyerPosterTitle}>{item.title}</Text>
                     </LinearGradient>
@@ -660,6 +668,10 @@ const getStyles = (colors: any) => StyleSheet.create({
     lineHeight: 16,
     fontStyle: 'italic' as const,
     marginBottom: 8,
+  },
+  surroundGreatnessHomeQuote: {
+    fontSize: 10,
+    lineHeight: 13,
   },
   flyerPosterAccentLine: {
     width: 36,
