@@ -80,10 +80,13 @@ function ProfileContent() {
       return;
     }
     
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions');
-      return;
+    if (Platform.OS === 'ios') {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions');
+        return;
+      }
     }
     
     const result = await ImagePicker.launchImageLibraryAsync({

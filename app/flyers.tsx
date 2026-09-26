@@ -224,10 +224,13 @@ export default function FlyersScreen() {
   const pickImageFromGallery = useCallback(async () => {
     try {
       setIsPickingImage(true);
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
-        return;
+      if (Platform.OS === 'ios') {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+          return;
+        }
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],

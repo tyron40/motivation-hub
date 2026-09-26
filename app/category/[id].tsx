@@ -164,10 +164,13 @@ export default function CategoryScreen() {
   const pickBannerImage = useCallback(async () => {
     try {
       setIsPickingImage(true);
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your photo library.');
-        return;
+      if (Platform.OS === 'ios') {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Please allow access to your photo library.');
+          return;
+        }
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
