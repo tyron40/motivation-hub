@@ -1,4 +1,4 @@
-import { Settings } from 'react-native';
+import { Platform, Settings } from 'react-native';
 
 type AdEventCallback = (event: string, data?: any) => void;
 
@@ -48,7 +48,11 @@ const privacyStatusName = (status: number): string => {
  * every method degrades to a safe no-op, letting the existing AdMob path
  * (AdManager) serve ads unchanged.
  */
-const APPODEAL_APP_KEY = process.env.EXPO_PUBLIC_APPODEAL_APP_KEY;
+const APPODEAL_APP_KEY =
+  Platform.OS === 'android'
+    ? process.env.EXPO_PUBLIC_APPODEAL_ANDROID_APP_KEY
+    : process.env.EXPO_PUBLIC_APPODEAL_IOS_APP_KEY ??
+      process.env.EXPO_PUBLIC_APPODEAL_APP_KEY;
 
 let Appodeal: any = null;
 let AdType: any = null;
