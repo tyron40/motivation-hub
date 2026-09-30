@@ -248,6 +248,15 @@ class AppodealManager {
     add(SdkEvents.INITIALIZED, () => {
       debugLog('[Appodeal] SDK initialized');
       debugLog(`[Appodeal] active: ${this.active}`);
+      // Cache after native initialization so Android's mediation adapters are
+      // ready before the first request is made.
+      try {
+        Appodeal.cache(AdType.INTERSTITIAL);
+        Appodeal.cache(AdType.REWARDED_VIDEO);
+        debugLog('[Appodeal] initial post-initialization cache requested');
+      } catch (error: any) {
+        this.log('Post-initialization cache request failed', error);
+      }
       this.syncLoadedState();
       this.log('initialized/active');
     });

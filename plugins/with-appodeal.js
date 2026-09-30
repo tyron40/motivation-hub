@@ -23,6 +23,7 @@ const {
   withInfoPlist,
   withDangerousMod,
   withProjectBuildGradle,
+  withAppBuildGradle,
 } = require('expo/config-plugins');
 
 /** Official Appodeal SKAdNetwork IDs (256). */
@@ -85,6 +86,12 @@ def appodeal
   pod 'AppodealVungleAdapter', '7.6.2.0'
   pod 'AppodealYandexAdapter', '7.17.0.1'
 end`;
+
+// Android SDK 4.1+ requires demand-source adapters to be declared separately.
+const APPODEAL_ANDROID_ADAPTERS = [
+  'implementation("com.appodeal.ads.sdk.adapters:admob:24.7.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:bidmachine:3.7.1.0")',
+];
 
 function withAppodealInfoPlist(config, props) {
   return withInfoPlist(config, (cfg) => {
@@ -238,8 +245,36 @@ function withAppodealAndroidRepository(config) {
   });
 }
 
+function withAppodealAndroidAdapters(config) {
+  return withAppBuildGradle(config, (cfg) => {
+    let contents = cfg.modResults.contents;
+
+    if (contents.includes('com.appodeal.ads.sdk.adapters:admob:')) {
+      return cfg;
+    }
+
+    const dependenciesBlock = /dependencies\s*\{/;
+
+    if (!dependenciesBlock.test(contents)) {
+      throw new Error(
+        '[with-appodeal] Android app dependencies block not found'
+      );
+    }
+
+    contents = contents.replace(
+      dependenciesBlock,
+      `dependencies {\n    // Appodeal Android mediation adapters (SDK 4.1+)\n    ${APPODEAL_ANDROID_ADAPTERS.join('\n    ')}`
+    );
+
+    cfg.modResults.contents = contents;
+    console.log('[with-appodeal] Android mediation adapters configured');
+    return cfg;
+  });
+}
+
 function withAppodeal(config, props = {}) {
   config = withAppodealAndroidRepository(config);
+  config = withAppodealAndroidAdapters(config);
   config = withAppodealInfoPlist(config, props);
   config = withAppodealPodfile(config);
   return config;
