@@ -205,6 +205,12 @@ class AppodealManager {
 
       const adTypes = AdType.INTERSTITIAL | AdType.BANNER | AdType.REWARDED_VIDEO;
 
+      // Apply identical production and caching behavior on Android and iOS.
+      Appodeal.setTesting?.(false);
+      Appodeal.setAutoCache?.(AdType.INTERSTITIAL, true);
+      Appodeal.setAutoCache?.(AdType.REWARDED_VIDEO, true);
+      Appodeal.setAutoCache?.(AdType.BANNER, true);
+
       console.log('[Appodeal] calling native initialize');
       Appodeal.initialize(APPODEAL_APP_KEY, adTypes);
 
@@ -217,7 +223,7 @@ class AppodealManager {
         debugLog(`[Appodeal] explicit cache request failed: ${cacheError?.message ?? 'unknown'}`);
       }
 
-      debugLog(`[Appodeal] initializing (app key present, never logged) | test mode: setTesting() never called → off`);
+      debugLog('[Appodeal] initializing (app key present, never logged) | test mode: off');
       try {
         debugLog(`[Appodeal] SDK version: ${Appodeal.getVersion?.() ?? 'unknown'}`);
       } catch {}

@@ -167,6 +167,7 @@ class AppodealManager {
   /** One-time SDK init for interstitial, banner and rewarded video. */
   initialize(): void {
     if (this.initialized) return;
+    console.log('[Appodeal] initialize requested');
     if (!this.available) {
       debugLog(
         `[Appodeal] unavailable (${
@@ -179,9 +180,50 @@ class AppodealManager {
 
     try {
       this.wireEvents();
+
+      if (ADS_DEBUG) {
+        try {
+          const appodealModule = require('react-native-appodeal');
+          const LogLevel = appodealModule.AppodealLogLevel;
+
+          if (LogLevel?.VERBOSE !== undefined) {
+            Appodeal.setLogLevel(LogLevel.VERBOSE);
+            console.log('[Appodeal] native verbose logging enabled');
+          } else if (LogLevel?.DEBUG !== undefined) {
+            Appodeal.setLogLevel(LogLevel.DEBUG);
+            console.log('[Appodeal] native debug logging enabled');
+          } else {
+            console.log('[Appodeal] native log-level enum unavailable');
+          }
+        } catch (logError: any) {
+          console.warn(
+            '[Appodeal] unable to enable native SDK logging:',
+            logError?.message ?? 'unknown'
+          );
+        }
+      }
+
       const adTypes = AdType.INTERSTITIAL | AdType.BANNER | AdType.REWARDED_VIDEO;
+
+      // Apply identical production and caching behavior on Android and iOS.
+      Appodeal.setTesting?.(false);
+      Appodeal.setAutoCache?.(AdType.INTERSTITIAL, true);
+      Appodeal.setAutoCache?.(AdType.REWARDED_VIDEO, true);
+      Appodeal.setAutoCache?.(AdType.BANNER, true);
+
+      console.log('[Appodeal] calling native initialize');
       Appodeal.initialize(APPODEAL_APP_KEY, adTypes);
-      debugLog(`[Appodeal] initializing (app key present, never logged) | test mode: setTesting() never called → off`);
+
+      // Explicitly request inventory so the first fill never depends on
+      // native autocache timing alone.
+      try {
+        Appodeal.cache(AdType.INTERSTITIAL);
+        Appodeal.cache(AdType.REWARDED_VIDEO);
+      } catch (cacheError: any) {
+        debugLog(`[Appodeal] explicit cache request failed: ${cacheError?.message ?? 'unknown'}`);
+      }
+
+      debugLog('[Appodeal] initializing (app key present, never logged) | test mode: off');
       try {
         debugLog(`[Appodeal] SDK version: ${Appodeal.getVersion?.() ?? 'unknown'}`);
       } catch {}
@@ -221,7 +263,8 @@ class AppodealManager {
       } catch (error: any) {
         this.log('Post-initialization cache request failed', error);
       }
-      this.log('SDK initialized');
+      this.syncLoadedState();
+      this.log('initialized/active');
     });
 
     add(InterstitialEvents.LOADED, () => {
@@ -250,6 +293,13 @@ class AppodealManager {
       this.interstitialReady = false;
       this.log('Interstitial dismissed');
       this.resolveInterstitialClose(true);
+      // Immediately request fresh inventory: without this the shown ad was
+      // never replaced, so after the FIRST interstitial of a session every
+      // later trigger found Appodeal empty and silently fell back to AdMob.
+      try {
+        Appodeal.cache(AdType.INTERSTITIAL);
+        debugLog('[Appodeal] interstitial re-cache requested after close');
+      } catch {}
     });
 
     // Banner lifecycle (loaded/shown fire from the native SDK, not from UI)
@@ -280,6 +330,12 @@ class AppodealManager {
       this.rewardedReady = false;
       this.log('Rewarded video dismissed');
       this.resolveRewardedClose(true);
+      // Same refill gap as the interstitial: request the next rewarded video
+      // as soon as the current one is dismissed.
+      try {
+        Appodeal.cache(AdType.REWARDED_VIDEO);
+        debugLog('[Appodeal] rewarded re-cache requested after close');
+      } catch {}
     });
   }
 
@@ -376,7 +432,13 @@ class AppodealManager {
    * (bypassing the cached AdMob fallback path entirely).
    */
   private async verifyConsentAfterForm(): Promise<void> {
-    if (!ADS_DEBUG) return;
+    // Strictly development-only. EXPO_PUBLIC_APPODEAL_DEBUG can be enabled in
+    // EAS production builds for diagnostics; this verification path also
+    // FORCE-SHOWS an interstitial right after consent — in production that
+    // consumed Appodeal's only cached fill seconds after launch (with no user
+    // interaction), after which Appodeal never triggered again for the rest
+    // of the session. The production CMP flow itself still runs in syncConsent().
+    if (!__DEV__) return;
 
     // Give UMP a moment to persist IABTCF_* defaults after form dismissal.
     await this.delay(1000);
@@ -463,6 +525,31 @@ class AppodealManager {
   }
 
   // ─── Frequency (identical caps to AdManager) ──────────────────
+
+  /**
+   * Reconciles the JS readiness flags with the native SDK ground truth.
+   * Native load events can be missed during early startup (bridge timing),
+   * leaving the flags stuck false while the SDK actually holds inventory.
+   * The React-side poll calls this on every tick so Appodeal readiness
+   * self-heals instead of staying "not ready" forever.
+   */
+  syncLoadedState(): void {
+    if (!this.available) return;
+    try {
+      const interstitial = Boolean(Appodeal.isLoaded(AdType.INTERSTITIAL));
+      if (interstitial !== this.interstitialReady) {
+        this.interstitialReady = interstitial;
+        debugLog(`[Appodeal] interstitial ${interstitial ? 'loaded' : 'not loaded'} (native sync)`);
+      }
+    } catch {}
+    try {
+      const rewarded = Boolean(Appodeal.isLoaded(AdType.REWARDED_VIDEO));
+      if (rewarded !== this.rewardedReady) {
+        this.rewardedReady = rewarded;
+        debugLog(`[Appodeal] rewarded ${rewarded ? 'loaded' : 'not loaded'} (native sync)`);
+      }
+    } catch {}
+  }
 
   recordInteraction(): boolean {
     this.interactionCount += 1;

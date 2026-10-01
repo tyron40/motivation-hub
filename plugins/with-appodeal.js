@@ -89,8 +89,29 @@ end`;
 
 // Android SDK 4.1+ requires demand-source adapters to be declared separately.
 const APPODEAL_ANDROID_ADAPTERS = [
+  'implementation("com.appodeal.ads.sdk.adapters:adjust:5.4.6.1")',
   'implementation("com.appodeal.ads.sdk.adapters:admob:24.7.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:amazon:11.3.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:applovin:13.5.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:applovin_max:13.5.1.1")',
+  'implementation("com.appodeal.ads.sdk.adapters:appsflyer:6.18.0.1")',
   'implementation("com.appodeal.ads.sdk.adapters:bidmachine:3.7.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:bidon:0.14.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:bigo_ads:5.6.2.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:dt_exchange:8.4.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:facebook_analytics:18.0.3.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:firebase:23.0.0.1")',
+  'implementation("com.appodeal.ads.sdk.adapters:iab:1.8.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:inmobi:11.1.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:ironsource:9.1.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:level_play:9.1.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:meta:6.21.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:mintegral:17.1.61.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:my_target:5.47.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:sentry_analytics:8.26.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:unity_ads:4.17.0.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:vungle:7.6.1.0")',
+  'implementation("com.appodeal.ads.sdk.adapters:yandex:7.17.0.0")',
 ];
 
 function withAppodealInfoPlist(config, props) {
@@ -249,7 +270,14 @@ function withAppodealAndroidAdapters(config) {
   return withAppBuildGradle(config, (cfg) => {
     let contents = cfg.modResults.contents;
 
-    if (contents.includes('com.appodeal.ads.sdk.adapters:admob:')) {
+    const missingAdapters = APPODEAL_ANDROID_ADAPTERS.filter(
+      (dependency) => {
+        const coordinate = dependency.match(/"([^"]+)"/)?.[1];
+        return coordinate && !contents.includes(coordinate);
+      }
+    );
+
+    if (missingAdapters.length === 0) {
       return cfg;
     }
 
@@ -263,7 +291,7 @@ function withAppodealAndroidAdapters(config) {
 
     contents = contents.replace(
       dependenciesBlock,
-      `dependencies {\n    // Appodeal Android mediation adapters (SDK 4.1+)\n    ${APPODEAL_ANDROID_ADAPTERS.join('\n    ')}`
+      `dependencies {\n    // Appodeal Android mediation adapters (SDK 4.1+)\n    ${missingAdapters.join('\n    ')}`
     );
 
     cfg.modResults.contents = contents;
