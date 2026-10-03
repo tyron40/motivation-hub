@@ -27,7 +27,6 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
   const [isInterstitialAdLoaded, setIsInterstitialAdLoaded] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const initializationStartedRef = useRef(false);
 
   const manager = useMemo(() => AdManager.getInstance(), []);
   const appodeal = useMemo(() => AppodealManager.getInstance(), []);
@@ -73,30 +72,11 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
     appodeal.setEventCallback((_event: string) => reportAdState());
 
     const init = async () => {
-      // Android does not require ATT. Start its advertising SDK when this
-      // provider mounts instead of waiting for authentication restoration.
-      if (
-        Platform.OS === 'ios' &&
-        (isAuthLoading || !isAuthenticated)
-      ) {
+      // Do not request ATT or initialize tracking-capable ad SDKs before auth.
+      // On the first authenticated session, request ATT if still undetermined.
+      if (isAuthLoading || !isAuthenticated) {
         return;
       }
-
-      if (
-        Platform.OS === 'web' ||
-        initializationStartedRef.current
-      ) {
-        return;
-      }
-
-      initializationStartedRef.current = true;
-
-      console.log('[Appodeal bootstrap]', {
-        platform: Platform.OS,
-        available: appodeal.available,
-        authenticated: isAuthenticated,
-        authLoading: isAuthLoading,
-      });
       // Apple ATT must resolve before any tracking-capable advertising SDK
       // initializes or requests ad inventory.
       if (Platform.OS === 'ios') {
@@ -126,13 +106,8 @@ export const [AdMobProvider, useAdMob] = createContextHook(() => {
 
       // Appodeal remains primary, but advertising starts only after the
       // ATT decision has resolved on iOS.
-      appodeal.initialize();
-
-      console.log('[Appodeal bootstrap result]', {
-        platform: Platform.OS,
-        available: appodeal.available,
-        active: appodeal.active,
-      });
+      appodeal.initialize(); // one-time; no-op without key/native module (Expo Go/web)
+      if (ADS_DEBUG) console.log(`[Appodeal] active: ${appodeal.active}`);
       reportAdState();
 
       await manager.initialize();
