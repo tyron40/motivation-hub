@@ -160,7 +160,7 @@ public final class MainActivity extends Activity {
         new AsyncTask<Void, Void, List<Speech>>() {
             private String error;
             @Override protected List<Speech> doInBackground(Void... unused) {
-                try { return ApiClient.getSpeeches(endpoint, body); }
+                try { return ApiClient.getSpeeches(MainActivity.this, endpoint, body); }
                 catch (Exception e) { error = readableError(e); return null; }
             }
             @Override protected void onPostExecute(List<Speech> result) {
@@ -256,7 +256,7 @@ public final class MainActivity extends Activity {
                         new AsyncTask<Void, Void, String>() {
                             private String error;
                             @Override protected String doInBackground(Void... unused) {
-                                try { return ApiClient.chat(text); }
+                                try { return ApiClient.chat(MainActivity.this, text); }
                                 catch (Exception e) { error = readableError(e); return null; }
                             }
                             @Override protected void onPostExecute(String result) {
