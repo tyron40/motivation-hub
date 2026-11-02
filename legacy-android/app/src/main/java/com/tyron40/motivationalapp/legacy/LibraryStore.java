@@ -39,7 +39,11 @@ final class LibraryStore {
     }
 
     List<Speech> favorites() {
-        return decode(new JSONArray(prefs.getString(FAVORITES, "[]")));
+        try {
+            return decode(new JSONArray(prefs.getString(FAVORITES, "[]")));
+        } catch (Exception ignored) {
+            return new ArrayList<Speech>();
+        }
     }
 
     void addToPlaylist(String name, Speech speech) throws Exception {
@@ -49,7 +53,8 @@ final class LibraryStore {
         JSONArray items = playlists.optJSONArray(clean);
         if (items == null) items = new JSONArray();
         for (int i = 0; i < items.length(); i++) {
-            if (speech.id.equals(items.optJSONObject(i).optString("id"))) return;
+            JSONObject item = items.optJSONObject(i);
+            if (item != null && speech.id.equals(item.optString("id"))) return;
         }
         items.put(speech.toJson());
         playlists.put(clean, items);
