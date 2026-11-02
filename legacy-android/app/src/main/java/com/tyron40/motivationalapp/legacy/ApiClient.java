@@ -1,5 +1,6 @@
 package com.tyron40.motivationalapp.legacy;
 
+import android.content.Context;
 import android.os.Build;
 
 import org.json.JSONArray;
@@ -11,11 +12,19 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 final class ApiClient {
     static final String BASE_URL = "https://motivation-hub-iota.vercel.app";
@@ -27,8 +36,8 @@ final class ApiClient {
 
     private ApiClient() {}
 
-    static List<Speech> getSpeeches(String endpoint, JSONObject body) throws Exception {
-        JSONObject response = post(endpoint, body);
+    static List<Speech> getSpeeches(Context context, String endpoint, JSONObject body) throws Exception {
+        JSONObject response = post(context, endpoint, body);
         JSONArray videos = response.optJSONArray("videos");
         List<Speech> result = new ArrayList<Speech>();
         if (videos != null) {
@@ -42,26 +51,26 @@ final class ApiClient {
         return result;
     }
 
-    static String chat(String prompt) throws Exception {
+    static String chat(Context context, String prompt) throws Exception {
         JSONArray messages = new JSONArray();
         messages.put(new JSONObject()
             .put("role", "system")
             .put("content", "You are the Motivation Fuel coach. Be encouraging, practical, concise, and safe."));
         messages.put(new JSONObject().put("role", "user").put("content", prompt));
-        JSONObject response = post("/api/chat", new JSONObject().put("messages", messages));
+        JSONObject response = post(context, "/api/chat", new JSONObject().put("messages", messages));
         String message = response.optString("message");
         if (message.length() == 0) throw new Exception("The coach returned an empty response.");
         return message;
     }
 
-    private static JSONObject post(String endpoint, JSONObject body) throws Exception {
+    private static JSONObject post(Context context, String endpoint, JSONObject body) throws Exception {
         URL url = new URL(BASE_URL + endpoint);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         if (connection instanceof HttpsURLConnection && Build.VERSION.SDK_INT <= 20) {
-            SSLContext context = SSLContext.getInstance("TLSv1.2");
-            context.init(null, null, null);
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+            sslContext.init(null, new TrustManager[] { legacyTrustManager(context) }, null);
             ((HttpsURLConnection) connection).setSSLSocketFactory(
-                new Tls12SocketFactory(context.getSocketFactory())
+                new Tls12SocketFactory(sslContext.getSocketFactory())
             );
         }
         connection.setConnectTimeout(20000);
@@ -89,6 +98,64 @@ final class ApiClient {
             throw new Exception("Server error " + status + (text.length() > 0 ? ": " + text : ""));
         }
         return new JSONObject(text);
+    }
+
+    private static X509TrustManager legacyTrustManager(Context context) throws Exception {
+        TrustManagerFactory systemFactory = TrustManagerFactory.getInstance(
+            TrustManagerFactory.getDefaultAlgorithm()
+        );
+        systemFactory.init((KeyStore) null);
+        final X509TrustManager system = findX509(systemFactory.getTrustManagers());
+
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        InputStream input = context.getResources().openRawResource(R.raw.isrg_root_x1);
+        Certificate certificate;
+        try {
+            certificate = certificateFactory.generateCertificate(input);
+        } finally {
+            input.close();
+        }
+
+        KeyStore anchors = KeyStore.getInstance(KeyStore.getDefaultType());
+        anchors.load(null, null);
+        anchors.setCertificateEntry("isrg-root-x1", certificate);
+        TrustManagerFactory fallbackFactory = TrustManagerFactory.getInstance(
+            TrustManagerFactory.getDefaultAlgorithm()
+        );
+        fallbackFactory.init(anchors);
+        final X509TrustManager fallback = findX509(fallbackFactory.getTrustManagers());
+
+        return new X509TrustManager() {
+            @Override public X509Certificate[] getAcceptedIssuers() {
+                X509Certificate[] first = system.getAcceptedIssuers();
+                X509Certificate[] second = fallback.getAcceptedIssuers();
+                X509Certificate[] combined = new X509Certificate[first.length + second.length];
+                System.arraycopy(first, 0, combined, 0, first.length);
+                System.arraycopy(second, 0, combined, first.length, second.length);
+                return combined;
+            }
+
+            @Override public void checkClientTrusted(X509Certificate[] chain, String authType)
+                throws CertificateException {
+                system.checkClientTrusted(chain, authType);
+            }
+
+            @Override public void checkServerTrusted(X509Certificate[] chain, String authType)
+                throws CertificateException {
+                try {
+                    system.checkServerTrusted(chain, authType);
+                } catch (CertificateException ignored) {
+                    fallback.checkServerTrusted(chain, authType);
+                }
+            }
+        };
+    }
+
+    private static X509TrustManager findX509(TrustManager[] managers) throws Exception {
+        for (TrustManager manager : managers) {
+            if (manager instanceof X509TrustManager) return (X509TrustManager) manager;
+        }
+        throw new Exception("No X.509 trust manager is available.");
     }
 
     private static String read(InputStream stream) throws Exception {
