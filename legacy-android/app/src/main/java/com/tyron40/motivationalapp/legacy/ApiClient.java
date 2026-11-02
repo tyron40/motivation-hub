@@ -3,6 +3,8 @@ package com.tyron40.motivationalapp.legacy;
 import android.content.Context;
 import android.os.Build;
 
+import com.tyron40.motivationalapp.R;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
