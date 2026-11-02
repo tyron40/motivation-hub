@@ -1,0 +1,2 @@
+-keepattributes SourceFile,LineNumberTable
+-keep class com.tyron40.motivationalapp.legacy.** { *; }
