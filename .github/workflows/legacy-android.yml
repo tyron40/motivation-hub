@@ -41,7 +41,12 @@ jobs:
 
       - name: Validate and build debug APK
         working-directory: legacy-android
-        run: gradle --no-daemon :app:lintDebug :app:assembleDebug
+        run: |
+          set +e
+          gradle --no-daemon :app:lintDebug :app:assembleDebug
+          RESULT=$?
+          find app/build -name lint-results-debug.txt -print -exec cat {} \; || true
+          exit "$RESULT"
 
       - name: Verify KitKat manifest and package
         run: |
