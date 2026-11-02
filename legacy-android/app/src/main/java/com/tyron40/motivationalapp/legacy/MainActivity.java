@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -60,7 +61,7 @@ public final class MainActivity extends Activity {
         root.setPadding(dp(14), dp(14), dp(14), dp(10));
 
         TextView title = text("MOTIVATION FUEL", 26, Color.WHITE);
-        title.setTypeface(null, 1);
+        title.setTypeface(null, Typeface.BOLD);
         root.addView(title);
         TextView subtitle = text("Lite for Android 4.4–6.0", 13, Color.LTGRAY);
         root.addView(subtitle);
@@ -278,7 +279,7 @@ public final class MainActivity extends Activity {
             card.setBackgroundColor(SURFACE);
             Speech speech = speeches.get(position);
             TextView title = text((library.isFavorite(speech.id) ? "★ " : "") + speech.title, 17, Color.WHITE);
-            title.setTypeface(null, 1);
+            title.setTypeface(null, Typeface.BOLD);
             TextView speaker = text(speech.speaker, 13, Color.LTGRAY);
             card.addView(title);
             card.addView(speaker);
