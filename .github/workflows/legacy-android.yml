@@ -1,0 +1,66 @@
+name: Legacy Android APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'legacy-android/**'
+      - '.github/workflows/legacy-android.yml'
+  push:
+    branches:
+      - 'legacy-android-kitkat'
+    paths:
+      - 'legacy-android/**'
+      - '.github/workflows/legacy-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android API 36
+        run: |
+          SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Validate and build debug APK
+        working-directory: legacy-android
+        run: |
+          set +e
+          gradle --no-daemon :app:lintDebug :app:assembleDebug
+          RESULT=$?
+          find app/build -name lint-results-debug.txt -print -exec cat {} \; || true
+          exit "$RESULT"
+
+      - name: Verify KitKat manifest and package
+        run: |
+          APK="legacy-android/app/build/outputs/apk/debug/app-debug.apk"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging "$APK" | tee legacy-apk-badging.txt
+          grep -q "package: name='com.tyron40.motivationalapp.legacytest'" legacy-apk-badging.txt
+          grep -q "sdkVersion:'19'" legacy-apk-badging.txt
+          grep -q "targetSdkVersion:'36'" legacy-apk-badging.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motivation-fuel-legacy-debug
+          path: |
+            legacy-android/app/build/outputs/apk/debug/app-debug.apk
+            legacy-apk-badging.txt
+          if-no-files-found: error
