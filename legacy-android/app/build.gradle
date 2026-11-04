@@ -1,63 +1,6 @@
-plugins {
-    id 'com.android.application'
-}
-
-def hasReleaseSigning = [
-    'LEGACY_KEYSTORE_FILE',
-    'LEGACY_KEYSTORE_PASSWORD',
-    'LEGACY_KEY_ALIAS',
-    'LEGACY_KEY_PASSWORD'
-].every { System.getenv(it) }
-
+plugins { id 'com.android.application' }
 android {
-    namespace 'com.tyron40.motivationalapp'
-    compileSdk 36
-
-    defaultConfig {
-        applicationId 'com.tyron40.motivationalapp'
-        minSdk 19
-        targetSdk 36
-        versionCode 452
-        versionName '1.1.14-legacy.1'
-    }
-
-    if (hasReleaseSigning) {
-        signingConfigs {
-            legacyRelease {
-                storeFile file(System.getenv('LEGACY_KEYSTORE_FILE'))
-                storePassword System.getenv('LEGACY_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('LEGACY_KEY_ALIAS')
-                keyPassword System.getenv('LEGACY_KEY_PASSWORD')
-            }
-        }
-    }
-
-    buildTypes {
-        debug {
-            applicationIdSuffix '.legacytest'
-            versionNameSuffix '-debug'
-        }
-        release {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (hasReleaseSigning) {
-                signingConfig signingConfigs.legacyRelease
-            }
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    lint {
-        abortOnError true
-        checkReleaseBuilds true
-    }
-}
-
-dependencies {
-    // Intentionally empty. Every modern Android/ads dependency raises minSdk.
+ namespace 'com.motivationfuel.legacy'
+ compileSdk 35
+ defaultConfig { applicationId 'com.motivationfuel.legacy'; minSdk 19; targetSdk 28; versionCode 1; versionName '0.1.0' }
 }
